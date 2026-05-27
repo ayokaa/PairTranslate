@@ -2,6 +2,7 @@ import { HashRouter, Route, useLocation, useNavigate } from "@solidjs/router";
 import {
 	Earth,
 	ExternalLink,
+	FileText,
 	LayoutPanelLeft,
 	Power,
 	PowerOff,
@@ -17,10 +18,13 @@ import { SettingsRecoveryBanner } from "~/components/SettingsRecoveryBanner";
 import { SettingsProvider, useSettings } from "~/hooks/settings";
 import { createTheme } from "~/hooks/theme";
 import { t } from "~/utils/i18n";
+import { createLogger } from "~/utils/rpc/logger";
 import { openTranslatorPopup } from "~/utils/translator-window";
 import { getCurrentDomain } from "./get-current";
 import Overall from "./pages/Overall";
 import Website from "./pages/Website";
+
+const logger = createLogger(import.meta.env.DEV ? "debug" : "error", "Popup");
 
 const Content = (props: { children?: JSX.Element }) => {
 	const { settings, setSettings } = useSettings();
@@ -65,6 +69,34 @@ const Content = (props: { children?: JSX.Element }) => {
 					data-tip={t("popup.navigation.openTranslatorWindow")}
 				>
 					<LayoutPanelLeft size={16} />
+				</Button>
+				<Button
+					class="btn-circle tooltip tooltip-right z-1"
+					size="sm"
+					variant="ghost"
+					disabled={!settings.translate.summaryModel}
+					on:click={async () => {
+						logger.info("Summary button clicked");
+						try {
+							const tabs = await browser.tabs.query({
+								active: true,
+								currentWindow: true,
+							});
+							const tabId = tabs[0]?.id;
+							logger.debug("Sending message to tab:", tabId);
+							if (tabId) {
+								await browser.tabs.sendMessage(tabId, {
+									type: "generate-summary",
+								});
+								logger.info("Message sent successfully");
+							}
+						} catch (e) {
+							logger.error("Failed to send message:", e);
+						}
+					}}
+					data-tip={t("summary.generate")}
+				>
+					<FileText size={16} />
 				</Button>
 				<Switch>
 					<Match when={location.pathname.includes("overall")}>

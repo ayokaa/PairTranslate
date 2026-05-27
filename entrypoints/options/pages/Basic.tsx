@@ -190,6 +190,19 @@ export default (props: { navId: string }) => {
 					}
 				/>
 
+				<ShortcutInput
+					label={t("settings.basic.keyboardShortcutForSummary")}
+					description={t("settings.basic.keyboardShortcutForSummaryDesc")}
+					value={settings.basic.keyboardShortcutForSummary}
+					enabled={settings.basic.keyboardShortcutSummarizes}
+					onChange={(shortcut) =>
+						setSettings("basic", "keyboardShortcutForSummary", shortcut)
+					}
+					onEnabledChange={(enabled) =>
+						setSettings("basic", "keyboardShortcutSummarizes", enabled)
+					}
+				/>
+
 				<SettingsToggle
 					label={t("settings.basic.progressIndicationEnabled")}
 					helperText={t("settings.basic.progressIndicationEnabledDesc")}

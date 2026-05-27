@@ -6,6 +6,7 @@ import { WebsiteRuleProvider } from "~/hooks/website-rule";
 import { getThemeClass } from "~/utils/theme";
 import { PopupProvider, PopupRenderer } from "./components/Popup";
 import ProgressIndicator from "./components/ProgressIndicator";
+import SummaryHost from "./components/SummaryHost";
 import TipRenderer from "./components/TipRenderer";
 import TranslatorHost from "./components/TranslatorHost";
 
@@ -19,6 +20,7 @@ const Content = () => {
 			<TranslationStyle />
 			<KatexStyle />
 			<TranslatorHost />
+			<SummaryHost />
 			<PopupRenderer />
 			<TipRenderer />
 			<ProgressIndicator />

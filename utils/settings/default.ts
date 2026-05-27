@@ -8,6 +8,7 @@ import {
 	EXPLAIN,
 	EXPLAIN_SCHEMA,
 	INPUT,
+	SUMMARY,
 	UNARY,
 } from "~/utils/prompt";
 import type * as s from "./def";
@@ -38,6 +39,8 @@ export function generateBasicSettings(): s.BasicSettings {
 			italic: false,
 			underline: false,
 		},
+		keyboardShortcutSummarizes: false,
+		keyboardShortcutForSummary: "Alt+T",
 	};
 }
 
@@ -59,6 +62,7 @@ export function generateTranslateSettings(): s.TranslateSettings {
 		floatingExplainModel: undefined,
 		inputTranslateModel: MS_TRANSLATOR_ID,
 		inputTranslateLang: "en",
+		summaryModel: undefined,
 	};
 }
 
@@ -178,6 +182,18 @@ export function generatePromptSettings(): s.PromptsSettings {
 						type: "structured",
 						schema: EXPLAIN_SCHEMA(),
 					},
+				},
+			],
+		},
+		[PROMPT_ID.summary]: {
+			name: t("prompts.defaultNames.summary"),
+			systemPrompt: SUMMARY().system,
+			input: "string",
+			output: "string",
+			steps: [
+				{
+					message: SUMMARY().user,
+					output: "string",
 				},
 			],
 		},

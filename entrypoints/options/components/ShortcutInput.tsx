@@ -7,6 +7,8 @@ interface ShortcutInputProps {
 	enabled: boolean;
 	onChange: (shortcut: string) => void;
 	onEnabledChange: (enabled: boolean) => void;
+	label?: string;
+	description?: string;
 }
 
 export default (props: ShortcutInputProps) => {
@@ -146,7 +148,7 @@ export default (props: ShortcutInputProps) => {
 			<div class="flex items-center justify-between mb-2">
 				<label class="label">
 					<span class="label-text font-medium">
-						{t("settings.basic.keyboardShortcut")}
+						{props.label || t("settings.basic.keyboardShortcut")}
 					</span>
 				</label>
 				<label class="label cursor-pointer">
@@ -161,7 +163,7 @@ export default (props: ShortcutInputProps) => {
 			</div>
 
 			<div class="label-text-alt text-xs mb-2 block">
-				{t("settings.basic.keyboardShortcutDesc")}
+				{props.description || t("settings.basic.keyboardShortcutDesc")}
 			</div>
 
 			<div class="join mb-3">

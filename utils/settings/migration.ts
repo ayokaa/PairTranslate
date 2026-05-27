@@ -81,6 +81,12 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 			version = 3;
 			continue;
 		}
+		if (version === 3) {
+			working = migrateV3ToV4(working as SettingsSchema);
+			version = 4;
+			continue;
+		}
+
 		throw new Error(`Unsupported settings version: ${version}`);
 	}
 
@@ -122,6 +128,23 @@ function migrateV2ToV3(oldSettings: SettingsSchema): SettingsSchema {
 		...oldSettings,
 		prompts: generatePromptSettings(),
 		__v: 3,
+	};
+}
+
+function migrateV3ToV4(oldSettings: SettingsSchema): SettingsSchema {
+	return {
+		...oldSettings,
+		translate: {
+			...oldSettings.translate,
+			summaryModel: undefined,
+		},
+		basic: {
+			...oldSettings.basic,
+			keyboardShortcutSummarizes: false,
+			keyboardShortcutForSummary: "Alt+T",
+		},
+		prompts: generatePromptSettings(),
+		__v: 4,
 	};
 }
 

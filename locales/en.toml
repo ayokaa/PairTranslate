@@ -155,6 +155,10 @@ keyboardShortcutConfigureDesc = "Open the browser's shortcut settings to update 
 keyboardShortcutInvalid = "Invalid shortcut format"
 keyboardShortcutTest = "Test your shortcut:"
 keyboardShortcutTestHint = "Click here and press your shortcut combination"
+keyboardShortcutForSummary = "Summary Keyboard Shortcut"
+keyboardShortcutForSummaryDesc = "Key combination to trigger page summary"
+keyboardShortcutSummarizes = "Enable Summary Shortcut"
+keyboardShortcutSummarizesDesc = "Allow triggering page summary with a keyboard shortcut"
 
 [commands]
 openTranslatorPopup = "Open translator popup"
@@ -215,6 +219,7 @@ inTextTranslateModel = "In-text Translation Model"
 floatingTranslateModel = "Floating Translation Model"
 floatingExplainModel = "Floating Explanation Model"
 inputTranslateModel = "Input Translation Model"
+summaryModel = "Summary Model"
 modelSettings = "Model Settings"
 translationSettings = "Translation Settings"
 fullPage = "Full Page"
@@ -495,12 +500,21 @@ examples = "Examples"
 translation = "Translation"
 reasoning = "Reasoning"
 
+[summary]
+generate = "Summarize"
+generating = "Generating summary..."
+panelTitle = "Page Summary"
+noModel = "No summary model configured"
+noContent = "No content available to summarize on this page."
+contentTruncated = "Content was truncated due to length limits."
+
 [prompts.defaultNames]
 translate = "Translate"
 batchTranslate = "Batch Translate"
 inputTranslate = "Input Translate"
 explain = "Explain"
 dictionaryTranslate = "Dictionary Translate"
+summary = "Summary"
 
 # Prompt Studio
 

@@ -207,5 +207,6 @@ export const PROMPT_ID = {
 	explain: "c39b8ab4-5656-4887-8b48-d5eb86fa0b8f",
 	inputTranslate: "4a87e959-cab4-4b8d-bc8f-1079dc2c4c86",
 	dictionaryTranslate: "d736a0f9-6f61-4f34-9d54-2c7ec49c70d7",
+	summary: "161b88be-5238-42d9-8adb-0767cb8d298e",
 };
 export const OPEN_TRANSLATOR_POPUP_COMMAND = "open-translator-popup";

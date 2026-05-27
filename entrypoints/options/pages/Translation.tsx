@@ -259,6 +259,16 @@ export default (props: { navId: string }) => {
 						setLocalSettings("inputTranslateModel", value);
 					}}
 				/>
+				<OptionSelect
+					label={t("settings.translation.summaryModel")}
+					options={lLMOptions()}
+					value={localSettings.summaryModel || ""}
+					error={getFieldError(["summaryModel"])?.message}
+					onChange={(e) => {
+						const value = e.target.value === "" ? undefined : e.target.value;
+						setLocalSettings("summaryModel", value);
+					}}
+				/>
 			</FormGrid>
 		</SettingsCard>
 	);

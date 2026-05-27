@@ -575,21 +575,21 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						while (true) {
 							const next = await source.next();
 							if (next.done) {
-								if (next.value.reasoning) {
+								if (next.value?.reasoning) {
 									yield { reasoning: next.value.reasoning };
 								}
 								traceLlms("response", {
 									service: service.name,
 									model: service.model ?? "(unset)",
 									stream: true,
-									tokens: next.value.usage?.completionTokens ?? 0,
-									reasoningChars: next.value.reasoning?.length ?? 0,
+									tokens: next.value?.usage?.completionTokens ?? 0,
+									reasoningChars: next.value?.reasoning?.length ?? 0,
 								});
-								resolveCompletion(next.value.usage?.completionTokens ?? 0);
+								resolveCompletion(next.value?.usage?.completionTokens ?? 0);
 								return;
 							}
 							const chunk = next.value;
-							if (chunk.content || chunk.reasoning) {
+							if (chunk?.content || chunk?.reasoning) {
 								yield chunk;
 							}
 						}
@@ -944,6 +944,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				let reasoningAggregate = "";
 				try {
 					for await (const chunk of iterator) {
+						if (!chunk) continue;
 						if (chunk.content) {
 							translationAggregate += chunk.content;
 						}

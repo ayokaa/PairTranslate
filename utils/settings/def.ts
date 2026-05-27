@@ -39,6 +39,8 @@ export const BasicSettings = z.object({
 	translationStyle: TranslationStyleSettings.default(
 		TranslationStyleSettings.parse({}),
 	),
+	keyboardShortcutSummarizes: z.boolean().default(false),
+	keyboardShortcutForSummary: z.string().default("Alt+T"),
 });
 export type BasicSettings = z.infer<typeof BasicSettings>;
 
@@ -116,6 +118,7 @@ export const TranslateSettings = z.object({
 	floatingExplainModel: z.uuid().optional(),
 	inputTranslateModel: z.uuid().optional(),
 	inputTranslateLang: z.string().default("en"), // Target language for input translation
+	summaryModel: z.uuid().optional(),
 });
 export type TranslateSettings = z.infer<typeof TranslateSettings>;
 

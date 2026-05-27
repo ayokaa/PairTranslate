@@ -9,6 +9,8 @@ import explainUser from "./prompt/explain-user.md?raw";
 import input from "./prompt/input-system.md?raw";
 import inputUser from "./prompt/input-user.md?raw";
 import prefix from "./prompt/prefix-system.md?raw";
+import summarySystem from "./prompt/summary-system.md?raw";
+import summaryUser from "./prompt/summary-user.md?raw";
 import unary from "./prompt/unary-system.md?raw";
 import unaryUser from "./prompt/unary-user.md?raw";
 
@@ -28,6 +30,10 @@ export const EXPLAIN = () => ({ system: explain, user: explainUser });
 export const DICTIONARY = () => ({
 	system: dictionary,
 	user: dictionaryUser,
+});
+export const SUMMARY = () => ({
+	system: summarySystem,
+	user: summaryUser,
 });
 
 const ExplainOutput = () =>

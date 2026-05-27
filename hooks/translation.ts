@@ -14,6 +14,7 @@ import {
 	TranslateErrorType,
 } from "~/utils/errors";
 import { t } from "~/utils/i18n";
+import { createThinkingFilter } from "~/utils/llm/thinking-filter";
 import type { TranslateContext } from "~/utils/types";
 import { mightUseProgressIndicator } from "./progress-indicator";
 
@@ -380,8 +381,10 @@ export function createTranslation<T>(
 			for await (const chunk of listener as AsyncGenerator<TranslationStreamChunk>) {
 				batch(() => {
 					setError(undefined);
+					if (!chunk) return;
 					const content = chunk.content;
 					const reasoning = chunk.reasoning;
+
 					if (content) {
 						// @ts-ignore stream request must return string chunks
 						setResult((prev) => (prev || "") + content);
@@ -428,7 +431,13 @@ export function createTranslation<T>(
 			)
 			.then((resp) => {
 				const normalized = normalizeUnaryResponse<T>(resp);
-				setResultVal(normalized.output, normalized.reasoning);
+				const filter = createThinkingFilter();
+				const filtered =
+					typeof normalized.output === "string"
+						? (((filter.process(normalized.output) || "") +
+								(filter.flush() || "")) as T)
+						: normalized.output;
+				setResultVal(filtered, normalized.reasoning);
 			})
 			.catch((e) => {
 				if (abortController.signal.aborted) return;

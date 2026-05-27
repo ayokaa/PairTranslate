@@ -101,6 +101,24 @@ export default () => {
 				disabled: false,
 			});
 		});
+		return options;
+	});
+
+	const llmModelList = createMemo(() => {
+		trackStore(settings.services);
+		const services = unwrap(settings.services);
+		const llmServices = selectServicesByType(services, "llm");
+
+		const options = [
+			{ value: "", label: t("settings.translation.noModel"), disabled: false },
+		];
+		Object.entries(llmServices).forEach(([uuid, service]) => {
+			options.push({
+				value: uuid,
+				label: service.name,
+				disabled: false,
+			});
+		});
 
 		return options;
 	});
@@ -163,6 +181,28 @@ export default () => {
 										selected={
 											option.value === settings.translate.floatingTranslateModel
 										}
+									>
+										{option.label}
+									</option>
+								)}
+							</For>
+						</select>
+						<select
+							class="select select-sm"
+							on:change={(e) =>
+								setSettings(
+									"translate",
+									"summaryModel",
+									e.target.value || undefined,
+								)
+							}
+						>
+							<option disabled>{t("settings.translation.summaryModel")}</option>
+							<For each={llmModelList()}>
+								{(option) => (
+									<option
+										value={option.value}
+										selected={option.value === settings.translate.summaryModel}
 									>
 										{option.label}
 									</option>
