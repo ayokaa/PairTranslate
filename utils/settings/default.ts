@@ -270,6 +270,12 @@ export const LLMServiceTemplates = [
 	},
 	{
 		type: "llm" as const,
+		name: t("templates.llm.minimax"),
+		baseUrl: "https://api.minimaxi.com/v1",
+		apiSpec: "openai" as const,
+	},
+	{
+		type: "llm" as const,
 		name: t("templates.llm.mistral"),
 		baseUrl: "https://api.mistral.ai",
 		apiSpec: "openai" as const,
