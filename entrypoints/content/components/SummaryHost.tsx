@@ -3,6 +3,7 @@ import { browser } from "#imports";
 import { usePopup } from "~/entrypoints/content/components/Popup";
 import { createKeyboardShortcut } from "~/hooks/keyboard-shortcut";
 import { useSettings } from "~/hooks/settings";
+import { makeDomainMatcher } from "~/utils/domain-matcher";
 import { t } from "~/utils/i18n";
 import { getPageContext } from "~/utils/page-context";
 import { createLogger } from "~/utils/rpc/logger";
@@ -16,8 +17,14 @@ const SUMMARY_POPUP_WIDTH = 420;
 const SUMMARY_POPUP_MARGIN = 12;
 
 const clampPosition = (width: number, height: number) => ({
-	x: Math.max(SUMMARY_POPUP_MARGIN, window.innerWidth - width - SUMMARY_POPUP_MARGIN),
-	y: Math.max(SUMMARY_POPUP_MARGIN, Math.min(80, window.innerHeight - height - SUMMARY_POPUP_MARGIN)),
+	x: Math.max(
+		SUMMARY_POPUP_MARGIN,
+		window.innerWidth - width - SUMMARY_POPUP_MARGIN,
+	),
+	y: Math.max(
+		SUMMARY_POPUP_MARGIN,
+		Math.min(80, window.innerHeight - height - SUMMARY_POPUP_MARGIN),
+	),
 });
 
 export default () => {
@@ -34,6 +41,26 @@ export default () => {
 	};
 
 	const handleGenerateSummary = () => {
+		const excludedSites = settings.translate.summaryExcludedSites;
+		if (excludedSites.length > 0) {
+			const matcher = makeDomainMatcher(excludedSites);
+			if (matcher(window.location.hostname) !== null) {
+				logger.info("Site is excluded from summary");
+				closeExistingPopup();
+				popupActions = popup.addPopup({
+					...clampPosition(SUMMARY_POPUP_WIDTH, 120),
+					width: SUMMARY_POPUP_WIDTH,
+					height: 120,
+					content: () => (
+						<div class="p-4 text-sm text-base-content/70">
+							{t("summary.excludedSite")}
+						</div>
+					),
+				});
+				return;
+			}
+		}
+
 		logger.info("Generating summary...");
 		closeExistingPopup();
 
