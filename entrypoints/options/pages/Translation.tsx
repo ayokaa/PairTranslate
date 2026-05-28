@@ -1,8 +1,9 @@
 import { trackStore } from "@solid-primitives/deep";
-import { ArrowRight } from "lucide-solid";
-import { createEffect, createMemo, createSignal, on } from "solid-js";
+import { ArrowRight, Plus, Trash2 } from "lucide-solid";
+import { createEffect, createMemo, createSignal, For, on } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import type z from "zod";
+import { Button } from "~/components/Button";
 import { ButtonGroup } from "~/components/settings/ButtonGroup";
 import { FormGrid } from "~/components/settings/FormGrid";
 import {
@@ -106,6 +107,24 @@ export default (props: { navId: string }) => {
 	const handleReset = () => {
 		const defaults = generateTranslateSettings();
 		setLocalSettings(reconcile(defaults));
+	};
+
+	let exclusionInput: HTMLInputElement | undefined;
+	const addExclusion = () => {
+		if (!exclusionInput) return;
+		const value = exclusionInput.value.trim();
+		if (!value) return;
+		if (localSettings.summaryExcludedSites.includes(value)) return;
+		setLocalSettings("summaryExcludedSites", [
+			...localSettings.summaryExcludedSites,
+			value,
+		]);
+		exclusionInput.value = "";
+	};
+	const removeExclusion = (index: number) => {
+		const sites = [...localSettings.summaryExcludedSites];
+		sites.splice(index, 1);
+		setLocalSettings("summaryExcludedSites", sites);
 	};
 
 	return (
@@ -270,6 +289,50 @@ export default (props: { navId: string }) => {
 					}}
 				/>
 			</FormGrid>
+			<div class="divider m-0" />
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text font-semibold">
+						{t("summary.excludedSites")}
+					</span>
+				</label>
+				<p class="text-xs text-base-content/60 mb-2">
+					{t("summary.excludedSitesDesc")}
+				</p>
+				<div class="flex gap-2 mb-2">
+					<input
+						type="text"
+						class="input input-bordered input-sm flex-1"
+						placeholder={t("summary.excludedSitesPlaceholder")}
+						ref={(el) => {
+							exclusionInput = el;
+						}}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.preventDefault();
+								addExclusion();
+							}
+						}}
+					/>
+					<Button size="sm" variant="primary" on:click={addExclusion}>
+						<Plus size={14} />
+					</Button>
+				</div>
+				<For each={localSettings.summaryExcludedSites}>
+					{(site, index) => (
+						<div class="flex items-center gap-2 py-1">
+							<span class="text-sm font-mono flex-1">{site}</span>
+							<Button
+								size="xs"
+								variant="ghost"
+								on:click={() => removeExclusion(index())}
+							>
+								<Trash2 size={14} />
+							</Button>
+						</div>
+					)}
+				</For>
+			</div>
 		</SettingsCard>
 	);
 };
