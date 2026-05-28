@@ -507,6 +507,12 @@ panelTitle = "Page Summary"
 noModel = "No summary model configured"
 noContent = "No content available to summarize on this page."
 contentTruncated = "Content was truncated due to length limits."
+excludedSites = "Summary Excluded Sites"
+excludedSitesDesc = "Summary will not be triggered on these sites"
+excludedSitesPlaceholder = "e.g. *.example.com"
+excludedSite = "This site is excluded from summary"
+addToExclusion = "Exclude from summary"
+removeFromExclusion = "Allow summary"
 
 [prompts.defaultNames]
 translate = "Translate"
