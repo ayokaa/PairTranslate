@@ -86,6 +86,11 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 			version = 4;
 			continue;
 		}
+		if (version === 4) {
+			working = migrateV4ToV5(working as SettingsSchema);
+			version = 5;
+			continue;
+		}
 
 		throw new Error(`Unsupported settings version: ${version}`);
 	}
@@ -209,6 +214,17 @@ function buildQueueSettings(
 		maxBatchSize: legacy?.maxBatchSize ?? defaults.maxBatchSize,
 		maxTokensPerBatch: defaults.maxTokensPerBatch,
 		cacheSize: legacy?.cacheSize ?? defaults.cacheSize,
+	};
+}
+
+function migrateV4ToV5(oldSettings: SettingsSchema): SettingsSchema {
+	return {
+		...oldSettings,
+		translate: {
+			...oldSettings.translate,
+			summaryExcludedSites: [],
+		},
+		__v: 5,
 	};
 }
 

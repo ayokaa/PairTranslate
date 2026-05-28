@@ -63,6 +63,7 @@ export function generateTranslateSettings(): s.TranslateSettings {
 		inputTranslateModel: MS_TRANSLATOR_ID,
 		inputTranslateLang: "en",
 		summaryModel: undefined,
+		summaryExcludedSites: [],
 	};
 }
 
