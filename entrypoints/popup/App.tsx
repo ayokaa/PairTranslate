@@ -7,10 +7,19 @@ import {
 	Power,
 	PowerOff,
 	Settings2,
+	ShieldCheck,
+	ShieldOff,
 } from "lucide-solid";
 import type { JSX } from "solid-js";
-import { createEffect, createMemo, Match, Switch } from "solid-js";
+import {
+	createEffect,
+	createMemo,
+	createResource,
+	Match,
+	Switch,
+} from "solid-js";
 import { browser } from "#imports";
+import { makeDomainMatcher } from "@/utils/domain-matcher";
 import { getThemeClass } from "@/utils/theme";
 import { Button } from "~/components/Button";
 import { Loading } from "~/components/Loading";
@@ -32,6 +41,30 @@ const Content = (props: { children?: JSX.Element }) => {
 
 	const navigate = useNavigate();
 	const location = useLocation();
+
+	const [domain] = createResource(getCurrentDomain);
+
+	const isSummaryExcluded = createMemo(() => {
+		const d = domain();
+		const sites = settings.translate.summaryExcludedSites;
+		if (!d || sites.length === 0) return false;
+		const matcher = makeDomainMatcher(sites);
+		return matcher(d) !== null;
+	});
+
+	const toggleSummaryExclusion = () => {
+		const d = domain();
+		if (!d) return;
+		const sites = [...settings.translate.summaryExcludedSites];
+		if (isSummaryExcluded()) {
+			const matcher = makeDomainMatcher(sites);
+			const idx = matcher(d);
+			if (idx !== null) sites.splice(idx, 1);
+		} else {
+			sites.push(d);
+		}
+		setSettings("translate", "summaryExcludedSites", sites);
+	};
 
 	getCurrentDomain()
 		.then((hostname) => window.rpc.matchWebsiteRule(hostname))
@@ -97,6 +130,23 @@ const Content = (props: { children?: JSX.Element }) => {
 					data-tip={t("summary.generate")}
 				>
 					<FileText size={16} />
+				</Button>
+				<Button
+					class="btn-circle tooltip tooltip-right z-1"
+					size="sm"
+					variant={isSummaryExcluded() ? "error" : "ghost"}
+					on:click={toggleSummaryExclusion}
+					data-tip={
+						isSummaryExcluded()
+							? t("summary.removeFromExclusion")
+							: t("summary.addToExclusion")
+					}
+				>
+					{isSummaryExcluded() ? (
+						<ShieldOff size={16} />
+					) : (
+						<ShieldCheck size={16} />
+					)}
 				</Button>
 				<Switch>
 					<Match when={location.pathname.includes("overall")}>
