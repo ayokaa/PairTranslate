@@ -32,7 +32,7 @@ const DEFAULT_STATE = {
 	zIndex: 0,
 	content: () => <></>,
 };
-type PopupState = typeof DEFAULT_STATE;
+type PopupState = typeof DEFAULT_STATE & { callbacks?: PopupCallbacks };
 
 export interface PopupCallbacks {
 	onMoveEnd?: (x: number, y: number) => void;
@@ -55,13 +55,11 @@ export interface PopupContext {
 	) => PopupActions;
 	popups: Store<PopupState[]>;
 	setPopups: SetStoreFunction<PopupState[]>;
-	_callbacks: Map<number, PopupCallbacks>;
 }
 const PopupContext = createContext<PopupContext>();
 
 export const PopupProvider = (props: { children: JSX.Element }) => {
 	const [popups, setPopups] = createStore([] as PopupState[]);
-	const _callbacks = new Map<number, PopupCallbacks>();
 
 	const value: PopupContext = {
 		addPopup: (inputState, callbacks) => {
@@ -71,11 +69,9 @@ export const PopupProvider = (props: { children: JSX.Element }) => {
 				...DEFAULT_STATE,
 				...inputState,
 				zIndex,
+				callbacks,
 			});
 			setPopups(lastIdx, state);
-			if (callbacks) {
-				_callbacks.set(zIndex, callbacks);
-			}
 
 			return {
 				togglePin: () => setState("pinned", (p) => !p),
@@ -86,7 +82,6 @@ export const PopupProvider = (props: { children: JSX.Element }) => {
 		},
 		popups,
 		setPopups,
-		_callbacks,
 	};
 
 	return (
@@ -106,7 +101,7 @@ export const usePopup = () => {
 };
 
 export const PopupRenderer = () => {
-	const { popups, setPopups, _callbacks } = usePopup();
+	const { popups, setPopups } = usePopup();
 
 	return (
 		<For each={popups}>
@@ -114,7 +109,6 @@ export const PopupRenderer = () => {
 				<PopupImpl
 					onDelete={() => {
 						const index_ = index();
-						_callbacks.delete(popup.zIndex);
 						setPopups((p) => p.filter((_, i) => i !== index_));
 					}}
 					onBringToFront={() => {
@@ -122,7 +116,6 @@ export const PopupRenderer = () => {
 					}}
 					// @ts-ignore This should be fine on most cases
 					setState={(...args) => setPopups(index(), ...args)}
-					callbacks={_callbacks.get(popup.zIndex)}
 					{...popup}
 				/>
 			)}
@@ -134,7 +127,6 @@ interface ImplProps extends PopupState {
 	onDelete: () => void;
 	onBringToFront: () => void;
 	setState: SetStoreFunction<PopupState>;
-	callbacks?: PopupCallbacks;
 }
 const PopupImpl = (props: ImplProps) => {
 	const [ref, setRef] = createSignal<HTMLDivElement>();
