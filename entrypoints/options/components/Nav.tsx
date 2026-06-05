@@ -11,6 +11,7 @@ import { Menu } from "~/components/Menu";
 import { useSettings } from "~/hooks/settings";
 import { cn } from "~/utils/cn";
 import { t } from "~/utils/i18n";
+import { pickActiveNavSection } from "~/utils/nav-scroll-spy";
 
 interface ItemProps {
 	children?: JSX.Element;
@@ -58,17 +59,30 @@ const Root = (props: RootProps) => {
 	);
 };
 
-const callbackMap = new WeakMap<
-	HTMLElement,
-	(isIntersecting: boolean) => void
->();
+// Shared scroll-spy state: at any moment only one nav item is active, even
+// when multiple sections happen to be >60% visible (e.g. on a tall viewport
+// with several short sections, or during the middle of a smooth scroll).
+const [activeNavId, setActiveNavId] = createSignal<string | null>(null);
+const intersectingSections = new Set<string>();
 
 const observer = new IntersectionObserver(
 	(entries) => {
-		entries.forEach((entry) => {
-			const callback = callbackMap.get(entry.target as HTMLElement);
-			callback?.(entry.isIntersecting);
-		});
+		for (const entry of entries) {
+			const navId = (entry.target as HTMLElement).dataset.nav;
+			if (!navId) continue;
+			if (entry.isIntersecting) {
+				intersectingSections.add(navId);
+			} else {
+				intersectingSections.delete(navId);
+			}
+		}
+		// Pick the topmost intersecting section (first in DOM order).
+		const allSections = document.querySelectorAll<HTMLElement>("[data-nav]");
+		const next = pickActiveNavSection(
+			intersectingSections,
+			Array.from(allSections, (el) => el.dataset.nav ?? "").filter(Boolean),
+		);
+		setActiveNavId(next);
 	},
 	{
 		root: null,
@@ -78,7 +92,6 @@ const observer = new IntersectionObserver(
 );
 
 const Item = (props: ItemProps) => {
-	const [active, setActive] = createSignal(false);
 	const handleClick = () => {
 		const element = document.querySelector(`[data-nav='${props.navId}']`);
 		element?.scrollIntoView({ behavior: "smooth" });
@@ -90,13 +103,10 @@ const Item = (props: ItemProps) => {
 		) as HTMLElement | null;
 
 		if (element) {
-			callbackMap.set(element, (isIntersecting: boolean) => {
-				setActive(isIntersecting);
-			});
 			observer.observe(element);
 			onCleanup(() => {
 				observer.unobserve(element);
-				callbackMap.delete(element);
+				intersectingSections.delete(props.navId);
 			});
 		}
 	});
@@ -108,7 +118,9 @@ const Item = (props: ItemProps) => {
 				onClick={handleClick}
 				class={cn(
 					"flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition hover:bg-base-200",
-					active() ? "bg-primary/10 text-primary" : "text-base-content/70",
+					activeNavId() === props.navId
+						? "bg-primary/10 text-primary"
+						: "text-base-content/70",
 				)}
 			>
 				{props.children}
