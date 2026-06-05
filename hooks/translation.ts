@@ -14,6 +14,7 @@ import {
 	TranslateErrorType,
 } from "~/utils/errors";
 import { t } from "~/utils/i18n";
+import { areLanguagesSame } from "~/utils/language";
 import { createThinkingFilter } from "~/utils/llm/thinking-filter";
 import type { TranslateContext } from "~/utils/types";
 import { mightUseProgressIndicator } from "./progress-indicator";
@@ -127,6 +128,11 @@ export function createBatchTranslation(
 			return;
 		}
 
+		if (areLanguagesSame(srcLang(), dstLang())) {
+			setResultTexts(texts);
+			return;
+		}
+
 		const endTracking = progressCtx?.beginRequest(modelId_);
 		setAllLoading(texts.length);
 
@@ -178,6 +184,14 @@ export function createBatchTranslation(
 			batch(() => {
 				setError(index, noModelError());
 				setTextResult(index, undefined);
+			});
+			return;
+		}
+
+		if (areLanguagesSame(srcLang(), dstLang())) {
+			batch(() => {
+				setError(index, undefined);
+				setTextResult(index, text_);
 			});
 			return;
 		}
@@ -357,6 +371,11 @@ export function createTranslation<T>(
 			return;
 		}
 
+		if (areLanguagesSame(srcLang(), dstLang())) {
+			setResultVal(text_ as unknown as T);
+			return;
+		}
+
 		const endTracking = progressCtx?.beginRequest(modelId_);
 		setLoading();
 
@@ -409,6 +428,11 @@ export function createTranslation<T>(
 		const modelId_ = modelId();
 		if (modelId_ === undefined) {
 			setErrorVal(noModelError());
+			return;
+		}
+
+		if (areLanguagesSame(srcLang(), dstLang())) {
+			setResultVal(text_ as unknown as T);
 			return;
 		}
 

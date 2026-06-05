@@ -59,3 +59,30 @@ export function getLanguageName(code: string): string | null {
 	const language = SUPPORTED_LANGUAGES.find((lang) => lang.code === code);
 	return language?.name || null;
 }
+
+/**
+ * Check if two language codes refer to the same language.
+ * Resolves "auto" to the browser's UI language before comparing.
+ * Handles regional variants (e.g. "en-US" matches "en").
+ */
+export function areLanguagesSame(
+	langA: string | undefined,
+	langB: string | undefined,
+): boolean {
+	if (!langA || !langB) return false;
+
+	const resolve = (lang: string) =>
+		lang === "auto" ? getBrowserLanguage() : lang;
+
+	const resolvedA = resolve(langA);
+	const resolvedB = resolve(langB);
+
+	const isSupported = (code: string) =>
+		SUPPORTED_LANGUAGES.some(
+			(lang) => lang.code === code || lang.code === code.split("-")[0],
+		);
+
+	if (!isSupported(resolvedA) || !isSupported(resolvedB)) return false;
+
+	return normalizeLanguageCode(resolvedA) === normalizeLanguageCode(resolvedB);
+}
