@@ -11,6 +11,8 @@ import type {
 	UnaryResult,
 } from "~/utils/flow-control/model-queue";
 import { computeCacheKey } from "~/utils/hasher";
+import { areLanguagesSame, normalizeLanguageCode } from "~/utils/language";
+import { detectSourceLanguage } from "~/utils/language-detection";
 import type {
 	ChatRequest,
 	ClientConfig,
@@ -603,6 +605,27 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		};
 	};
 
+	/**
+	 * Resolve the effective source language when srcLang is "auto".
+	 * Uses a fast local detector to identify the language; if detection
+	 * is unavailable or the result equals the target language, returns
+	 * skip=true so the caller can short-circuit.
+	 */
+	const resolveAutoSrcLang = async (
+		text: string,
+		srcLang: string,
+		dstLang: string,
+	): Promise<{ srcLang: string; skip: boolean }> => {
+		if (srcLang !== "auto") return { srcLang, skip: false };
+		const detected = await detectSourceLanguage(text);
+		if (!detected) return { srcLang: "auto", skip: false };
+		const resolved = normalizeLanguageCode(detected);
+		if (areLanguagesSame(resolved, dstLang)) {
+			return { srcLang: resolved, skip: true };
+		}
+		return { srcLang: resolved, skip: false };
+	};
+
 	const executeUnary = async (
 		ctx: TranslateContext,
 		options: TranslateOptions,
@@ -629,12 +652,33 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			(service.type === "traditional" ||
 				(service.type === "llm" && compiled?.input === "stringArray"));
 
+		let effectiveSrcLang = options.srcLang;
+		if (effectiveSrcLang === "auto") {
+			const sample = Array.isArray(payload)
+				? (payload.find((entry) => entry.length > 0) ?? "")
+				: payload;
+			if (typeof sample === "string" && sample.length > 0) {
+				const resolved = await resolveAutoSrcLang(
+					sample,
+					options.srcLang,
+					options.dstLang,
+				);
+				if (resolved.skip) {
+					return {
+						value: { output: payload, reasoning: undefined },
+						completionTokens: 0,
+					};
+				}
+				effectiveSrcLang = resolved.srcLang;
+			}
+		}
+
 		const cacheKey = await computeCacheKey(
 			promptId,
 			modelId,
 			text,
 			ctx,
-			options.srcLang,
+			effectiveSrcLang,
 			options.dstLang,
 		);
 		let thinCacheState: ThinCacheState | undefined;
@@ -662,7 +706,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						modelId,
 						entry,
 						ctx,
-						options.srcLang,
+						effectiveSrcLang,
 						options.dstLang,
 					),
 				),
@@ -753,7 +797,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			const traditionalResult = await runTraditional(
 				service,
 				texts,
-				options.srcLang,
+				effectiveSrcLang,
 				options.dstLang,
 				signal,
 			);
@@ -767,7 +811,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				compiledPrompt,
 				normalizedPayload,
 				ctx,
-				options.srcLang,
+				effectiveSrcLang,
 				options.dstLang,
 				signal,
 			);
@@ -882,12 +926,30 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				cleanCache: Boolean(options.cleanCache),
 			});
 			return (async function* () {
+				let effectiveSrcLang = options.srcLang;
+				if (effectiveSrcLang === "auto") {
+					const sample = Array.isArray(payload)
+						? (payload.find((entry) => entry.length > 0) ?? "")
+						: payload;
+					if (typeof sample === "string" && sample.length > 0) {
+						const resolved = await resolveAutoSrcLang(
+							sample,
+							options.srcLang,
+							options.dstLang,
+						);
+						if (resolved.skip) {
+							yield { content: toStreamChunk(payload) };
+							return;
+						}
+						effectiveSrcLang = resolved.srcLang;
+					}
+				}
 				const cacheKey = await computeCacheKey(
 					modelId,
 					promptId,
 					text,
 					ctx,
-					options.srcLang,
+					effectiveSrcLang,
 					options.dstLang,
 				);
 				if (options.cleanCache) {
@@ -925,14 +987,14 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 								compiledPrompt ?? getPrompt(promptId),
 								normalized,
 								ctx,
-								options.srcLang,
+								effectiveSrcLang,
 								options.dstLang,
 								signal,
 							)
 						: runTraditionalStream(
 								service,
 								normalized,
-								options.srcLang,
+								effectiveSrcLang,
 								options.dstLang,
 								(result) => {
 									traditionalResult = result;

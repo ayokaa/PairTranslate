@@ -128,7 +128,8 @@ export function createBatchTranslation(
 			return;
 		}
 
-		if (areLanguagesSame(srcLang(), dstLang())) {
+		const currentSrc = srcLang();
+		if (currentSrc !== "auto" && areLanguagesSame(currentSrc, dstLang())) {
 			setResultTexts(texts);
 			return;
 		}
@@ -188,7 +189,8 @@ export function createBatchTranslation(
 			return;
 		}
 
-		if (areLanguagesSame(srcLang(), dstLang())) {
+		const currentSrc = srcLang();
+		if (currentSrc !== "auto" && areLanguagesSame(currentSrc, dstLang())) {
 			batch(() => {
 				setError(index, undefined);
 				setTextResult(index, text_);
@@ -371,7 +373,8 @@ export function createTranslation<T>(
 			return;
 		}
 
-		if (areLanguagesSame(srcLang(), dstLang())) {
+		const currentSrc = srcLang();
+		if (currentSrc !== "auto" && areLanguagesSame(currentSrc, dstLang())) {
 			setResultVal(text_ as unknown as T);
 			return;
 		}
@@ -431,7 +434,8 @@ export function createTranslation<T>(
 			return;
 		}
 
-		if (areLanguagesSame(srcLang(), dstLang())) {
+		const currentSrc = srcLang();
+		if (currentSrc !== "auto" && areLanguagesSame(currentSrc, dstLang())) {
 			setResultVal(text_ as unknown as T);
 			return;
 		}
