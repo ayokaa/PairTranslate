@@ -665,7 +665,12 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				);
 				if (resolved.skip) {
 					return {
-						value: { output: payload, reasoning: undefined },
+						value: {
+								output: Array.isArray(payload)
+									? payload.map(() => "")
+									: "",
+								reasoning: undefined,
+							},
 						completionTokens: 0,
 					};
 				}
@@ -938,7 +943,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 							options.dstLang,
 						);
 						if (resolved.skip) {
-							yield { content: toStreamChunk(payload) };
+							yield { content: "" };
 							return;
 						}
 						effectiveSrcLang = resolved.srcLang;
