@@ -47,16 +47,6 @@ export default () => {
 			if (matcher(window.location.hostname) !== null) {
 				logger.info("Site is excluded from summary");
 				closeExistingPopup();
-				popupActions = popup.addPopup({
-					...clampPosition(SUMMARY_POPUP_WIDTH, 120),
-					width: SUMMARY_POPUP_WIDTH,
-					height: 120,
-					content: () => (
-						<div class="p-4 text-sm text-base-content/70">
-							{t("summary.excludedSite")}
-						</div>
-					),
-				});
 				return;
 			}
 		}
