@@ -189,6 +189,7 @@ export const STORAGE_KEYS = {
 	settingsMigrationError: "pair-translate:settings-migration-error",
 	sidebarSettings: "pair-translate:sidebar-settings",
 	sidebarHistory: "pair-translate:sidebar-history",
+	summaryPopupGeometry: "pair-translate:summary-popup-geometry",
 };
 
 export const DOMAIN_TIMER_UNTIL_CLOSE = "UNTIL_CLOSE" as const;
