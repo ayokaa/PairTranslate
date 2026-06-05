@@ -35,6 +35,7 @@ const clampPosition = (width: number, height: number) => ({
 });
 
 let savedGeometry: PopupGeometry | null = null;
+let loadComplete = false;
 loadPopupGeometry().then((g) => {
 	if (g && !savedGeometry) {
 		savedGeometry = clampToViewport(
@@ -44,6 +45,7 @@ loadPopupGeometry().then((g) => {
 			SUMMARY_POPUP_MARGIN,
 		);
 	}
+	loadComplete = true;
 });
 
 const getDefaultGeometry = (height: number) => ({
@@ -83,6 +85,7 @@ export default () => {
 	const onMoveEnd = (x: number, y: number) => {
 		const current = latestGeometry ?? getSummaryGeometry();
 		latestGeometry = { ...current, x, y };
+		if (!loadComplete) return;
 		savedGeometry = latestGeometry;
 		savePopupGeometry(latestGeometry).catch((e) =>
 			logger.warn("Failed to save popup geometry:", e),
@@ -92,6 +95,7 @@ export default () => {
 	const onResizeEnd = (width: number, height: number) => {
 		const current = latestGeometry ?? getSummaryGeometry();
 		latestGeometry = { ...current, width, height };
+		if (!loadComplete) return;
 		savedGeometry = latestGeometry;
 		savePopupGeometry(latestGeometry).catch((e) =>
 			logger.warn("Failed to save popup geometry:", e),
@@ -117,9 +121,7 @@ export default () => {
 		if (!content.trim()) {
 			logger.warn("No content extracted");
 			popupActions = popup.addPopup({
-				...clampPosition(SUMMARY_POPUP_WIDTH, 160),
-				width: SUMMARY_POPUP_WIDTH,
-				height: 160,
+				...getDefaultGeometry(160),
 				content: () => (
 					<div class="p-4 text-sm text-base-content/70">
 						{t("summary.noContent")}
