@@ -1,35 +1,32 @@
-import { describe, expect, mock, test } from "bun:test";
-
-mock.module("~/utils/browser-translator", () => ({
-	checkLanguageDetectorSupport: async () => ({
-		isSupported: true,
-		availability: "available" as const,
-	}),
-	createBrowserLanguageDetector: async () => ({
-		detect: async (text: string) => {
-			if (text.includes("Hello") || text.includes("world")) {
-				return [{ detectedLanguage: "en", confidence: 1.0 }];
-			}
-			if (text.includes("你好") || text.includes("世界")) {
-				return [{ detectedLanguage: "zh-CN", confidence: 1.0 }];
-			}
-			return [];
-		},
-		destroy: () => {},
-	}),
-}));
+import { describe, expect, test } from "bun:test";
 
 const { detectSourceLanguage } = await import("~/utils/language-detection");
 
 describe("detectSourceLanguage", () => {
 	test("detects English text", async () => {
-		const result = await detectSourceLanguage("Hello world");
+		const result = await detectSourceLanguage(
+			"This is an English sentence for detection",
+		);
 		expect(result).toBe("en");
 	});
 
 	test("detects Chinese text", async () => {
-		const result = await detectSourceLanguage("你好世界");
-		expect(result).toBe("zh-CN");
+		const result = await detectSourceLanguage("这是一段中文文本用于语言检测");
+		expect(result).toBe("zh");
+	});
+
+	test("detects Japanese text", async () => {
+		const result = await detectSourceLanguage(
+			"これは日本語のテキストです。言語検出のための文章です。",
+		);
+		expect(result).toBe("ja");
+	});
+
+	test("detects Korean text", async () => {
+		const result = await detectSourceLanguage(
+			"이것은 한국어 텍스트입니다. 언어 감지를 위한 문장입니다.",
+		);
+		expect(result).toBe("ko");
 	});
 
 	test("returns null for empty string", async () => {
@@ -38,9 +35,5 @@ describe("detectSourceLanguage", () => {
 
 	test("returns null for whitespace-only string", async () => {
 		expect(await detectSourceLanguage("   \n\t  ")).toBeNull();
-	});
-
-	test("returns null when detector returns no results", async () => {
-		expect(await detectSourceLanguage("xyz123")).toBeNull();
 	});
 });

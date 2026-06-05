@@ -24,6 +24,12 @@ export function normalizeLanguageCode(language: string): string {
 	);
 	if (primaryMatch) return primaryLanguage;
 
+	// Match by primary part (e.g., "zh" matches "zh-CN")
+	const prefixMatch = SUPPORTED_LANGUAGES.find(
+		(lang) => lang.code.split("-")[0] === primaryLanguage,
+	);
+	if (prefixMatch) return prefixMatch.code;
+
 	// Fallback to English
 	return "en";
 }
