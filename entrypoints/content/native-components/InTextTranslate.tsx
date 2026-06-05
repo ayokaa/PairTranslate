@@ -198,6 +198,7 @@ interface TranslationRenderProps {
 	onDelete?: () => void;
 }
 const TranslationRender = (props: TranslationRenderProps) => {
+	if (!props.loading && !props.error && props.text === "") return null;
 	const [tooltipPos, setTooltipPos] = createSignal<{ x: number; y: number }>();
 	const createTooltip = (e: MouseEvent | TouchEvent) => {
 		e.preventDefault();

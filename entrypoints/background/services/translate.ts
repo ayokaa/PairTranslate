@@ -666,15 +666,15 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				if (resolved.skip) {
 					return {
 						value: {
-								output: Array.isArray(payload)
-									? payload.map(() => "")
-									: "",
-								reasoning: undefined,
-							},
+							output: Array.isArray(payload) ? payload.map(() => "") : "",
+							reasoning: undefined,
+						},
 						completionTokens: 0,
 					};
 				}
-				effectiveSrcLang = resolved.srcLang;
+				if (service.type === "llm") {
+					effectiveSrcLang = resolved.srcLang;
+				}
 			}
 		}
 
@@ -946,7 +946,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 							yield { content: "" };
 							return;
 						}
-						effectiveSrcLang = resolved.srcLang;
+						if (service.type === "llm") {
+							effectiveSrcLang = resolved.srcLang;
+						}
 					}
 				}
 				const cacheKey = await computeCacheKey(

@@ -7,6 +7,7 @@ import {
 	untrack,
 } from "solid-js";
 import { createStore } from "solid-js/store";
+import { PROMPT_ID } from "~/utils/constants";
 import {
 	convertGenericError,
 	createTranslateError,
@@ -15,9 +16,26 @@ import {
 } from "~/utils/errors";
 import { t } from "~/utils/i18n";
 import { areLanguagesSame } from "~/utils/language";
+import { detectSourceLanguage } from "~/utils/language-detection";
 import { createThinkingFilter } from "~/utils/llm/thinking-filter";
 import type { TranslateContext } from "~/utils/types";
 import { mightUseProgressIndicator } from "./progress-indicator";
+
+const shouldSkipSameLang = (promptId: string) => promptId !== PROMPT_ID.summary;
+
+const detectAndSkip = async (
+	text: string,
+	srcLang: string | undefined,
+	dstLang: string,
+	promptId: string,
+): Promise<boolean> => {
+	if (!shouldSkipSameLang(promptId)) return false;
+	const currentSrc = srcLang || "auto";
+	if (currentSrc !== "auto") return areLanguagesSame(currentSrc, dstLang);
+	const detected = await detectSourceLanguage(text);
+	if (!detected) return false;
+	return areLanguagesSame(detected, dstLang);
+};
 
 type Pending = {
 	(): undefined;
@@ -121,15 +139,21 @@ export function createBatchTranslation(
 			setTextResult([]);
 		});
 
-	const translate = (texts: string[], cleanCache = false) => {
+	const translate = async (texts: string[], cleanCache = false) => {
 		const modelId_ = modelId();
 		if (modelId_ === undefined) {
 			setAllError(noModelError(), texts.length);
 			return;
 		}
 
-		const currentSrc = srcLang();
-		if (currentSrc !== "auto" && areLanguagesSame(currentSrc, dstLang())) {
+		if (
+			await detectAndSkip(
+				texts.find((t) => t.length > 0) || "",
+				srcLang(),
+				dstLang(),
+				promptId,
+			)
+		) {
 			setResultTexts(texts.map(() => ""));
 			return;
 		}
@@ -179,7 +203,7 @@ export function createBatchTranslation(
 		onCleanup(() => abortController.abort());
 	};
 
-	const translateSingle = (index: number, text_: string) => {
+	const translateSingle = async (index: number, text_: string) => {
 		const modelId_ = modelId();
 		if (modelId_ === undefined) {
 			batch(() => {
@@ -189,8 +213,7 @@ export function createBatchTranslation(
 			return;
 		}
 
-		const currentSrc = srcLang();
-		if (currentSrc !== "auto" && areLanguagesSame(currentSrc, dstLang())) {
+		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
 			batch(() => {
 				setError(index, undefined);
 				setTextResult(index, "");
@@ -373,8 +396,7 @@ export function createTranslation<T>(
 			return;
 		}
 
-		const currentSrc = srcLang();
-		if (currentSrc !== "auto" && areLanguagesSame(currentSrc, dstLang())) {
+		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
 			setResultVal("" as unknown as T);
 			return;
 		}
@@ -434,8 +456,7 @@ export function createTranslation<T>(
 			return;
 		}
 
-		const currentSrc = srcLang();
-		if (currentSrc !== "auto" && areLanguagesSame(currentSrc, dstLang())) {
+		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
 			setResultVal("" as unknown as T);
 			return;
 		}
