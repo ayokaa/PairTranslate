@@ -519,7 +519,6 @@ contentTruncated = "内容因长度限制已截断"
 excludedSites = "摘要排除网站"
 excludedSitesDesc = "在这些网站上不会触发页面摘要"
 excludedSitesPlaceholder = "例如 *.example.com"
-excludedSite = "该网站已排除摘要功能"
 addToExclusion = "排除摘要"
 removeFromExclusion = "允许摘要"
 

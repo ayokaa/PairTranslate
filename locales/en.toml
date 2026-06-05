@@ -510,7 +510,6 @@ contentTruncated = "Content was truncated due to length limits."
 excludedSites = "Summary Excluded Sites"
 excludedSitesDesc = "Summary will not be triggered on these sites"
 excludedSitesPlaceholder = "e.g. *.example.com"
-excludedSite = "This site is excluded from summary"
 addToExclusion = "Exclude from summary"
 removeFromExclusion = "Allow summary"
 
