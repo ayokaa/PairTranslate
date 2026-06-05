@@ -77,12 +77,9 @@ export function areLanguagesSame(
 	const resolvedA = resolve(langA);
 	const resolvedB = resolve(langB);
 
-	const isSupported = (code: string) =>
-		SUPPORTED_LANGUAGES.some(
-			(lang) => lang.code === code || lang.code === code.split("-")[0],
-		);
-
-	if (!isSupported(resolvedA) || !isSupported(resolvedB)) return false;
+	if (!isLanguageSupported(resolvedA) || !isLanguageSupported(resolvedB)) {
+		return false;
+	}
 
 	return normalizeLanguageCode(resolvedA) === normalizeLanguageCode(resolvedB);
 }

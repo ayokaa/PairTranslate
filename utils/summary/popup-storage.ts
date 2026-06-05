@@ -40,6 +40,9 @@ export function clampToViewport(
 	vh: number,
 	margin = 12,
 ): PopupGeometry | null {
+	if (vw < margin * 2 || vh < margin * 2) {
+		return null;
+	}
 	if (
 		geometry.x + geometry.width < margin ||
 		geometry.y + geometry.height < margin ||

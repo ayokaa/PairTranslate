@@ -6,9 +6,15 @@ mock.module("#imports", () => ({
 	browser: {
 		storage: {
 			local: {
-				get: async (key: string) => {
-					const k = typeof key === "string" ? key : key;
-					return { [k]: storage.get(k as string) };
+				get: async (key: string | string[]) => {
+					if (typeof key === "string") {
+						return { [key]: storage.get(key) };
+					}
+					const result: Record<string, unknown> = {};
+					for (const k of key) {
+						result[k] = storage.get(k);
+					}
+					return result;
 				},
 				set: async (obj: Record<string, unknown>) => {
 					for (const [k, v] of Object.entries(obj)) {
@@ -20,12 +26,18 @@ mock.module("#imports", () => ({
 	},
 }));
 
-const { sanitizeGeometry, clampToViewport, loadPopupGeometry, savePopupGeometry } =
-	await import("./popup-storage");
+const {
+	sanitizeGeometry,
+	clampToViewport,
+	loadPopupGeometry,
+	savePopupGeometry,
+} = await import("./popup-storage");
 
 describe("sanitizeGeometry", () => {
 	test("returns valid geometry", () => {
-		expect(sanitizeGeometry({ x: 100, y: 200, width: 420, height: 520 })).toEqual({
+		expect(
+			sanitizeGeometry({ x: 100, y: 200, width: 420, height: 520 }),
+		).toEqual({
 			x: 100,
 			y: 200,
 			width: 420,
@@ -79,9 +91,12 @@ describe("sanitizeGeometry", () => {
 	});
 
 	test("accepts zero position with valid dimensions", () => {
-		expect(
-			sanitizeGeometry({ x: 0, y: 0, width: 200, height: 150 }),
-		).toEqual({ x: 0, y: 0, width: 200, height: 150 });
+		expect(sanitizeGeometry({ x: 0, y: 0, width: 200, height: 150 })).toEqual({
+			x: 0,
+			y: 0,
+			width: 200,
+			height: 150,
+		});
 	});
 });
 
@@ -216,6 +231,31 @@ describe("clampToViewport", () => {
 		expect(result).not.toBeNull();
 		expect(result!.x).toBe(12);
 		expect(result!.y).toBe(12);
+	});
+
+	test("returns null when viewport is smaller than margin*2 in width", () => {
+		expect(
+			clampToViewport({ x: 0, y: 0, width: 200, height: 150 }, 20, 800, 12),
+		).toBeNull();
+	});
+
+	test("returns null when viewport is smaller than margin*2 in height", () => {
+		expect(
+			clampToViewport({ x: 0, y: 0, width: 200, height: 150 }, 1000, 20, 12),
+		).toBeNull();
+	});
+
+	test("never produces negative width or height", () => {
+		const result = clampToViewport(
+			{ x: 0, y: 0, width: 200, height: 150 },
+			30,
+			30,
+			12,
+		);
+		if (result !== null) {
+			expect(result.width).toBeGreaterThanOrEqual(0);
+			expect(result.height).toBeGreaterThanOrEqual(0);
+		}
 	});
 });
 
