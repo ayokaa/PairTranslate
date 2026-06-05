@@ -34,6 +34,11 @@ const DEFAULT_STATE = {
 };
 type PopupState = typeof DEFAULT_STATE;
 
+export interface PopupCallbacks {
+	onMoveEnd?: (x: number, y: number) => void;
+	onResizeEnd?: (width: number, height: number) => void;
+}
+
 export interface PopupActions {
 	togglePin: () => void;
 	close: () => void;
@@ -44,24 +49,33 @@ export interface PopupActions {
 let cnt = 0;
 
 export interface PopupContext {
-	addPopup: (state?: Partial<PopupState>) => PopupActions;
+	addPopup: (
+		state?: Partial<PopupState>,
+		callbacks?: PopupCallbacks,
+	) => PopupActions;
 	popups: Store<PopupState[]>;
 	setPopups: SetStoreFunction<PopupState[]>;
+	_callbacks: Map<number, PopupCallbacks>;
 }
 const PopupContext = createContext<PopupContext>();
 
 export const PopupProvider = (props: { children: JSX.Element }) => {
 	const [popups, setPopups] = createStore([] as PopupState[]);
+	const _callbacks = new Map<number, PopupCallbacks>();
 
 	const value: PopupContext = {
-		addPopup: (inputState) => {
+		addPopup: (inputState, callbacks) => {
 			const lastIdx = untrack(() => popups.length);
+			const zIndex = ++cnt;
 			const [state, setState] = createStore<PopupState>({
 				...DEFAULT_STATE,
 				...inputState,
-				zIndex: ++cnt,
+				zIndex,
 			});
 			setPopups(lastIdx, state);
+			if (callbacks) {
+				_callbacks.set(zIndex, callbacks);
+			}
 
 			return {
 				togglePin: () => setState("pinned", (p) => !p),
@@ -72,6 +86,7 @@ export const PopupProvider = (props: { children: JSX.Element }) => {
 		},
 		popups,
 		setPopups,
+		_callbacks,
 	};
 
 	return (
@@ -91,7 +106,7 @@ export const usePopup = () => {
 };
 
 export const PopupRenderer = () => {
-	const { popups, setPopups } = usePopup();
+	const { popups, setPopups, _callbacks } = usePopup();
 
 	return (
 		<For each={popups}>
@@ -99,6 +114,7 @@ export const PopupRenderer = () => {
 				<PopupImpl
 					onDelete={() => {
 						const index_ = index();
+						_callbacks.delete(popup.zIndex);
 						setPopups((p) => p.filter((_, i) => i !== index_));
 					}}
 					onBringToFront={() => {
@@ -106,6 +122,7 @@ export const PopupRenderer = () => {
 					}}
 					// @ts-ignore This should be fine on most cases
 					setState={(...args) => setPopups(index(), ...args)}
+					callbacks={_callbacks.get(popup.zIndex)}
 					{...popup}
 				/>
 			)}
@@ -117,6 +134,7 @@ interface ImplProps extends PopupState {
 	onDelete: () => void;
 	onBringToFront: () => void;
 	setState: SetStoreFunction<PopupState>;
+	callbacks?: PopupCallbacks;
 }
 const PopupImpl = (props: ImplProps) => {
 	const [ref, setRef] = createSignal<HTMLDivElement>();
@@ -205,6 +223,7 @@ const PopupImpl = (props: ImplProps) => {
 		setDragging(false);
 		document.removeEventListener("mousemove", onDragMove);
 		document.removeEventListener("mouseup", onDragEnd);
+		props.callbacks?.onMoveEnd?.(props.x, props.y);
 	};
 
 	// Touch event handlers for dragging
@@ -245,6 +264,7 @@ const PopupImpl = (props: ImplProps) => {
 		document.removeEventListener("touchmove", onTouchDragMove);
 		document.removeEventListener("touchend", onTouchDragEnd);
 		document.removeEventListener("touchcancel", onTouchDragEnd);
+		props.callbacks?.onMoveEnd?.(props.x, props.y);
 	};
 
 	// Mouse event handlers for resizing
@@ -267,6 +287,7 @@ const PopupImpl = (props: ImplProps) => {
 		setResizing(false);
 		document.removeEventListener("mousemove", onResizeMove);
 		document.removeEventListener("mouseup", onResizeEnd);
+		props.callbacks?.onResizeEnd?.(props.width, props.height);
 	};
 
 	// Touch event handlers for resizing
@@ -308,6 +329,7 @@ const PopupImpl = (props: ImplProps) => {
 		document.removeEventListener("touchmove", onTouchResizeMove);
 		document.removeEventListener("touchend", onTouchResizeEnd);
 		document.removeEventListener("touchcancel", onTouchResizeEnd);
+		props.callbacks?.onResizeEnd?.(props.width, props.height);
 	};
 
 	onCleanup(() => {
