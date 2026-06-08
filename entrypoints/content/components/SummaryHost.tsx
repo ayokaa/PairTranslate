@@ -103,6 +103,11 @@ export default () => {
 	};
 
 	const handleGenerateSummary = () => {
+		if (popupActions?.isVisible()) {
+			logger.info("Summary popup already visible, skipping");
+			return;
+		}
+
 		const excludedSites = settings.translate.summaryExcludedSites;
 		if (excludedSites.length > 0) {
 			const matcher = makeDomainMatcher(excludedSites);

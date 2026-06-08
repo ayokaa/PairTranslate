@@ -44,6 +44,7 @@ export interface PopupActions {
 	close: () => void;
 	setPosition: (x: number, y: number) => void;
 	setSize: (width: number, height: number) => void;
+	isVisible: () => boolean;
 }
 
 let cnt = 0;
@@ -78,6 +79,7 @@ export const PopupProvider = (props: { children: JSX.Element }) => {
 				close: () => setState("visible", false),
 				setPosition: (x: number, y: number) => setState({ x, y }),
 				setSize: (width: number, height: number) => setState({ width, height }),
+				isVisible: () => state.visible,
 			};
 		},
 		popups,
