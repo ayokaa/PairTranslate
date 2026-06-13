@@ -1,5 +1,5 @@
 import { createQueueHub } from "~/utils/async/queue-hub";
-import { STORAGE_KEYS } from "~/utils/constants";
+import { PROMPT_ID, STORAGE_KEYS } from "~/utils/constants";
 import {
 	convertFromLLMError,
 	convertFromTranslationError,
@@ -609,18 +609,20 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 	 * Resolve the effective source language when srcLang is "auto".
 	 * Uses a fast local detector to identify the language; if detection
 	 * is unavailable or the result equals the target language, returns
-	 * skip=true so the caller can short-circuit.
+	 * skip=true so the caller can short-circuit. Summaries are exempt:
+	 * the same language can still be summarized.
 	 */
 	const resolveAutoSrcLang = async (
 		text: string,
 		srcLang: string,
 		dstLang: string,
+		promptId: string,
 	): Promise<{ srcLang: string; skip: boolean }> => {
 		if (srcLang !== "auto") return { srcLang, skip: false };
 		const detected = await detectSourceLanguage(text);
 		if (!detected) return { srcLang: "auto", skip: false };
 		const resolved = normalizeLanguageCode(detected);
-		if (areLanguagesSame(resolved, dstLang)) {
+		if (promptId !== PROMPT_ID.summary && areLanguagesSame(resolved, dstLang)) {
 			return { srcLang: resolved, skip: true };
 		}
 		return { srcLang: resolved, skip: false };
@@ -662,6 +664,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					sample,
 					options.srcLang,
 					options.dstLang,
+					promptId,
 				);
 				if (resolved.skip) {
 					return {
@@ -941,6 +944,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 							sample,
 							options.srcLang,
 							options.dstLang,
+							promptId,
 						);
 						if (resolved.skip) {
 							yield { content: "" };
