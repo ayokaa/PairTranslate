@@ -119,6 +119,7 @@ export const TEXT_TAGS = [
 	"TH",
 	"BUTTON",
 	"LABEL",
+	"FONT",
 ];
 
 export const BLOCK_TAGS = [
