@@ -75,6 +75,61 @@ describe("migrateSettings", () => {
 		expect(result.__v).toBe(SETTINGS_VERSION);
 		expect(result.translate.summaryExcludedSites).toEqual([]);
 	});
+
+	test("migrates from v5 to v6 adding summaryDefaultPinned", () => {
+		const v5Settings = {
+			__v: 5,
+			basic: {
+				enabled: true,
+				theme: "system",
+				selectionPopupEnabled: true,
+				autoPin: false,
+				floatingBallEnabled: true,
+				floatingBallPosition: { side: "right", top: 20 },
+				keyboardShortcutEnabled: true,
+				keyboardShortcut: "Alt+T",
+				selectionTranslateEnabled: true,
+				selectionTranslateModifier: "Alt",
+				inputTranslateEnabled: true,
+				progressIndicationEnabled: true,
+				translationStyle: {},
+				keyboardShortcutSummarizes: false,
+				keyboardShortcutForSummary: "Alt+T",
+			},
+			translate: {
+				sourceLang: "auto",
+				targetLang: "en",
+				filterInteractive: true,
+				translationMode: "parallel",
+				inTextTranslateIconEnabled: true,
+				translateFullPage: false,
+				inputTranslateLang: "en",
+				summaryModel: undefined,
+				summaryExcludedSites: [],
+			},
+			services: {},
+			queue: {
+				requestConcurrency: 4,
+				tokensPerMinute: 80000,
+				maxBatchSize: 8,
+				maxTokensPerBatch: 8000,
+				cacheSize: 1000,
+			},
+			prompts: {},
+			websiteRules: [],
+			debug: {
+				verboseLogging: false,
+				traceLlms: false,
+				traceTraditional: false,
+				disableCache: false,
+				simulateLatencyMs: 0,
+			},
+		};
+
+		const result = migrateSettings(v5Settings);
+		expect(result.__v).toBe(SETTINGS_VERSION);
+		expect(result.translate.summaryDefaultPinned).toBe(false);
+	});
 });
 
 describe("TranslateSettings schema", () => {
