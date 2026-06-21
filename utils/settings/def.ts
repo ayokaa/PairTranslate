@@ -120,6 +120,7 @@ export const TranslateSettings = z.object({
 	inputTranslateLang: z.string().default("en"), // Target language for input translation
 	summaryModel: z.uuid().optional(),
 	summaryExcludedSites: z.array(z.string()).default([]),
+	summaryDefaultPinned: z.boolean().default(false),
 });
 export type TranslateSettings = z.infer<typeof TranslateSettings>;
 
