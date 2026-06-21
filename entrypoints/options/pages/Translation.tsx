@@ -288,6 +288,14 @@ export default (props: { navId: string }) => {
 						setLocalSettings("summaryModel", value);
 					}}
 				/>
+				<SettingsCheckbox
+					label={t("settings.translation.summaryDefaultPinned")}
+					helperText={t("settings.translation.summaryDefaultPinnedDesc")}
+					checked={localSettings.summaryDefaultPinned ?? false}
+					onChange={(e) =>
+						setLocalSettings("summaryDefaultPinned", e.target.checked)
+					}
+				/>
 			</FormGrid>
 			<div class="divider m-0" />
 			<div class="form-control">
