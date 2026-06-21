@@ -91,6 +91,11 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 			version = 5;
 			continue;
 		}
+		if (version === 5) {
+			working = migrateV5ToV6(working as SettingsSchema);
+			version = 6;
+			continue;
+		}
 
 		throw new Error(`Unsupported settings version: ${version}`);
 	}
@@ -225,6 +230,17 @@ function migrateV4ToV5(oldSettings: SettingsSchema): SettingsSchema {
 			summaryExcludedSites: [],
 		},
 		__v: 5,
+	};
+}
+
+function migrateV5ToV6(oldSettings: SettingsSchema): SettingsSchema {
+	return {
+		...oldSettings,
+		translate: {
+			...oldSettings.translate,
+			summaryDefaultPinned: false,
+		},
+		__v: 6,
 	};
 }
 
