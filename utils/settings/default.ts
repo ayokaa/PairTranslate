@@ -64,6 +64,7 @@ export function generateTranslateSettings(): s.TranslateSettings {
 		inputTranslateLang: "en",
 		summaryModel: undefined,
 		summaryExcludedSites: [],
+		summaryDefaultPinned: false,
 	};
 }
 
