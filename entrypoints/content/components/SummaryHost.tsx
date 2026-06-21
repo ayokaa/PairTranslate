@@ -147,6 +147,7 @@ export default () => {
 				y: geometry.y,
 				width: geometry.width,
 				height: geometry.height,
+				pinned: settings.translate.summaryDefaultPinned,
 				content: () => (
 					<SummaryPanel
 						content={content}
