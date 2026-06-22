@@ -96,6 +96,11 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 			version = 6;
 			continue;
 		}
+		if (version === 6) {
+			working = migrateV6ToV7(working as SettingsSchema);
+			version = 7;
+			continue;
+		}
 
 		throw new Error(`Unsupported settings version: ${version}`);
 	}
@@ -241,6 +246,17 @@ function migrateV5ToV6(oldSettings: SettingsSchema): SettingsSchema {
 			summaryDefaultPinned: false,
 		},
 		__v: 6,
+	};
+}
+
+function migrateV6ToV7(oldSettings: SettingsSchema): SettingsSchema {
+	return {
+		...oldSettings,
+		basic: {
+			...oldSettings.basic,
+			restorePageState: true,
+		},
+		__v: 7,
 	};
 }
 

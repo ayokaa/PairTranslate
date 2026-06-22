@@ -130,6 +130,62 @@ describe("migrateSettings", () => {
 		expect(result.__v).toBe(SETTINGS_VERSION);
 		expect(result.translate.summaryDefaultPinned).toBe(false);
 	});
+
+	test("migrates from v6 to v7 adding restorePageState", () => {
+		const v6Settings = {
+			__v: 6,
+			basic: {
+				enabled: true,
+				theme: "system",
+				selectionPopupEnabled: true,
+				autoPin: false,
+				floatingBallEnabled: true,
+				floatingBallPosition: { side: "right", top: 20 },
+				keyboardShortcutEnabled: true,
+				keyboardShortcut: "Alt+T",
+				selectionTranslateEnabled: true,
+				selectionTranslateModifier: "Alt",
+				inputTranslateEnabled: true,
+				progressIndicationEnabled: true,
+				translationStyle: {},
+				keyboardShortcutSummarizes: false,
+				keyboardShortcutForSummary: "Alt+T",
+			},
+			translate: {
+				sourceLang: "auto",
+				targetLang: "en",
+				filterInteractive: true,
+				translationMode: "parallel",
+				inTextTranslateIconEnabled: true,
+				translateFullPage: false,
+				inputTranslateLang: "en",
+				summaryModel: undefined,
+				summaryExcludedSites: [],
+				summaryDefaultPinned: false,
+			},
+			services: {},
+			queue: {
+				requestConcurrency: 4,
+				tokensPerMinute: 80000,
+				maxBatchSize: 8,
+				maxTokensPerBatch: 8000,
+				cacheSize: 1000,
+			},
+			prompts: {},
+			websiteRules: [],
+			debug: {
+				verboseLogging: false,
+				traceLlms: false,
+				traceTraditional: false,
+				disableCache: false,
+				simulateLatencyMs: 0,
+			},
+		};
+
+		const result = migrateSettings(v6Settings);
+		expect(result.__v).toBe(SETTINGS_VERSION);
+		expect(result.basic.restorePageState).toBe(true);
+	});
 });
 
 describe("TranslateSettings schema", () => {

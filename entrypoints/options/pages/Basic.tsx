@@ -212,6 +212,15 @@ export default (props: { navId: string }) => {
 					}
 				/>
 
+				<SettingsToggle
+					label={t("settings.basic.restorePageState")}
+					helperText={t("settings.basic.restorePageStateDesc")}
+					checked={settings.basic.restorePageState}
+					onChange={(e) =>
+						setSettings("basic", "restorePageState", e.target.checked)
+					}
+				/>
+
 				<FormField
 					label={t("settings.basic.selectionTranslateEnabled")}
 					helperText={t("settings.basic.selectionTranslateEnabledDesc")}

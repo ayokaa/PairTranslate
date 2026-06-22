@@ -1,8 +1,9 @@
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, onMount, Show } from "solid-js";
 import { createDomainEnabledTimer } from "~/hooks/domain-timer";
 import { createKeyboardShortcut } from "~/hooks/keyboard-shortcut";
 import { useSettings } from "~/hooks/settings";
 import { useWebsiteRule } from "~/hooks/website-rule";
+import { loadPageState, savePageState } from "~/utils/page-state";
 import FloatingBall from "./FloatingBall";
 import FourFingerTap from "./FourFingerTap";
 import InputTranslator from "./InputTranslator";
@@ -27,6 +28,30 @@ export default () => {
 		setInTextTranslateEnabled((prev) => websiteRule.enableTranslation ?? prev);
 	});
 
+	// Toggle the in-text translation switch and persist the choice per-URL so it
+	// can be restored after a reload/browser restart (when restorePageState is on).
+	const toggleTranslate = (next?: boolean) => {
+		const resolved = next ?? !inTextTranslateEnabled();
+		setInTextTranslateEnabled(resolved);
+		if (settings.basic.restorePageState) {
+			savePageState(window.location.href, {
+				translateEnabled: resolved,
+			}).catch(() => {});
+		}
+	};
+
+	// Restore per-page state once on mount, unless a website rule explicitly
+	// overrides the translation flag (in which case the rule wins).
+	onMount(() => {
+		if (!settings.basic.restorePageState) return;
+		if (websiteRule.enableTranslation !== undefined) return;
+		loadPageState(window.location.href)
+			.then((state) => {
+				if (state?.translateEnabled) setInTextTranslateEnabled(true);
+			})
+			.catch(() => {});
+	});
+
 	// Handle keyboard shortcut
 	createKeyboardShortcut(
 		() => settings.basic.keyboardShortcut,
@@ -34,7 +59,7 @@ export default () => {
 			if (inInput && settings.basic.inputTranslateEnabled) {
 				setInputTranslateElement(event.target as HTMLElement);
 			} else {
-				setInTextTranslateEnabled((prev) => !prev);
+				toggleTranslate();
 			}
 		},
 		{
@@ -53,11 +78,11 @@ export default () => {
 			>
 				<FloatingBall
 					translateEnabled={inTextTranslateEnabled()}
-					onSwitch={() => setInTextTranslateEnabled((v) => !v)}
+					onSwitch={() => toggleTranslate()}
 				/>
 			</Show>
 
-			<FourFingerTap onToggle={() => setInTextTranslateEnabled((v) => !v)} />
+			<FourFingerTap onToggle={() => toggleTranslate()} />
 
 			<Show when={inTextTranslateEnabled()} keyed>
 				<InTextTranslator />

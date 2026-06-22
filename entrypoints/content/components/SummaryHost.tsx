@@ -6,6 +6,7 @@ import { useSettings } from "~/hooks/settings";
 import { makeDomainMatcher } from "~/utils/domain-matcher";
 import { t } from "~/utils/i18n";
 import { getPageContext } from "~/utils/page-context";
+import { loadPageState, savePageState } from "~/utils/page-state";
 import { createLogger } from "~/utils/rpc/logger";
 import { extractPageContent } from "~/utils/summary/extract";
 import {
@@ -80,6 +81,11 @@ export default () => {
 			popupActions = undefined;
 		}
 		latestGeometry = null;
+		if (settings.basic.restorePageState) {
+			savePageState(window.location.href, { summaryOpen: false }).catch(
+				() => {},
+			);
+		}
 	};
 
 	const onMoveEnd = (x: number, y: number) => {
@@ -158,9 +164,26 @@ export default () => {
 			},
 			{ onMoveEnd, onResizeEnd },
 		);
+		if (settings.basic.restorePageState) {
+			savePageState(window.location.href, { summaryOpen: true }).catch(
+				() => {},
+			);
+		}
 	};
 
 	onMount(() => {
+		// Restore the summary popup once on mount if it was open before a
+		// reload/browser restart (when restorePageState is on). The summary
+		// result itself is served from the background's IndexedDB cache, so no
+		// new API request is issued.
+		if (settings.basic.restorePageState) {
+			loadPageState(window.location.href)
+				.then((state) => {
+					if (state?.summaryOpen) handleGenerateSummary();
+				})
+				.catch(() => {});
+		}
+
 		const listener = (message: unknown) => {
 			logger.debug("Received message:", message);
 			if (

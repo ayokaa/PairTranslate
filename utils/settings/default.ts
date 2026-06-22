@@ -41,6 +41,7 @@ export function generateBasicSettings(): s.BasicSettings {
 		},
 		keyboardShortcutSummarizes: false,
 		keyboardShortcutForSummary: "Alt+T",
+		restorePageState: true,
 	};
 }
 

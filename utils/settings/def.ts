@@ -41,6 +41,8 @@ export const BasicSettings = z.object({
 	),
 	keyboardShortcutSummarizes: z.boolean().default(false),
 	keyboardShortcutForSummary: z.string().default("Alt+T"),
+	// Restore per-page UI state (in-text translation switch + summary popup) after reload/restart
+	restorePageState: z.boolean().default(true),
 });
 export type BasicSettings = z.infer<typeof BasicSettings>;
 
