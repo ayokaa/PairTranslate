@@ -101,6 +101,11 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 			version = 7;
 			continue;
 		}
+		if (version === 7) {
+			working = migrateV7ToV8(working as SettingsSchema);
+			version = 8;
+			continue;
+		}
 
 		throw new Error(`Unsupported settings version: ${version}`);
 	}
@@ -257,6 +262,18 @@ function migrateV6ToV7(oldSettings: SettingsSchema): SettingsSchema {
 			restorePageState: true,
 		},
 		__v: 7,
+	};
+}
+
+function migrateV7ToV8(oldSettings: SettingsSchema): SettingsSchema {
+	return {
+		...oldSettings,
+		translate: {
+			...oldSettings.translate,
+			summaryGeometryPerSite: true,
+			summaryGeometryMaxEntries: 1000,
+		},
+		__v: 8,
 	};
 }
 

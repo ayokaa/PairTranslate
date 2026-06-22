@@ -123,6 +123,9 @@ export const TranslateSettings = z.object({
 	summaryModel: z.uuid().optional(),
 	summaryExcludedSites: z.array(z.string()).default([]),
 	summaryDefaultPinned: z.boolean().default(false),
+	// Remember summary popup geometry per root domain
+	summaryGeometryPerSite: z.boolean().default(true),
+	summaryGeometryMaxEntries: z.number().min(1).default(1000),
 });
 export type TranslateSettings = z.infer<typeof TranslateSettings>;
 

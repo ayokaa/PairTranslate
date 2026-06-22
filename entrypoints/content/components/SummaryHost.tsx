@@ -35,45 +35,33 @@ const clampPosition = (width: number, height: number) => ({
 	),
 });
 
-let savedGeometry: PopupGeometry | null = null;
-let loadComplete = false;
-loadPopupGeometry().then((g) => {
-	if (g && !savedGeometry) {
-		savedGeometry = clampToViewport(
-			g,
-			window.innerWidth,
-			window.innerHeight,
-			SUMMARY_POPUP_MARGIN,
-		);
-	}
-	loadComplete = true;
-});
-
-const getDefaultGeometry = (height: number) => ({
-	...clampPosition(SUMMARY_POPUP_WIDTH, height),
-	width: SUMMARY_POPUP_WIDTH,
-	height,
-});
-
-const getSummaryGeometry = () => {
-	if (savedGeometry) {
-		const clamped = clampToViewport(
-			savedGeometry,
-			window.innerWidth,
-			window.innerHeight,
-			SUMMARY_POPUP_MARGIN,
-		);
-		if (clamped) return clamped;
-	}
-	return getDefaultGeometry(SUMMARY_POPUP_HEIGHT);
-};
-
 export default () => {
 	const popup = usePopup();
 	const { settings } = useSettings();
 	let popupActions: ReturnType<typeof popup.addPopup> | undefined;
 	let messageListener: ((message: unknown) => void) | undefined;
 	let latestGeometry: PopupGeometry | null = null;
+	let savedGeometry: PopupGeometry | null = null;
+	let loadComplete = false;
+
+	const getDefaultGeometry = (height: number) => ({
+		...clampPosition(SUMMARY_POPUP_WIDTH, height),
+		width: SUMMARY_POPUP_WIDTH,
+		height,
+	});
+
+	const getSummaryGeometry = () => {
+		if (savedGeometry) {
+			const clamped = clampToViewport(
+				savedGeometry,
+				window.innerWidth,
+				window.innerHeight,
+				SUMMARY_POPUP_MARGIN,
+			);
+			if (clamped) return clamped;
+		}
+		return getDefaultGeometry(SUMMARY_POPUP_HEIGHT);
+	};
 
 	const closeExistingPopup = () => {
 		if (popupActions) {
@@ -88,24 +76,27 @@ export default () => {
 		}
 	};
 
+	const saveGeometry = (geometry: PopupGeometry) => {
+		savedGeometry = geometry;
+		if (!loadComplete) return;
+		savePopupGeometry(
+			geometry,
+			window.location.href,
+			settings.translate.summaryGeometryPerSite,
+			settings.translate.summaryGeometryMaxEntries,
+		).catch((e) => logger.warn("Failed to save popup geometry:", e));
+	};
+
 	const onMoveEnd = (x: number, y: number) => {
 		const current = latestGeometry ?? getSummaryGeometry();
 		latestGeometry = { ...current, x, y };
-		if (!loadComplete) return;
-		savedGeometry = latestGeometry;
-		savePopupGeometry(latestGeometry).catch((e) =>
-			logger.warn("Failed to save popup geometry:", e),
-		);
+		saveGeometry(latestGeometry);
 	};
 
 	const onResizeEnd = (width: number, height: number) => {
 		const current = latestGeometry ?? getSummaryGeometry();
 		latestGeometry = { ...current, width, height };
-		if (!loadComplete) return;
-		savedGeometry = latestGeometry;
-		savePopupGeometry(latestGeometry).catch((e) =>
-			logger.warn("Failed to save popup geometry:", e),
-		);
+		saveGeometry(latestGeometry);
 	};
 
 	const handleGenerateSummary = () => {
@@ -172,6 +163,26 @@ export default () => {
 	};
 
 	onMount(() => {
+		// Load saved geometry for the current domain (or global fallback).
+		loadPopupGeometry(
+			window.location.href,
+			settings.translate.summaryGeometryPerSite,
+		)
+			.then((g) => {
+				if (g) {
+					savedGeometry = clampToViewport(
+						g,
+						window.innerWidth,
+						window.innerHeight,
+						SUMMARY_POPUP_MARGIN,
+					);
+				}
+			})
+			.catch((e) => logger.warn("Failed to load popup geometry:", e))
+			.finally(() => {
+				loadComplete = true;
+			});
+
 		// Restore the summary popup once on mount if it was open before a
 		// reload/browser restart (when restorePageState is on). The summary
 		// result itself is served from the background's IndexedDB cache, so no

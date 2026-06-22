@@ -186,6 +186,64 @@ describe("migrateSettings", () => {
 		expect(result.__v).toBe(SETTINGS_VERSION);
 		expect(result.basic.restorePageState).toBe(true);
 	});
+
+	test("migrates from v7 to v8 adding summaryGeometry settings", () => {
+		const v7Settings = {
+			__v: 7,
+			basic: {
+				enabled: true,
+				theme: "system",
+				selectionPopupEnabled: true,
+				autoPin: false,
+				floatingBallEnabled: true,
+				floatingBallPosition: { side: "right", top: 20 },
+				keyboardShortcutEnabled: true,
+				keyboardShortcut: "Alt+T",
+				selectionTranslateEnabled: true,
+				selectionTranslateModifier: "Alt",
+				inputTranslateEnabled: true,
+				progressIndicationEnabled: true,
+				translationStyle: {},
+				keyboardShortcutSummarizes: false,
+				keyboardShortcutForSummary: "Alt+T",
+				restorePageState: true,
+			},
+			translate: {
+				sourceLang: "auto",
+				targetLang: "en",
+				filterInteractive: true,
+				translationMode: "parallel",
+				inTextTranslateIconEnabled: true,
+				translateFullPage: false,
+				inputTranslateLang: "en",
+				summaryModel: undefined,
+				summaryExcludedSites: [],
+				summaryDefaultPinned: false,
+			},
+			services: {},
+			queue: {
+				requestConcurrency: 4,
+				tokensPerMinute: 80000,
+				maxBatchSize: 8,
+				maxTokensPerBatch: 8000,
+				cacheSize: 1000,
+			},
+			prompts: {},
+			websiteRules: [],
+			debug: {
+				verboseLogging: false,
+				traceLlms: false,
+				traceTraditional: false,
+				disableCache: false,
+				simulateLatencyMs: 0,
+			},
+		};
+
+		const result = migrateSettings(v7Settings);
+		expect(result.__v).toBe(SETTINGS_VERSION);
+		expect(result.translate.summaryGeometryPerSite).toBe(true);
+		expect(result.translate.summaryGeometryMaxEntries).toBe(1000);
+	});
 });
 
 describe("TranslateSettings schema", () => {

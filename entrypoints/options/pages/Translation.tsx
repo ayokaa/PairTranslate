@@ -6,6 +6,7 @@ import type z from "zod";
 import { Button } from "~/components/Button";
 import { ButtonGroup } from "~/components/settings/ButtonGroup";
 import { FormGrid } from "~/components/settings/FormGrid";
+import { NumberInput } from "~/components/settings/NumberInput";
 import {
 	OptionSelect,
 	type SelectOption,
@@ -294,6 +295,26 @@ export default (props: { navId: string }) => {
 					checked={localSettings.summaryDefaultPinned ?? false}
 					onChange={(e) =>
 						setLocalSettings("summaryDefaultPinned", e.target.checked)
+					}
+				/>
+				<SettingsCheckbox
+					label={t("settings.translation.summaryGeometryPerSite")}
+					helperText={t("settings.translation.summaryGeometryPerSiteDesc")}
+					checked={localSettings.summaryGeometryPerSite ?? true}
+					onChange={(e) =>
+						setLocalSettings("summaryGeometryPerSite", e.target.checked)
+					}
+				/>
+				<NumberInput
+					label={t("settings.translation.summaryGeometryMaxEntries")}
+					helperText={t("settings.translation.summaryGeometryMaxEntriesDesc")}
+					value={localSettings.summaryGeometryMaxEntries ?? 1000}
+					min={1}
+					onChange={(e) =>
+						setLocalSettings(
+							"summaryGeometryMaxEntries",
+							Number(e.target.value),
+						)
 					}
 				/>
 			</FormGrid>

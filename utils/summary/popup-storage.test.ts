@@ -21,6 +21,12 @@ mock.module("#imports", () => ({
 						storage.set(k, v);
 					}
 				},
+				remove: async (key: string | string[]) => {
+					const keys = Array.isArray(key) ? key : [key];
+					for (const k of keys) {
+						storage.delete(k);
+					}
+				},
 			},
 		},
 	},
@@ -31,6 +37,7 @@ const {
 	clampToViewport,
 	loadPopupGeometry,
 	savePopupGeometry,
+	__resetGeometryBackend,
 } = await import("./popup-storage");
 
 describe("sanitizeGeometry", () => {
@@ -262,12 +269,14 @@ describe("clampToViewport", () => {
 describe("loadPopupGeometry / savePopupGeometry", () => {
 	test("returns null when nothing is stored", async () => {
 		storage.clear();
+		__resetGeometryBackend();
 		const result = await loadPopupGeometry();
 		expect(result).toBeNull();
 	});
 
-	test("round-trips valid geometry", async () => {
+	test("round-trips valid geometry globally", async () => {
 		storage.clear();
+		__resetGeometryBackend();
 		const geometry = { x: 100, y: 200, width: 420, height: 520 };
 		await savePopupGeometry(geometry);
 		const loaded = await loadPopupGeometry();
@@ -276,6 +285,7 @@ describe("loadPopupGeometry / savePopupGeometry", () => {
 
 	test("returns null for corrupted stored data", async () => {
 		storage.clear();
+		__resetGeometryBackend();
 		const { STORAGE_KEYS } = await import("~/utils/constants");
 		storage.set(STORAGE_KEYS.summaryPopupGeometry, { x: "bad" });
 		const result = await loadPopupGeometry();
@@ -284,6 +294,7 @@ describe("loadPopupGeometry / savePopupGeometry", () => {
 
 	test("returns null for stored data with NaN values", async () => {
 		storage.clear();
+		__resetGeometryBackend();
 		const { STORAGE_KEYS } = await import("~/utils/constants");
 		storage.set(STORAGE_KEYS.summaryPopupGeometry, {
 			x: NaN,
@@ -297,9 +308,77 @@ describe("loadPopupGeometry / savePopupGeometry", () => {
 
 	test("overwrites previous geometry on save", async () => {
 		storage.clear();
+		__resetGeometryBackend();
 		await savePopupGeometry({ x: 10, y: 10, width: 300, height: 300 });
 		await savePopupGeometry({ x: 50, y: 50, width: 500, height: 600 });
 		const result = await loadPopupGeometry();
 		expect(result).toEqual({ x: 50, y: 50, width: 500, height: 600 });
+	});
+
+	test("saves and loads geometry per domain", async () => {
+		storage.clear();
+		__resetGeometryBackend();
+		const githubGeometry = { x: 10, y: 20, width: 420, height: 520 };
+		const redditGeometry = { x: 30, y: 40, width: 400, height: 500 };
+
+		await savePopupGeometry(githubGeometry, "https://github.com/ayokaa", true);
+		await savePopupGeometry(
+			redditGeometry,
+			"https://reddit.com/r/webdev",
+			true,
+		);
+
+		const loadedGithub = await loadPopupGeometry(
+			"https://github.com/ayokaa",
+			true,
+		);
+		const loadedReddit = await loadPopupGeometry(
+			"https://reddit.com/r/webdev",
+			true,
+		);
+
+		expect(loadedGithub).toEqual(githubGeometry);
+		expect(loadedReddit).toEqual(redditGeometry);
+	});
+
+	test("falls back to global geometry when per-site is disabled", async () => {
+		storage.clear();
+		__resetGeometryBackend();
+		const globalGeometry = { x: 1, y: 2, width: 420, height: 520 };
+		await savePopupGeometry(globalGeometry);
+		const result = await loadPopupGeometry("https://github.com/ayokaa", false);
+		expect(result).toEqual(globalGeometry);
+	});
+
+	test("falls back to global geometry when no domain-specific record exists", async () => {
+		storage.clear();
+		__resetGeometryBackend();
+		const globalGeometry = { x: 1, y: 2, width: 420, height: 520 };
+		await savePopupGeometry(globalGeometry);
+		const result = await loadPopupGeometry("https://github.com/ayokaa", true);
+		expect(result).toEqual(globalGeometry);
+	});
+
+	test("evicts oldest entries when max entries exceeded", async () => {
+		storage.clear();
+		__resetGeometryBackend();
+		const baseGeometry = { x: 0, y: 0, width: 420, height: 520 };
+
+		for (let i = 0; i < 3; i++) {
+			await savePopupGeometry(
+				{ ...baseGeometry, x: i },
+				`https://site${i}.com`,
+				true,
+				2,
+			);
+			// Small delay to ensure distinct updatedAt values
+			await new Promise((resolve) => setTimeout(resolve, 5));
+		}
+
+		const oldest = await loadPopupGeometry("https://site0.com", true);
+		const newest = await loadPopupGeometry("https://site2.com", true);
+
+		expect(oldest).toBeNull();
+		expect(newest).toEqual({ ...baseGeometry, x: 2 });
 	});
 });
