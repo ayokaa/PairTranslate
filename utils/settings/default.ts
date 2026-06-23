@@ -66,7 +66,6 @@ export function generateTranslateSettings(): s.TranslateSettings {
 		summaryModel: undefined,
 		summaryExcludedSites: [],
 		summaryDefaultPinned: false,
-		summaryGeometryPerSite: true,
 		summaryGeometryMaxEntries: 1000,
 	};
 }

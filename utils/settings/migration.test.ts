@@ -241,7 +241,6 @@ describe("migrateSettings", () => {
 
 		const result = migrateSettings(v7Settings);
 		expect(result.__v).toBe(SETTINGS_VERSION);
-		expect(result.translate.summaryGeometryPerSite).toBe(true);
 		expect(result.translate.summaryGeometryMaxEntries).toBe(1000);
 	});
 });

@@ -1,5 +1,3 @@
-import { browser } from "#imports";
-import { STORAGE_KEYS } from "~/utils/constants";
 import { getRootDomain } from "~/utils/domain";
 
 export type PopupGeometry = {
@@ -205,10 +203,9 @@ export function __resetGeometryBackend(): void {
 	backend = null;
 }
 
-// --- Domain helpers ---
+// --- Public API ---
 
-const getDomainKey = (url?: string): string | null => {
-	if (!url) return null;
+const getDomainKey = (url: string): string | null => {
 	return getRootDomain(url);
 };
 
@@ -222,64 +219,27 @@ const enforceCap = async (maxEntries: number): Promise<void> => {
 	await Promise.all(toRemove.map((entry) => b.delete(entry.key)));
 };
 
-// --- Global geometry fallback (storage.local) ---
-
-const loadGlobalGeometry = async (): Promise<PopupGeometry | null> => {
-	const res = await browser.storage.local.get(
-		STORAGE_KEYS.summaryPopupGeometry,
-	);
-	return sanitizeGeometry(res[STORAGE_KEYS.summaryPopupGeometry]);
-};
-
-const saveGlobalGeometry = async (geometry: PopupGeometry): Promise<void> => {
-	await browser.storage.local.set({
-		[STORAGE_KEYS.summaryPopupGeometry]: geometry,
-	});
-};
-
-// --- Public API ---
-
 export async function loadPopupGeometry(
-	url?: string,
-	perSite = false,
+	url: string,
 ): Promise<PopupGeometry | null> {
-	if (perSite) {
-		const key = getDomainKey(url);
-		if (key) {
-			const geometry = await getBackend().get(key);
-			if (geometry) return geometry;
-		}
-	}
-	return loadGlobalGeometry();
+	const key = getDomainKey(url);
+	if (!key) return null;
+	return getBackend().get(key);
 }
 
 export async function savePopupGeometry(
 	geometry: PopupGeometry,
-	url?: string,
-	perSite = false,
+	url: string,
 	maxEntries = 1000,
 ): Promise<void> {
-	if (perSite) {
-		const key = getDomainKey(url);
-		if (key) {
-			await getBackend().set(key, geometry);
-			await enforceCap(maxEntries);
-			return;
-		}
-	}
-	await saveGlobalGeometry(geometry);
+	const key = getDomainKey(url);
+	if (!key) return;
+	await getBackend().set(key, geometry);
+	await enforceCap(maxEntries);
 }
 
-export async function resetPopupGeometry(
-	url?: string,
-	perSite = false,
-): Promise<void> {
-	if (perSite) {
-		const key = getDomainKey(url);
-		if (key) {
-			await getBackend().delete(key);
-			return;
-		}
-	}
-	await browser.storage.local.remove(STORAGE_KEYS.summaryPopupGeometry);
+export async function resetPopupGeometry(url: string): Promise<void> {
+	const key = getDomainKey(url);
+	if (!key) return;
+	await getBackend().delete(key);
 }

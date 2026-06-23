@@ -270,7 +270,6 @@ function migrateV7ToV8(oldSettings: SettingsSchema): SettingsSchema {
 		...oldSettings,
 		translate: {
 			...oldSettings.translate,
-			summaryGeometryPerSite: true,
 			summaryGeometryMaxEntries: 1000,
 		},
 		__v: 8,

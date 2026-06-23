@@ -1,44 +1,11 @@
-import { describe, expect, mock, test } from "bun:test";
-
-const storage = new Map<string, unknown>();
-
-mock.module("#imports", () => ({
-	browser: {
-		storage: {
-			local: {
-				get: async (key: string | string[]) => {
-					if (typeof key === "string") {
-						return { [key]: storage.get(key) };
-					}
-					const result: Record<string, unknown> = {};
-					for (const k of key) {
-						result[k] = storage.get(k);
-					}
-					return result;
-				},
-				set: async (obj: Record<string, unknown>) => {
-					for (const [k, v] of Object.entries(obj)) {
-						storage.set(k, v);
-					}
-				},
-				remove: async (key: string | string[]) => {
-					const keys = Array.isArray(key) ? key : [key];
-					for (const k of keys) {
-						storage.delete(k);
-					}
-				},
-			},
-		},
-	},
-}));
-
-const {
-	sanitizeGeometry,
+import { describe, expect, test } from "bun:test";
+import {
+	__resetGeometryBackend,
 	clampToViewport,
 	loadPopupGeometry,
+	sanitizeGeometry,
 	savePopupGeometry,
-	__resetGeometryBackend,
-} = await import("./popup-storage");
+} from "./popup-storage";
 
 describe("sanitizeGeometry", () => {
 	test("returns valid geometry", () => {
@@ -268,99 +235,49 @@ describe("clampToViewport", () => {
 
 describe("loadPopupGeometry / savePopupGeometry", () => {
 	test("returns null when nothing is stored", async () => {
-		storage.clear();
 		__resetGeometryBackend();
-		const result = await loadPopupGeometry();
+		const result = await loadPopupGeometry("https://example.com");
 		expect(result).toBeNull();
 	});
 
-	test("round-trips valid geometry globally", async () => {
-		storage.clear();
+	test("round-trips geometry per domain", async () => {
 		__resetGeometryBackend();
 		const geometry = { x: 100, y: 200, width: 420, height: 520 };
-		await savePopupGeometry(geometry);
-		const loaded = await loadPopupGeometry();
+		await savePopupGeometry(geometry, "https://github.com/ayokaa");
+		const loaded = await loadPopupGeometry("https://github.com/ayokaa");
 		expect(loaded).toEqual(geometry);
 	});
 
-	test("returns null for corrupted stored data", async () => {
-		storage.clear();
-		__resetGeometryBackend();
-		const { STORAGE_KEYS } = await import("~/utils/constants");
-		storage.set(STORAGE_KEYS.summaryPopupGeometry, { x: "bad" });
-		const result = await loadPopupGeometry();
-		expect(result).toBeNull();
-	});
-
-	test("returns null for stored data with NaN values", async () => {
-		storage.clear();
-		__resetGeometryBackend();
-		const { STORAGE_KEYS } = await import("~/utils/constants");
-		storage.set(STORAGE_KEYS.summaryPopupGeometry, {
-			x: NaN,
-			y: 0,
-			width: 300,
-			height: 300,
-		});
-		const result = await loadPopupGeometry();
-		expect(result).toBeNull();
-	});
-
 	test("overwrites previous geometry on save", async () => {
-		storage.clear();
 		__resetGeometryBackend();
-		await savePopupGeometry({ x: 10, y: 10, width: 300, height: 300 });
-		await savePopupGeometry({ x: 50, y: 50, width: 500, height: 600 });
-		const result = await loadPopupGeometry();
+		await savePopupGeometry(
+			{ x: 10, y: 10, width: 300, height: 300 },
+			"https://github.com/ayokaa",
+		);
+		await savePopupGeometry(
+			{ x: 50, y: 50, width: 500, height: 600 },
+			"https://github.com/ayokaa",
+		);
+		const result = await loadPopupGeometry("https://github.com/ayokaa");
 		expect(result).toEqual({ x: 50, y: 50, width: 500, height: 600 });
 	});
 
-	test("saves and loads geometry per domain", async () => {
-		storage.clear();
+	test("keeps geometry isolated per domain", async () => {
 		__resetGeometryBackend();
 		const githubGeometry = { x: 10, y: 20, width: 420, height: 520 };
 		const redditGeometry = { x: 30, y: 40, width: 400, height: 500 };
 
-		await savePopupGeometry(githubGeometry, "https://github.com/ayokaa", true);
-		await savePopupGeometry(
-			redditGeometry,
-			"https://reddit.com/r/webdev",
-			true,
-		);
+		await savePopupGeometry(githubGeometry, "https://github.com/ayokaa");
+		await savePopupGeometry(redditGeometry, "https://reddit.com/r/webdev");
 
-		const loadedGithub = await loadPopupGeometry(
-			"https://github.com/ayokaa",
-			true,
-		);
-		const loadedReddit = await loadPopupGeometry(
-			"https://reddit.com/r/webdev",
-			true,
-		);
+		const loadedGithub = await loadPopupGeometry("https://github.com/ayokaa");
+		const loadedReddit = await loadPopupGeometry("https://reddit.com/r/webdev");
 
 		expect(loadedGithub).toEqual(githubGeometry);
 		expect(loadedReddit).toEqual(redditGeometry);
 	});
 
-	test("falls back to global geometry when per-site is disabled", async () => {
-		storage.clear();
-		__resetGeometryBackend();
-		const globalGeometry = { x: 1, y: 2, width: 420, height: 520 };
-		await savePopupGeometry(globalGeometry);
-		const result = await loadPopupGeometry("https://github.com/ayokaa", false);
-		expect(result).toEqual(globalGeometry);
-	});
-
-	test("falls back to global geometry when no domain-specific record exists", async () => {
-		storage.clear();
-		__resetGeometryBackend();
-		const globalGeometry = { x: 1, y: 2, width: 420, height: 520 };
-		await savePopupGeometry(globalGeometry);
-		const result = await loadPopupGeometry("https://github.com/ayokaa", true);
-		expect(result).toEqual(globalGeometry);
-	});
-
 	test("evicts oldest entries when max entries exceeded", async () => {
-		storage.clear();
 		__resetGeometryBackend();
 		const baseGeometry = { x: 0, y: 0, width: 420, height: 520 };
 
@@ -368,17 +285,28 @@ describe("loadPopupGeometry / savePopupGeometry", () => {
 			await savePopupGeometry(
 				{ ...baseGeometry, x: i },
 				`https://site${i}.com`,
-				true,
 				2,
 			);
-			// Small delay to ensure distinct updatedAt values
 			await new Promise((resolve) => setTimeout(resolve, 5));
 		}
 
-		const oldest = await loadPopupGeometry("https://site0.com", true);
-		const newest = await loadPopupGeometry("https://site2.com", true);
+		const oldest = await loadPopupGeometry("https://site0.com");
+		const newest = await loadPopupGeometry("https://site2.com");
 
 		expect(oldest).toBeNull();
 		expect(newest).toEqual({ ...baseGeometry, x: 2 });
+	});
+
+	test("returns null for invalid URLs", async () => {
+		__resetGeometryBackend();
+		const result = await loadPopupGeometry("not-a-url");
+		expect(result).toBeNull();
+	});
+
+	test("ignores save for invalid URLs", async () => {
+		__resetGeometryBackend();
+		await expect(
+			savePopupGeometry({ x: 0, y: 0, width: 420, height: 520 }, "not-a-url"),
+		).resolves.toBeUndefined();
 	});
 });

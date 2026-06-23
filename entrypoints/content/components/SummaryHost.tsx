@@ -24,11 +24,8 @@ const SUMMARY_POPUP_WIDTH = 420;
 const SUMMARY_POPUP_HEIGHT = 520;
 const SUMMARY_POPUP_MARGIN = 12;
 
-const clampPosition = (width: number, height: number) => ({
-	x: Math.max(
-		SUMMARY_POPUP_MARGIN,
-		window.innerWidth - width - SUMMARY_POPUP_MARGIN,
-	),
+const clampPosition = (height: number) => ({
+	x: SUMMARY_POPUP_MARGIN,
 	y: Math.max(
 		SUMMARY_POPUP_MARGIN,
 		Math.min(80, window.innerHeight - height - SUMMARY_POPUP_MARGIN),
@@ -45,7 +42,7 @@ export default () => {
 	let loadComplete = false;
 
 	const getDefaultGeometry = (height: number) => ({
-		...clampPosition(SUMMARY_POPUP_WIDTH, height),
+		...clampPosition(height),
 		width: SUMMARY_POPUP_WIDTH,
 		height,
 	});
@@ -79,12 +76,9 @@ export default () => {
 	const saveGeometry = (geometry: PopupGeometry) => {
 		savedGeometry = geometry;
 		if (!loadComplete) return;
-		savePopupGeometry(
-			geometry,
-			window.location.href,
-			settings.translate.summaryGeometryPerSite,
-			settings.translate.summaryGeometryMaxEntries,
-		).catch((e) => logger.warn("Failed to save popup geometry:", e));
+		savePopupGeometry(geometry, window.location.href).catch((e) =>
+			logger.warn("Failed to save popup geometry:", e),
+		);
 	};
 
 	const onMoveEnd = (x: number, y: number) => {
@@ -163,11 +157,8 @@ export default () => {
 	};
 
 	onMount(() => {
-		// Load saved geometry for the current domain (or global fallback).
-		loadPopupGeometry(
-			window.location.href,
-			settings.translate.summaryGeometryPerSite,
-		)
+		// Load saved geometry for the current domain.
+		loadPopupGeometry(window.location.href)
 			.then((g) => {
 				if (g) {
 					savedGeometry = clampToViewport(

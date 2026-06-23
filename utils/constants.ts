@@ -190,7 +190,6 @@ export const STORAGE_KEYS = {
 	settingsMigrationError: "pair-translate:settings-migration-error",
 	sidebarSettings: "pair-translate:sidebar-settings",
 	sidebarHistory: "pair-translate:sidebar-history",
-	summaryPopupGeometry: "pair-translate:summary-popup-geometry",
 	pageState: "pair-translate:page-state",
 };
 

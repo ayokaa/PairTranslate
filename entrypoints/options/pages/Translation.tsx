@@ -297,14 +297,6 @@ export default (props: { navId: string }) => {
 						setLocalSettings("summaryDefaultPinned", e.target.checked)
 					}
 				/>
-				<SettingsCheckbox
-					label={t("settings.translation.summaryGeometryPerSite")}
-					helperText={t("settings.translation.summaryGeometryPerSiteDesc")}
-					checked={localSettings.summaryGeometryPerSite ?? true}
-					onChange={(e) =>
-						setLocalSettings("summaryGeometryPerSite", e.target.checked)
-					}
-				/>
 				<NumberInput
 					label={t("settings.translation.summaryGeometryMaxEntries")}
 					helperText={t("settings.translation.summaryGeometryMaxEntriesDesc")}
