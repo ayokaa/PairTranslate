@@ -155,9 +155,13 @@ export default () => {
 	};
 
 	onMount(() => {
-		// Load saved geometry for the current domain. Guard with !savedGeometry
-		// so a user move that raced ahead of the load isn't overwritten by the
-		// stale persisted value.
+		// Load saved geometry FIRST and only then restore the popup below. The
+		// two reads are async and resolve in arbitrary order; if the page-state
+		// read wins, handleGenerateSummary() runs while savedGeometry is still
+		// null and getSummaryGeometry() falls back to the default position —
+		// the "always resets to default after reload" bug. Guard with
+		// !savedGeometry so a user move that raced ahead of the load isn't
+		// overwritten by the stale persisted value.
 		loadPopupGeometry(window.location.href)
 			.then((g) => {
 				if (g && !savedGeometry) {
@@ -169,19 +173,19 @@ export default () => {
 					);
 				}
 			})
-			.catch((e) => logger.warn("Failed to load popup geometry:", e));
-
-		// Restore the summary popup once on mount if it was open before a
-		// reload/browser restart (when restorePageState is on). The summary
-		// result itself is served from the background's IndexedDB cache, so no
-		// new API request is issued.
-		if (settings.basic.restorePageState) {
-			loadPageState(window.location.href)
-				.then((state) => {
-					if (state?.summaryOpen) handleGenerateSummary();
-				})
-				.catch(() => {});
-		}
+			.catch((e) => logger.warn("Failed to load popup geometry:", e))
+			.finally(() => {
+				// Restore the summary popup once on mount if it was open before
+				// a reload/browser restart (when restorePageState is on). The
+				// summary result itself is served from the background's
+				// IndexedDB cache, so no new API request is issued.
+				if (!settings.basic.restorePageState) return;
+				loadPageState(window.location.href)
+					.then((state) => {
+						if (state?.summaryOpen) handleGenerateSummary();
+					})
+					.catch(() => {});
+			});
 
 		const listener = (message: unknown) => {
 			logger.debug("Received message:", message);
