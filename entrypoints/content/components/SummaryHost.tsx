@@ -39,7 +39,6 @@ export default () => {
 	let messageListener: ((message: unknown) => void) | undefined;
 	let latestGeometry: PopupGeometry | null = null;
 	let savedGeometry: PopupGeometry | null = null;
-	let loadComplete = false;
 
 	const getDefaultGeometry = (height: number) => ({
 		...clampPosition(height),
@@ -75,7 +74,6 @@ export default () => {
 
 	const saveGeometry = (geometry: PopupGeometry) => {
 		savedGeometry = geometry;
-		if (!loadComplete) return;
 		savePopupGeometry(geometry, window.location.href).catch((e) =>
 			logger.warn("Failed to save popup geometry:", e),
 		);
@@ -157,10 +155,12 @@ export default () => {
 	};
 
 	onMount(() => {
-		// Load saved geometry for the current domain.
+		// Load saved geometry for the current domain. Guard with !savedGeometry
+		// so a user move that raced ahead of the load isn't overwritten by the
+		// stale persisted value.
 		loadPopupGeometry(window.location.href)
 			.then((g) => {
-				if (g) {
+				if (g && !savedGeometry) {
 					savedGeometry = clampToViewport(
 						g,
 						window.innerWidth,
@@ -169,10 +169,7 @@ export default () => {
 					);
 				}
 			})
-			.catch((e) => logger.warn("Failed to load popup geometry:", e))
-			.finally(() => {
-				loadComplete = true;
-			});
+			.catch((e) => logger.warn("Failed to load popup geometry:", e));
 
 		// Restore the summary popup once on mount if it was open before a
 		// reload/browser restart (when restorePageState is on). The summary
