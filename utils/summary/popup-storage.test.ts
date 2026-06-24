@@ -1,11 +1,45 @@
-import { describe, expect, test } from "bun:test";
-import {
-	__resetGeometryBackend,
-	clampToViewport,
-	loadPopupGeometry,
-	sanitizeGeometry,
-	savePopupGeometry,
-} from "./popup-storage";
+import { describe, expect, mock, test } from "bun:test";
+import { STORAGE_KEYS } from "~/utils/constants";
+
+// --- browser.storage.local mock (in-memory) ---
+//
+// popup-storage now persists via browser.storage.local (the extension's own
+// storage), so the tests mock it the same way migration.test.ts does. This
+// also means the round-trip tests now exercise the real read/write path that
+// previously ran against the page-origin IndexedDB.
+
+const localStore = new Map<string, unknown>();
+
+const mockBrowser = {
+	storage: {
+		local: {
+			get: async (keys: string | string[]) => {
+				const keyList = Array.isArray(keys) ? keys : [keys];
+				const result: Record<string, unknown> = {};
+				for (const k of keyList) {
+					if (localStore.has(k)) result[k] = localStore.get(k);
+				}
+				return result;
+			},
+			set: async (items: Record<string, unknown>) => {
+				for (const [k, v] of Object.entries(items)) localStore.set(k, v);
+			},
+			remove: async (keys: string | string[]) => {
+				const keyList = Array.isArray(keys) ? keys : [keys];
+				for (const k of keyList) localStore.delete(k);
+			},
+		},
+	},
+};
+mock.module("#imports", () => ({ browser: mockBrowser }));
+mock.module("@wxt-dev/browser", () => ({ browser: mockBrowser }));
+
+const { sanitizeGeometry, clampToViewport } = await import("./popup-storage");
+const { loadPopupGeometry, savePopupGeometry, resetPopupGeometry } =
+	await import("./popup-storage");
+
+/** Reset the mock storage between tests so each starts from a clean slate. */
+const resetStorage = () => localStore.clear();
 
 describe("sanitizeGeometry", () => {
 	test("returns valid geometry", () => {
@@ -71,6 +105,18 @@ describe("sanitizeGeometry", () => {
 			width: 200,
 			height: 150,
 		});
+	});
+
+	test("strips updatedAt/timestamp fields when loading", () => {
+		const result = sanitizeGeometry({
+			x: 1,
+			y: 2,
+			width: 300,
+			height: 300,
+			updatedAt: 12345,
+		});
+		expect(result).toEqual({ x: 1, y: 2, width: 300, height: 300 });
+		expect(result).not.toHaveProperty("updatedAt");
 	});
 });
 
@@ -235,21 +281,37 @@ describe("clampToViewport", () => {
 
 describe("loadPopupGeometry / savePopupGeometry", () => {
 	test("returns null when nothing is stored", async () => {
-		__resetGeometryBackend();
+		resetStorage();
 		const result = await loadPopupGeometry("https://example.com");
 		expect(result).toBeNull();
 	});
 
 	test("round-trips geometry per domain", async () => {
-		__resetGeometryBackend();
+		resetStorage();
 		const geometry = { x: 100, y: 200, width: 420, height: 520 };
 		await savePopupGeometry(geometry, "https://github.com/ayokaa");
 		const loaded = await loadPopupGeometry("https://github.com/ayokaa");
 		expect(loaded).toEqual(geometry);
 	});
 
+	test("persists via browser.storage.local under the storage key", async () => {
+		resetStorage();
+		const geometry = { x: 10, y: 20, width: 420, height: 520 };
+		await savePopupGeometry(geometry, "https://github.com/x");
+		// The data must live in extension storage, not a per-origin IndexedDB.
+		const raw = await mockBrowser.storage.local.get(
+			STORAGE_KEYS.summaryPopupGeometry,
+		);
+		expect(raw).toHaveProperty(STORAGE_KEYS.summaryPopupGeometry);
+		const map = raw[STORAGE_KEYS.summaryPopupGeometry] as Record<
+			string,
+			unknown
+		>;
+		expect(map["github.com"]).toMatchObject(geometry);
+	});
+
 	test("overwrites previous geometry on save", async () => {
-		__resetGeometryBackend();
+		resetStorage();
 		await savePopupGeometry(
 			{ x: 10, y: 10, width: 300, height: 300 },
 			"https://github.com/ayokaa",
@@ -263,7 +325,7 @@ describe("loadPopupGeometry / savePopupGeometry", () => {
 	});
 
 	test("keeps geometry isolated per domain", async () => {
-		__resetGeometryBackend();
+		resetStorage();
 		const githubGeometry = { x: 10, y: 20, width: 420, height: 520 };
 		const redditGeometry = { x: 30, y: 40, width: 400, height: 500 };
 
@@ -277,8 +339,19 @@ describe("loadPopupGeometry / savePopupGeometry", () => {
 		expect(loadedReddit).toEqual(redditGeometry);
 	});
 
+	test("shares one geometry across paths/subdomains of the same root domain", async () => {
+		resetStorage();
+		const geometry = { x: 5, y: 5, width: 420, height: 520 };
+		await savePopupGeometry(geometry, "https://github.com/ayokaa/repo");
+		// A different subdomain + path on the same root domain must hit the
+		// same entry — this is what makes per-domain recall work even when the
+		// user revisits via a different URL.
+		const loaded = await loadPopupGeometry("https://gist.github.com/other");
+		expect(loaded).toEqual(geometry);
+	});
+
 	test("evicts oldest entries when max entries exceeded", async () => {
-		__resetGeometryBackend();
+		resetStorage();
 		const baseGeometry = { x: 0, y: 0, width: 420, height: 520 };
 
 		for (let i = 0; i < 3; i++) {
@@ -298,15 +371,60 @@ describe("loadPopupGeometry / savePopupGeometry", () => {
 	});
 
 	test("returns null for invalid URLs", async () => {
-		__resetGeometryBackend();
+		resetStorage();
 		const result = await loadPopupGeometry("not-a-url");
 		expect(result).toBeNull();
 	});
 
 	test("ignores save for invalid URLs", async () => {
-		__resetGeometryBackend();
+		resetStorage();
 		await expect(
 			savePopupGeometry({ x: 0, y: 0, width: 420, height: 520 }, "not-a-url"),
 		).resolves.toBeUndefined();
+	});
+
+	test("clears only the targeted domain on reset", async () => {
+		resetStorage();
+		await savePopupGeometry(
+			{ x: 1, y: 1, width: 420, height: 520 },
+			"https://github.com/a",
+		);
+		await savePopupGeometry(
+			{ x: 2, y: 2, width: 420, height: 520 },
+			"https://reddit.com/b",
+		);
+
+		await resetPopupGeometry("https://github.com/a");
+
+		expect(await loadPopupGeometry("https://github.com/a")).toBeNull();
+		expect(await loadPopupGeometry("https://reddit.com/b")).not.toBeNull();
+	});
+
+	test("removes the storage key entirely when last entry is reset", async () => {
+		resetStorage();
+		await savePopupGeometry(
+			{ x: 1, y: 1, width: 420, height: 520 },
+			"https://github.com/a",
+		);
+		await resetPopupGeometry("https://github.com/a");
+
+		const raw = await mockBrowser.storage.local.get(
+			STORAGE_KEYS.summaryPopupGeometry,
+		);
+		expect(raw[STORAGE_KEYS.summaryPopupGeometry]).toBeUndefined();
+	});
+
+	test("survives a simulated restart (fresh module, same storage)", async () => {
+		// browser.storage.local persists across content-script reloads; the
+		// mock holds the data in localStore, which we deliberately do NOT clear
+		// here to model a browser restart where the extension storage survives.
+		resetStorage();
+		const geometry = { x: 77, y: 88, width: 420, height: 520 };
+		await savePopupGeometry(geometry, "https://example.com/page");
+
+		// A subsequent load (e.g. after a long delay / browser restart) must
+		// still find the same geometry.
+		const loaded = await loadPopupGeometry("https://example.com/other-page");
+		expect(loaded).toEqual(geometry);
 	});
 });

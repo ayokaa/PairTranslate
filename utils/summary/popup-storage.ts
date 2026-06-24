@@ -1,3 +1,5 @@
+import { browser } from "#imports";
+import { STORAGE_KEYS } from "~/utils/constants";
 import { getRootDomain } from "~/utils/domain";
 
 export type PopupGeometry = {
@@ -11,20 +13,13 @@ type StoredPopupGeometry = PopupGeometry & {
 	updatedAt: number;
 };
 
-type GeometryBackend = {
-	get: (key: string) => Promise<PopupGeometry | null>;
-	set: (key: string, geometry: PopupGeometry) => Promise<void>;
-	delete: (key: string) => Promise<void>;
-	getAllEntries: () => Promise<Array<{ key: string; updatedAt: number }>>;
-	clear: () => Promise<void>;
-};
+type GeometryMap = Record<string, StoredPopupGeometry>;
 
 const MIN_WIDTH = 200;
 const MIN_HEIGHT = 150;
 
-const DB_NAME = "pair-translate";
-const DB_VERSION = 1;
-const STORE_NAME = "summary-popup-geometry";
+/** Cap the number of tracked domains to bound storage growth (LRU by updatedAt). */
+const MAX_ENTRIES = 1000;
 
 export function sanitizeGeometry(value: unknown): PopupGeometry | null {
 	if (!value || typeof value !== "object") return null;
@@ -74,134 +69,45 @@ export function clampToViewport(
 	};
 }
 
-// --- Backend selection: IndexedDB in browser, in-memory in tests ---
+// --- browser.storage.local backend ---
+//
+// Geometry is persisted in the extension's own storage (not the page origin's
+// IndexedDB) so it survives browser restarts, storage cleanup, and the page
+// clearing its own site data — the same storage layer used by page-state and
+// settings. Keyed by root domain so all pages on a domain share one entry.
 
-let backend: GeometryBackend | null = null;
-
-const createMemoryBackend = (): GeometryBackend => {
-	const map = new Map<string, StoredPopupGeometry>();
-	return {
-		get: async (key) => sanitizeGeometry(map.get(key)),
-		set: async (key, geometry) => {
-			map.set(key, { ...geometry, updatedAt: Date.now() });
-		},
-		delete: async (key) => {
-			map.delete(key);
-		},
-		getAllEntries: async () =>
-			Array.from(map.entries()).map(([key, value]) => ({
-				key,
-				updatedAt: value.updatedAt,
-			})),
-		clear: async () => {
-			map.clear();
-		},
-	};
+const readMap = async (): Promise<GeometryMap> => {
+	const res = await browser.storage.local.get(
+		STORAGE_KEYS.summaryPopupGeometry,
+	);
+	return (
+		(res[STORAGE_KEYS.summaryPopupGeometry] as GeometryMap | undefined) ?? {}
+	);
 };
 
-const openDb = (): Promise<IDBDatabase> => {
-	return new Promise((resolve, reject) => {
-		const request = indexedDB.open(DB_NAME, DB_VERSION);
-		request.onupgradeneeded = (event) => {
-			const db = (event.target as IDBOpenDBRequest).result;
-			if (!db.objectStoreNames.contains(STORE_NAME)) {
-				db.createObjectStore(STORE_NAME);
-			}
-		};
-		request.onsuccess = () => resolve(request.result);
-		request.onerror = () => reject(request.error);
+const writeMap = async (map: GeometryMap): Promise<void> => {
+	if (Object.keys(map).length === 0) {
+		await browser.storage.local.remove(STORAGE_KEYS.summaryPopupGeometry);
+		return;
+	}
+	await browser.storage.local.set({
+		[STORAGE_KEYS.summaryPopupGeometry]: map,
 	});
 };
 
-const createIndexedDbBackend = (): GeometryBackend => {
-	return {
-		get: async (key) => {
-			const db = await openDb();
-			return new Promise((resolve, reject) => {
-				const tx = db.transaction(STORE_NAME, "readonly");
-				const store = tx.objectStore(STORE_NAME);
-				const request = store.get(key);
-				request.onsuccess = () => {
-					resolve(sanitizeGeometry(request.result));
-				};
-				request.onerror = () => reject(request.error);
-			});
-		},
-		set: async (key, geometry) => {
-			const db = await openDb();
-			return new Promise((resolve, reject) => {
-				const tx = db.transaction(STORE_NAME, "readwrite");
-				const store = tx.objectStore(STORE_NAME);
-				const value: StoredPopupGeometry = {
-					...geometry,
-					updatedAt: Date.now(),
-				};
-				store.put(value, key);
-				tx.oncomplete = () => resolve();
-				tx.onerror = () => reject(tx.error);
-			});
-		},
-		delete: async (key) => {
-			const db = await openDb();
-			return new Promise((resolve, reject) => {
-				const tx = db.transaction(STORE_NAME, "readwrite");
-				const store = tx.objectStore(STORE_NAME);
-				store.delete(key);
-				tx.oncomplete = () => resolve();
-				tx.onerror = () => reject(tx.error);
-			});
-		},
-		getAllEntries: async () => {
-			const db = await openDb();
-			return new Promise((resolve, reject) => {
-				const tx = db.transaction(STORE_NAME, "readonly");
-				const store = tx.objectStore(STORE_NAME);
-				const request = store.openCursor();
-				const entries: Array<{ key: string; updatedAt: number }> = [];
-				request.onsuccess = (event) => {
-					const cursor = (event.target as IDBRequest<IDBCursorWithValue>)
-						.result;
-					if (cursor) {
-						const value = cursor.value as StoredPopupGeometry;
-						entries.push({
-							key: cursor.key as string,
-							updatedAt: value.updatedAt,
-						});
-						cursor.continue();
-					} else {
-						resolve(entries);
-					}
-				};
-				request.onerror = () => reject(request.error);
-			});
-		},
-		clear: async () => {
-			const db = await openDb();
-			return new Promise((resolve, reject) => {
-				const tx = db.transaction(STORE_NAME, "readwrite");
-				const store = tx.objectStore(STORE_NAME);
-				store.clear();
-				tx.oncomplete = () => resolve();
-				tx.onerror = () => reject(tx.error);
-			});
-		},
-	};
+/** Drop oldest entries (by updatedAt) until under the cap. */
+const enforceCap = (map: GeometryMap, maxEntries: number): GeometryMap => {
+	if (maxEntries <= 0) return map;
+	const keys = Object.keys(map);
+	if (keys.length <= maxEntries) return map;
+	const sorted = keys.sort(
+		(a, b) => (map[a].updatedAt ?? 0) - (map[b].updatedAt ?? 0),
+	);
+	const drop = sorted.length - maxEntries;
+	const next: GeometryMap = { ...map };
+	for (let i = 0; i < drop; i++) delete next[sorted[i]];
+	return next;
 };
-
-const getBackend = (): GeometryBackend => {
-	if (!backend) {
-		backend =
-			typeof indexedDB !== "undefined"
-				? createIndexedDbBackend()
-				: createMemoryBackend();
-	}
-	return backend;
-};
-
-/** Reset the in-memory backend; intended for tests only. */
-export function __resetGeometryBackend(): void {
-	backend = null;
-}
 
 // --- Public API ---
 
@@ -209,37 +115,32 @@ const getDomainKey = (url: string): string | null => {
 	return getRootDomain(url);
 };
 
-const enforceCap = async (maxEntries: number): Promise<void> => {
-	if (maxEntries <= 0) return;
-	const b = getBackend();
-	const entries = await b.getAllEntries();
-	if (entries.length <= maxEntries) return;
-	const sorted = entries.sort((a, b) => a.updatedAt - b.updatedAt);
-	const toRemove = sorted.slice(0, entries.length - maxEntries);
-	await Promise.all(toRemove.map((entry) => b.delete(entry.key)));
-};
-
 export async function loadPopupGeometry(
 	url: string,
 ): Promise<PopupGeometry | null> {
 	const key = getDomainKey(url);
 	if (!key) return null;
-	return getBackend().get(key);
+	const map = await readMap();
+	return sanitizeGeometry(map[key]);
 }
 
 export async function savePopupGeometry(
 	geometry: PopupGeometry,
 	url: string,
-	maxEntries = 1000,
+	maxEntries = MAX_ENTRIES,
 ): Promise<void> {
 	const key = getDomainKey(url);
 	if (!key) return;
-	await getBackend().set(key, geometry);
-	await enforceCap(maxEntries);
+	const map = await readMap();
+	map[key] = { ...geometry, updatedAt: Date.now() };
+	await writeMap(enforceCap(map, maxEntries));
 }
 
 export async function resetPopupGeometry(url: string): Promise<void> {
 	const key = getDomainKey(url);
 	if (!key) return;
-	await getBackend().delete(key);
+	const map = await readMap();
+	if (!(key in map)) return;
+	delete map[key];
+	await writeMap(map);
 }
