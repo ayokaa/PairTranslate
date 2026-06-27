@@ -55,6 +55,25 @@ const enforceCap = (map: PageStateMap): PageStateMap => {
 	return next;
 };
 
+/** Serialize read-modify-write operations for the same URL so concurrent
+ *  saves don't overwrite each other's independent fields. */
+const pageStateQueues = new Map<string, Promise<unknown>>();
+
+const withPageStateLock = <T>(
+	url: string,
+	fn: () => Promise<T>,
+): Promise<T> => {
+	const previous = pageStateQueues.get(url) ?? Promise.resolve();
+	const next = previous
+		.catch(() => {})
+		.then(() => fn())
+		.finally(() => {
+			if (pageStateQueues.get(url) === next) pageStateQueues.delete(url);
+		}) as Promise<T>;
+	pageStateQueues.set(url, next);
+	return next;
+};
+
 export async function loadPageState(
 	url: string,
 ): Promise<PageState | undefined> {
@@ -67,24 +86,28 @@ export async function savePageState(
 	patch: Partial<PageState>,
 ): Promise<void> {
 	if (!url) return;
-	const map = await readMap();
-	const prev = sanitizeState(map[url]) ?? {
-		translateEnabled: false,
-		summaryOpen: false,
-	};
-	const next: StoredPageState = {
-		...prev,
-		...patch,
-		updatedAt: Date.now(),
-	};
-	map[url] = next;
-	await writeMap(enforceCap(map));
+	return withPageStateLock(url, async () => {
+		const map = await readMap();
+		const prev = sanitizeState(map[url]) ?? {
+			translateEnabled: false,
+			summaryOpen: false,
+		};
+		const next: StoredPageState = {
+			...prev,
+			...patch,
+			updatedAt: Date.now(),
+		};
+		map[url] = next;
+		await writeMap(enforceCap(map));
+	});
 }
 
 export async function clearPageState(url: string): Promise<void> {
 	if (!url) return;
-	const map = await readMap();
-	if (!(url in map)) return;
-	delete map[url];
-	await writeMap(map);
+	return withPageStateLock(url, async () => {
+		const map = await readMap();
+		if (!(url in map)) return;
+		delete map[url];
+		await writeMap(map);
+	});
 }

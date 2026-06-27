@@ -19,13 +19,25 @@ export default () => {
 		HTMLElement | undefined
 	>(undefined, { equals: false });
 
+	// Whether the user has an explicit per-URL choice (from page-state or from
+	// toggling in this session). When explicit, it wins over website rules.
+	const [hasExplicitChoice, setHasExplicitChoice] = createSignal(false);
+	const [restored, setRestored] = createSignal(false);
+
 	const [remaining] = createDomainEnabledTimer();
 	createEffect(() => {
 		if ((remaining() || 0) > 0) setInTextTranslateEnabled(true);
 	});
 
+	// Website rules act as defaults: they only apply when the user has not made
+	// an explicit choice for this URL.
 	createEffect(() => {
-		setInTextTranslateEnabled((prev) => websiteRule.enableTranslation ?? prev);
+		if (!restored()) return;
+		if (hasExplicitChoice()) return;
+		const rule = websiteRule.enableTranslation;
+		if (rule !== undefined) {
+			setInTextTranslateEnabled((prev) => rule ?? prev);
+		}
 	});
 
 	// Toggle the in-text translation switch and persist the choice per-URL so it
@@ -33,6 +45,8 @@ export default () => {
 	const toggleTranslate = (next?: boolean) => {
 		const resolved = next ?? !inTextTranslateEnabled();
 		setInTextTranslateEnabled(resolved);
+		// Any manual toggle counts as an explicit user choice for this session.
+		setHasExplicitChoice(true);
 		if (settings.basic.restorePageState) {
 			savePageState(window.location.href, {
 				translateEnabled: resolved,
@@ -40,16 +54,22 @@ export default () => {
 		}
 	};
 
-	// Restore per-page state once on mount, unless a website rule explicitly
-	// overrides the translation flag (in which case the rule wins).
+	// Restore per-page state once on mount. A saved translateEnabled value (or a
+	// manual toggle in this session) takes precedence over website rules.
 	onMount(() => {
-		if (!settings.basic.restorePageState) return;
-		if (websiteRule.enableTranslation !== undefined) return;
+		if (!settings.basic.restorePageState) {
+			setRestored(true);
+			return;
+		}
 		loadPageState(window.location.href)
 			.then((state) => {
-				if (state?.translateEnabled) setInTextTranslateEnabled(true);
+				if (state) {
+					setInTextTranslateEnabled(state.translateEnabled);
+					setHasExplicitChoice(true);
+				}
 			})
-			.catch(() => {});
+			.catch(() => {})
+			.finally(() => setRestored(true));
 	});
 
 	// Handle keyboard shortcut
