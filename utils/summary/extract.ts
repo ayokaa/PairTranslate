@@ -3,7 +3,7 @@ import { createLogger } from "~/utils/rpc/logger";
 
 const logger = createLogger(import.meta.env.DEV ? "debug" : "error", "Summary");
 
-const MAX_CONTENT_LENGTH = 100_000;
+const MAX_CONTENT_LENGTH = 500_000;
 
 const getMainContentElement = (): HTMLElement | null => {
 	const selectors = [

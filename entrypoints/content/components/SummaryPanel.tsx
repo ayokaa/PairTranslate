@@ -48,14 +48,6 @@ export default (props: SummaryPanelProps) => {
 	return (
 		<div class="flex flex-col h-full">
 			<div class="flex-1 overflow-y-auto overscroll-contain p-3 flex flex-col gap-3">
-				<Show when={props.truncated}>
-					<Alert
-						variant="warning"
-						size="sm"
-						description={t("summary.contentTruncated")}
-					/>
-				</Show>
-
 				<Show when={result.loading}>
 					<div class="flex flex-col items-center gap-3 py-8">
 						<Loading type="dots" size="lg" />
@@ -75,6 +67,13 @@ export default (props: SummaryPanelProps) => {
 				</Show>
 
 				<Show when={result()}>
+					<Show when={props.truncated}>
+						<Alert
+							variant="warning"
+							size="sm"
+							description={t("summary.contentTruncated")}
+						/>
+					</Show>
 					<div class="prose prose-sm max-w-none">
 						<MdStyled text={result() || ""} />
 					</div>
