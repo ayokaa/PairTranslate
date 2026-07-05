@@ -166,9 +166,7 @@ export const EXCLUDED_SELECTORS = [
 	"[contenteditable=true]",
 	".monaco-editor",
 	// Exclude math elements
-	'[class^="MathJax"]',
-	'[class^="katex"]',
-	"math",
+	// NOTE: MathJax/KaTeX rendered output is now extracted as math instead of skipped.
 ];
 
 export const INTERACTIVE_SELECTORS = [

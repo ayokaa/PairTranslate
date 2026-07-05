@@ -124,9 +124,13 @@ export async function* elementWalker(state: State): SectionGenerator {
 
 	const judgeText = (el: Element): boolean => {
 		if (!state.textTags.has(el.tagName)) return false;
-		if (!hasDirectText(el)) return false;
+		if (hasDirectText(el)) return true;
 
-		return true;
+		const mathSelector =
+			"mjx-container, math, .katex, .math.inline, .math.display";
+		if (el.querySelector(mathSelector)) return true;
+
+		return false;
 	};
 
 	const createElementWalker = (element: Node) => {

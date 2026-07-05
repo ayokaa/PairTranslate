@@ -342,17 +342,28 @@ function* handleList(el: HTMLElement, isOrdered: boolean): Generator<string> {
 
 /**
  * Helper to wrap content safely in LaTeX delimiters.
+ * Normalizes \(...\) / \[...\] to remark-math $...$ / $$...$$ syntax.
  */
 const wrapLatex = (content: string, isDisplay: boolean): string => {
-	const trimmed = content.trim();
+	let trimmed = content.trim();
+
+	// Normalize MathJax/LaTeX source delimiters to remark-math syntax
+	if (trimmed.startsWith("\\(") && trimmed.endsWith("\\)")) {
+		trimmed = trimmed.slice(2, -2).trim();
+		isDisplay = false;
+	} else if (trimmed.startsWith("\\[") && trimmed.endsWith("\\]")) {
+		trimmed = trimmed.slice(2, -2).trim();
+		isDisplay = true;
+	}
+
 	// Prevent double wrapping
 	if (
 		(trimmed.startsWith("$") && trimmed.endsWith("$")) ||
-		(trimmed.startsWith("\\(") && trimmed.endsWith("\\)")) ||
-		(trimmed.startsWith("\\[") && trimmed.endsWith("\\]"))
+		(trimmed.startsWith("$$") && trimmed.endsWith("$$"))
 	) {
 		return trimmed;
 	}
+
 	// Add zero-width space to prevent trimming issues in parent consumers
 	return isDisplay ? `\u200B\n$$\n${trimmed}\n$$\n\u200B` : `$${trimmed}$`;
 };
@@ -392,6 +403,40 @@ const tryExtractMath = (
 		return null;
 	}
 
+	if (tagName === "mjx-container") {
+		const math = element.querySelector("mjx-assistive-mml math");
+		if (math) {
+			try {
+				latex = MathMLToLaTeX.convert((math as HTMLElement).outerHTML);
+				isDisplay =
+					element.getAttribute("display") === "true" ||
+					(math as HTMLElement).getAttribute("display") === "block";
+				return wrapLatex(latex, isDisplay);
+			} catch (_e) {
+				// fall through
+			}
+		}
+		return null;
+	}
+
+	if (
+		classList.contains("math") &&
+		(classList.contains("inline") || classList.contains("display"))
+	) {
+		const rendered = element.querySelector("mjx-container, math, .katex");
+		if (rendered) {
+			return tryExtractMath(
+				rendered as HTMLElement,
+				rendered.tagName.toLowerCase(),
+			);
+		}
+		const text = element.textContent || "";
+		if (text.trim()) {
+			isDisplay = classList.contains("display");
+			return wrapLatex(text, isDisplay);
+		}
+	}
+
 	if (tagName === "math") {
 		// Check 'alttext' attribute (common in LaTeXML)
 		const alttext = element.getAttribute("alttext");
@@ -429,6 +474,18 @@ const tryExtractMath = (
 		const hiddenMath = element.querySelector("math");
 		if (hiddenMath) {
 			return tryExtractMath(hiddenMath as HTMLElement, "math");
+		}
+	}
+
+	if (classList.contains("katex")) {
+		const annotation = element.querySelector(
+			'annotation[encoding="application/x-tex"], annotation[encoding="application/x-latex"]',
+		);
+		if (annotation?.textContent) {
+			isDisplay =
+				classList.contains("katex-display") ||
+				element.closest(".katex-display") !== null;
+			return wrapLatex(annotation.textContent, isDisplay);
 		}
 	}
 
