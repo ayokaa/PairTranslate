@@ -2,6 +2,7 @@ import { createEffect, createSignal, onCleanup } from "solid-js";
 import { createNodeObserver } from "@/hooks/observer";
 import { useSettings } from "~/hooks/settings";
 import { useWebsiteRule } from "~/hooks/website-rule";
+import { isDisplayOnlySection } from "~/utils/parser/math-section";
 import type { DOMSection } from "~/utils/parser/types";
 import { BatchInTextTranslation } from "../native-components/InTextTranslate";
 import { getDomListener } from "../parser";
@@ -50,6 +51,8 @@ export default () => {
 		};
 
 		const handleAdd = (section: DOMSection) => {
+			if (isDisplayOnlySection(section)) return;
+
 			buffer.del.delete(section);
 			buffer.add.add(section);
 			scheduleFlush();
