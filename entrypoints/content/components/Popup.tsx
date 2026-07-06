@@ -388,7 +388,9 @@ const PopupImpl = (props: ImplProps) => {
 						<X size={16} />
 					</Button>
 				</div>
-				<div class="overflow-y-auto overscroll-contain">{props.content()}</div>
+				<div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+					{props.content()}
+				</div>
 				<button
 					type="button"
 					class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize touch-none"
