@@ -49,7 +49,7 @@ export default (props: SummaryPanelProps) => {
 		<div class="flex flex-col h-full">
 			<div class="flex-1 overflow-y-auto overscroll-contain p-3 flex flex-col gap-3">
 				<Show when={result.loading}>
-					<div class="flex flex-col items-center gap-3 py-8">
+					<div class="flex flex-col items-center gap-3 py-8 m-auto">
 						<Loading type="dots" size="lg" />
 						<span class="text-sm text-base-content/70">
 							{t("summary.generating")}
