@@ -10,6 +10,7 @@ import {
 	Languages,
 	Menu as MenuIcon,
 	MessageSquare,
+	ScrollText,
 } from "lucide-solid";
 import {
 	createEffect,
@@ -30,6 +31,7 @@ import Debug from "./pages/Debug";
 import FlowControl from "./pages/FlowControl";
 import LLM from "./pages/LLM";
 import PromptSettings from "./pages/PromptSettings";
+import Summary from "./pages/Summary";
 import Traditional from "./pages/Traditional";
 import Translation from "./pages/Translation";
 import WebsiteRules from "./pages/WebsiteRules";
@@ -91,6 +93,7 @@ const SettingsPage = () => {
 					<SettingsRecoveryBanner />
 					<Basic navId="basic" />
 					<Translation navId="translate" />
+					<Summary navId="summary" />
 					<LLM navId="llm" />
 					<PromptSettings navId="promptSettings" />
 					<Traditional navId="traditional" />
@@ -114,6 +117,10 @@ const SettingsPage = () => {
 				<Nav.Item navId="translate">
 					<Languages size={16} />
 					{t("nav.translation")}
+				</Nav.Item>
+				<Nav.Item navId="summary">
+					<ScrollText size={16} />
+					{t("nav.summary")}
 				</Nav.Item>
 				<Nav.Item navId="llm">
 					<BrainCircuit size={16} />

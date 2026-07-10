@@ -91,20 +91,25 @@ export default () => {
 		saveGeometry(latestGeometry);
 	};
 
+	const isSummaryDisabled = () => {
+		const rules = settings.websiteRules.filter(
+			(r) => r.enableSummary === false,
+		);
+		if (rules.length === 0) return false;
+		const patterns = rules.flatMap((r) => r.urlPatterns);
+		return makeDomainMatcher(patterns)(window.location.hostname) !== null;
+	};
+
 	const handleGenerateSummary = () => {
 		if (popupActions?.isVisible()) {
 			logger.info("Summary popup already visible, skipping");
 			return;
 		}
 
-		const excludedSites = settings.translate.summaryExcludedSites;
-		if (excludedSites.length > 0) {
-			const matcher = makeDomainMatcher(excludedSites);
-			if (matcher(window.location.hostname) !== null) {
-				logger.info("Site is excluded from summary");
-				closeExistingPopup();
-				return;
-			}
+		if (isSummaryDisabled()) {
+			logger.info("Site is excluded from summary");
+			closeExistingPopup();
+			return;
 		}
 
 		logger.info("Generating summary...");
@@ -136,7 +141,7 @@ export default () => {
 				y: geometry.y,
 				width: geometry.width,
 				height: geometry.height,
-				pinned: settings.translate.summaryDefaultPinned,
+				pinned: settings.summary.summaryDefaultPinned,
 				content: () => (
 					<SummaryPanel
 						content={content}
@@ -215,7 +220,7 @@ export default () => {
 	createKeyboardShortcut(
 		() => settings.basic.keyboardShortcutForSummary,
 		() => {
-			const modelId = settings.translate.summaryModel;
+			const modelId = settings.summary.summaryModel;
 			if (!modelId) {
 				logger.debug("Shortcut ignored: no summary model configured");
 				return;

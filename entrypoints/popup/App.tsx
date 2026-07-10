@@ -1,3 +1,4 @@
+import { trackDeep } from "@solid-primitives/deep";
 import { HashRouter, Route, useLocation, useNavigate } from "@solidjs/router";
 import {
 	Earth,
@@ -15,11 +16,12 @@ import {
 	createEffect,
 	createMemo,
 	createResource,
+	createSignal,
 	Match,
+	on,
 	Switch,
 } from "solid-js";
 import { browser } from "#imports";
-import { makeDomainMatcher } from "@/utils/domain-matcher";
 import { getThemeClass } from "@/utils/theme";
 import { Button } from "~/components/Button";
 import { Loading } from "~/components/Loading";
@@ -43,32 +45,56 @@ const Content = (props: { children?: JSX.Element }) => {
 	const location = useLocation();
 
 	const [domain] = createResource(getCurrentDomain);
+	const [isSummaryExcluded, setIsSummaryExcluded] = createSignal(false);
 
-	const isSummaryExcluded = createMemo(() => {
-		const d = domain();
-		const sites = settings.translate.summaryExcludedSites;
-		if (!d || sites.length === 0) return false;
-		const matcher = makeDomainMatcher(sites);
-		return matcher(d) !== null;
-	});
+	createEffect(
+		on(
+			[domain, () => trackDeep(settings.websiteRules)],
+			async ([d]) => {
+				if (!d) {
+					setIsSummaryExcluded(false);
+					return;
+				}
+				const matchedIdx = await window.rpc.matchWebsiteRule(d);
+				// Guard against stale async result if domain changed while RPC was in flight
+				if (domain() !== d) return;
+				setIsSummaryExcluded(
+					matchedIdx !== null &&
+						settings.websiteRules[matchedIdx]?.enableSummary === false,
+				);
+			},
+			{ defer: true },
+		),
+	);
 
-	const toggleSummaryExclusion = () => {
+	const toggleSummaryExclusion = async () => {
 		const d = domain();
 		if (!d) return;
-		const sites = [...settings.translate.summaryExcludedSites];
-		if (isSummaryExcluded()) {
-			const matcher = makeDomainMatcher(sites);
-			const idx = matcher(d);
-			if (idx !== null) sites.splice(idx, 1);
+		const idx = await window.rpc.matchWebsiteRule(d);
+		if (idx !== null) {
+			const currentlyExcluded =
+				settings.websiteRules[idx]?.enableSummary === false;
+			setSettings(
+				"websiteRules",
+				idx,
+				"enableSummary",
+				currentlyExcluded ? undefined : false,
+			);
 		} else {
-			sites.push(d);
+			setSettings("websiteRules", settings.websiteRules.length, {
+				urlPatterns: [d],
+				enableSummary: false,
+			});
 		}
-		setSettings("translate", "summaryExcludedSites", sites);
 	};
 
 	getCurrentDomain()
 		.then((hostname) => window.rpc.matchWebsiteRule(hostname))
-		.then((idx) => (idx === null ? navigate("overall") : navigate("website")));
+		.then((idx) => navigate(idx === null ? "overall" : "website"))
+		.catch((e) => {
+			logger.error("Failed to determine website rule route:", e);
+			navigate("overall");
+		});
 
 	const theme = createTheme();
 	createEffect(() => {
@@ -107,7 +133,7 @@ const Content = (props: { children?: JSX.Element }) => {
 					class="btn-circle tooltip tooltip-right z-1"
 					size="sm"
 					variant="ghost"
-					disabled={!settings.translate.summaryModel}
+					disabled={!settings.summary.summaryModel}
 					on:click={async () => {
 						logger.info("Summary button clicked");
 						try {

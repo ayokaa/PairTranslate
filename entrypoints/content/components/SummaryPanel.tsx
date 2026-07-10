@@ -27,7 +27,7 @@ export default (props: SummaryPanelProps) => {
 		page: props.pageContext,
 	});
 
-	const modelId = () => settings.translate.summaryModel;
+	const modelId = () => settings.summary.summaryModel;
 	const srcLang = () => settings.translate.sourceLang;
 	const dstLang = () => settings.translate.targetLang;
 

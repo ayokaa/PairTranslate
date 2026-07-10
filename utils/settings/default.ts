@@ -63,8 +63,12 @@ export function generateTranslateSettings(): s.TranslateSettings {
 		floatingExplainModel: undefined,
 		inputTranslateModel: MS_TRANSLATOR_ID,
 		inputTranslateLang: "en",
+	};
+}
+
+export function generateSummarySettings(): s.SummarySettings {
+	return {
 		summaryModel: undefined,
-		summaryExcludedSites: [],
 		summaryDefaultPinned: false,
 		summaryGeometryMaxEntries: 1000,
 	};
@@ -212,6 +216,7 @@ export function generateDefaultSettings(): s.SettingsSchema {
 		__v: SETTINGS_VERSION,
 		basic: generateBasicSettings(),
 		translate: generateTranslateSettings(),
+		summary: generateSummarySettings(),
 		services: generateServicesSettings(),
 		websiteRules: generateWebsiteRuleSettings(),
 		queue: generateQueueControlSettings(),

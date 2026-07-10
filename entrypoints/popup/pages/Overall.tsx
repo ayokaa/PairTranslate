@@ -191,7 +191,7 @@ export default () => {
 							class="select select-sm"
 							on:change={(e) =>
 								setSettings(
-									"translate",
+									"summary",
 									"summaryModel",
 									e.target.value || undefined,
 								)
@@ -202,7 +202,7 @@ export default () => {
 								{(option) => (
 									<option
 										value={option.value}
-										selected={option.value === settings.translate.summaryModel}
+										selected={option.value === settings.summary.summaryModel}
 									>
 										{option.label}
 									</option>

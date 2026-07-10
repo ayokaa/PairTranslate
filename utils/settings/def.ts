@@ -120,17 +120,25 @@ export const TranslateSettings = z.object({
 	floatingExplainModel: z.uuid().optional(),
 	inputTranslateModel: z.uuid().optional(),
 	inputTranslateLang: z.string().default("en"), // Target language for input translation
-	summaryModel: z.uuid().optional(),
-	summaryExcludedSites: z.array(z.string()).default([]),
-	summaryDefaultPinned: z.boolean().default(false),
-	// Maximum number of per-domain summary popup geometries to remember
-	summaryGeometryMaxEntries: z.number().min(1).default(1000),
 });
 export type TranslateSettings = z.infer<typeof TranslateSettings>;
+
+export const SummarySettings = z
+	.object({
+		summaryModel: z.uuid().optional(),
+		summaryDefaultPinned: z.boolean().default(false),
+		summaryGeometryMaxEntries: z.number().min(1).default(1000),
+	})
+	.default({
+		summaryDefaultPinned: false,
+		summaryGeometryMaxEntries: 1000,
+	});
+export type SummarySettings = z.infer<typeof SummarySettings>;
 
 export const WebsiteRuleSettings = z.object({
 	urlPatterns: z.array(z.string()),
 	enableTranslation: z.optional(z.boolean()),
+	enableSummary: z.optional(z.boolean()),
 	floatingBallEnabled: z.optional(z.boolean()),
 	translateFullPage: z.optional(z.boolean()),
 	sourceLang: z.optional(z.string()),
@@ -187,6 +195,7 @@ export const SettingsSchema = z.object({
 	__v: z.number().default(SETTINGS_VERSION),
 	basic: BasicSettings,
 	translate: TranslateSettings,
+	summary: SummarySettings,
 	services: ServicesSettings,
 	queue: QueueControlSettings,
 	prompts: PromptsSettings,

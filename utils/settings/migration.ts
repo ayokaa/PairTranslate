@@ -4,6 +4,7 @@ import {
 	generateDebugSettings,
 	generatePromptSettings,
 	generateQueueControlSettings,
+	generateSummarySettings,
 	generateTranslateSettings,
 } from "./default";
 import { SETTINGS_VERSION } from "./version";
@@ -50,11 +51,22 @@ type LegacyTranslateSettings = {
 
 type SettingsV1 = Omit<SettingsSchema, "debug"> & { __v: 1 };
 
-type LegacySettingsV0 = Omit<SettingsV1, "services" | "prompts"> & {
+type LegacySettingsV0 = Omit<SettingsV1, "services" | "prompts" | "summary"> & {
 	services?: LegacyServices;
 	prompts?: SettingsSchema["prompts"];
 	translate?: LegacyTranslateSettings;
 	__v?: number;
+};
+
+type LegacyTranslateSettingsV8 = SettingsSchema["translate"] & {
+	summaryModel?: string;
+	summaryExcludedSites?: string[];
+	summaryDefaultPinned?: boolean;
+	summaryGeometryMaxEntries?: number;
+};
+
+type LegacySettingsV8 = Omit<SettingsSchema, "translate" | "summary"> & {
+	translate: LegacyTranslateSettingsV8;
 };
 
 export const migrateSettings = (raw: unknown): SettingsSchema => {
@@ -82,28 +94,33 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 			continue;
 		}
 		if (version === 3) {
-			working = migrateV3ToV4(working as SettingsSchema);
+			working = migrateV3ToV4(working as LegacySettingsV8);
 			version = 4;
 			continue;
 		}
 		if (version === 4) {
-			working = migrateV4ToV5(working as SettingsSchema);
+			working = migrateV4ToV5(working as LegacySettingsV8);
 			version = 5;
 			continue;
 		}
 		if (version === 5) {
-			working = migrateV5ToV6(working as SettingsSchema);
+			working = migrateV5ToV6(working as LegacySettingsV8);
 			version = 6;
 			continue;
 		}
 		if (version === 6) {
-			working = migrateV6ToV7(working as SettingsSchema);
+			working = migrateV6ToV7(working as LegacySettingsV8);
 			version = 7;
 			continue;
 		}
 		if (version === 7) {
-			working = migrateV7ToV8(working as SettingsSchema);
+			working = migrateV7ToV8(working as LegacySettingsV8);
 			version = 8;
+			continue;
+		}
+		if (version === 8) {
+			working = migrateV8ToV9(working as LegacySettingsV8);
+			version = 9;
 			continue;
 		}
 
@@ -130,6 +147,7 @@ function migrateV0ToV1(oldSettings: LegacySettingsV0): SettingsV1 {
 		queue,
 		services,
 		prompts: oldSettings.prompts ?? generatePromptSettings(),
+		summary: generateSummarySettings(),
 		__v: 1,
 	};
 }
@@ -151,7 +169,7 @@ function migrateV2ToV3(oldSettings: SettingsSchema): SettingsSchema {
 	};
 }
 
-function migrateV3ToV4(oldSettings: SettingsSchema): SettingsSchema {
+function migrateV3ToV4(oldSettings: LegacySettingsV8): LegacySettingsV8 {
 	return {
 		...oldSettings,
 		translate: {
@@ -232,7 +250,7 @@ function buildQueueSettings(
 	};
 }
 
-function migrateV4ToV5(oldSettings: SettingsSchema): SettingsSchema {
+function migrateV4ToV5(oldSettings: LegacySettingsV8): LegacySettingsV8 {
 	return {
 		...oldSettings,
 		translate: {
@@ -243,7 +261,7 @@ function migrateV4ToV5(oldSettings: SettingsSchema): SettingsSchema {
 	};
 }
 
-function migrateV5ToV6(oldSettings: SettingsSchema): SettingsSchema {
+function migrateV5ToV6(oldSettings: LegacySettingsV8): LegacySettingsV8 {
 	return {
 		...oldSettings,
 		translate: {
@@ -254,7 +272,7 @@ function migrateV5ToV6(oldSettings: SettingsSchema): SettingsSchema {
 	};
 }
 
-function migrateV6ToV7(oldSettings: SettingsSchema): SettingsSchema {
+function migrateV6ToV7(oldSettings: LegacySettingsV8): LegacySettingsV8 {
 	return {
 		...oldSettings,
 		basic: {
@@ -265,7 +283,7 @@ function migrateV6ToV7(oldSettings: SettingsSchema): SettingsSchema {
 	};
 }
 
-function migrateV7ToV8(oldSettings: SettingsSchema): SettingsSchema {
+function migrateV7ToV8(oldSettings: LegacySettingsV8): LegacySettingsV8 {
 	return {
 		...oldSettings,
 		translate: {
@@ -273,6 +291,33 @@ function migrateV7ToV8(oldSettings: SettingsSchema): SettingsSchema {
 			summaryGeometryMaxEntries: 1000,
 		},
 		__v: 8,
+	};
+}
+
+function migrateV8ToV9(oldSettings: LegacySettingsV8): SettingsSchema {
+	const {
+		summaryModel,
+		summaryDefaultPinned,
+		summaryGeometryMaxEntries,
+		summaryExcludedSites,
+		...restTranslate
+	} = oldSettings.translate;
+
+	const summaryRules = (summaryExcludedSites ?? []).map((pattern) => ({
+		urlPatterns: [pattern],
+		enableSummary: false,
+	}));
+
+	return {
+		...oldSettings,
+		translate: restTranslate as SettingsSchema["translate"],
+		summary: {
+			summaryModel,
+			summaryDefaultPinned: summaryDefaultPinned ?? false,
+			summaryGeometryMaxEntries: summaryGeometryMaxEntries ?? 1000,
+		},
+		websiteRules: [...oldSettings.websiteRules, ...summaryRules],
+		__v: 9,
 	};
 }
 
