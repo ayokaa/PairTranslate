@@ -106,9 +106,7 @@ export default (props: { navId: string }) => {
 									<th class="font-medium">
 										{t("options.websiteRules.languages")}
 									</th>
-									<th class="font-medium">
-										{t("options.websiteRules.enableSummary")}
-									</th>
+									<th class="font-medium">{t("websiteRule.enableSummary")}</th>
 									<th
 										class="w-32 text-right font-medium"
 										aria-label={`${t("common.edit")}/${t("common.delete")}`}
@@ -174,6 +172,22 @@ export default (props: { navId: string }) => {
 														{rule.sourceLang ||
 															t("settings.translation.autoDetect")}{" "}
 														→ {rule.targetLang || t("common.globalDefault")}
+													</span>
+												</Show>
+											</td>
+											<td class="align-top py-4 text-sm text-base-content/70">
+												<Show
+													when={rule.enableSummary !== undefined}
+													fallback={
+														<span class="text-base-content/50">
+															{t("common.globalDefault")}
+														</span>
+													}
+												>
+													<span class="text-base-content">
+														{rule.enableSummary
+															? t("common.yes")
+															: t("common.no")}
 													</span>
 												</Show>
 											</td>

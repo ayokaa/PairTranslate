@@ -322,6 +322,42 @@ export const WebsiteRuleEditor = (props: Props) => {
 				</div>
 			</div>
 
+			{/* Summary Settings Section */}
+			<div class="card bg-base-200">
+				<div class="card-body gap-4">
+					<h3 class="card-title text-lg">{t("websiteRule.summarySettings")}</h3>
+
+					<FormField
+						label={t("websiteRule.enableSummary")}
+						helperText={t("websiteRule.enableSummaryDesc")}
+					>
+						<ButtonGroup
+							options={[
+								{ value: "default", label: t("common.globalDefault") },
+								{ value: "true", label: t("common.yes") },
+								{ value: "false", label: t("common.no") },
+							]}
+							value={
+								local.enableSummary === undefined
+									? "default"
+									: local.enableSummary
+										? "true"
+										: "false"
+							}
+							onChange={(value) => {
+								if (value === "default") {
+									setLocal("enableSummary", undefined);
+								} else if (value === "true") {
+									setLocal("enableSummary", true);
+								} else {
+									setLocal("enableSummary", false);
+								}
+							}}
+						/>
+					</FormField>
+				</div>
+			</div>
+
 			{/* Advanced Settings Section */}
 			<div class="card bg-base-200">
 				<div class="card-body gap-4">
