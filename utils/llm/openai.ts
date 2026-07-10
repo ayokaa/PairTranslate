@@ -103,16 +103,10 @@ export function createOpenAIClient(config: ClientConfig): LLMClient {
 						...(reasoningConfig.reasoningEffort && {
 							reasoning_effort: reasoningConfig.reasoningEffort,
 						}),
-						...((reasoningConfig.extraBody || request.extraBody) && {
-							extra_body: {
-								...(typeof request.extraBody === "object"
-									? request.extraBody
-									: {}),
-								...(typeof reasoningConfig.extraBody === "object"
-									? reasoningConfig.extraBody
-									: {}),
-							},
-						}),
+						...(typeof request.extraBody === "object" ? request.extraBody : {}),
+						...(typeof reasoningConfig.extraBody === "object"
+							? reasoningConfig.extraBody
+							: {}),
 						...(schema && {
 							response_format: {
 								type: "json_schema",
@@ -173,9 +167,10 @@ export function createOpenAIClient(config: ClientConfig): LLMClient {
 						...(reasoningConfig.reasoningEffort && {
 							reasoning_effort: reasoningConfig.reasoningEffort,
 						}),
-						...(reasoningConfig.extraBody && {
-							extra_body: reasoningConfig.extraBody,
-						}),
+						...(typeof request.extraBody === "object" ? request.extraBody : {}),
+						...(typeof reasoningConfig.extraBody === "object"
+							? reasoningConfig.extraBody
+							: {}),
 						stream: true,
 						stream_options: { include_usage: true },
 						...(schema && {
