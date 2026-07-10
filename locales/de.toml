@@ -16,6 +16,7 @@ advanced = "Erweiterte Einstellungen"
 about = "Über"
 debug = "Debug-Einstellungen"
 website = "Website"
+summary = "Zusammenfassungsdienste"
 
 [popup.navigation]
 openOptions = "Weitere Einstellungen"
@@ -155,6 +156,12 @@ keyboardShortcutConfigureDesc = "Öffnen Sie die Tastatureinstellungen des Brows
 keyboardShortcutInvalid = "Ungültiges Tastaturkürzel-Format"
 keyboardShortcutTest = "Testen Sie Ihr Tastaturkürzel:"
 keyboardShortcutTestHint = "Klicken Sie hier und drücken Sie Ihre Tastenkombination"
+keyboardShortcutForSummary = "Tastenkürzel für Zusammenfassung"
+keyboardShortcutForSummaryDesc = "Tastenkombination zum Auslösen der Seitenzusammenfassung"
+keyboardShortcutSummarizes = "Tastenkürzel für Zusammenfassung aktivieren"
+keyboardShortcutSummarizesDesc = "Erlaubt das Auslösen der Seitenzusammenfassung mit einem Tastenkürzel"
+restorePageState = "Übersetzung und Zusammenfassung nach Neuladen wiederherstellen"
+restorePageStateDesc = "Merkt sich den Übersetzungsstatus und das Zusammenfassungsfenster pro Seite und stellt sie nach einem Browser-Neustart wieder her"
 
 [commands]
 openTranslatorPopup = "Übersetzer-Popup öffnen"
@@ -228,6 +235,15 @@ inTextTranslateIcon = "Übersetzungssymbol im Text anzeigen"
 inTextTranslateIconDesc = "Das Übersetzungssymbol vor jedem übersetzten Absatz anzeigen"
 selectionTranslateEnabled = "$1 + Mausklick/Ziehen zum Übersetzen"
 selectionTranslateHintSuffix = "+ Mausklick/Ziehen zum Übersetzen"
+
+[settings.summary]
+summaryDefaultPinned = "Zusammenfassungsfenster standardmäßig anheften"
+summaryDefaultPinnedDesc = "Zusammenfassungsfenster beim Klicken außerhalb geöffnet lassen"
+summaryGeometryMaxEntries = "Maximal zu merkende Seiten"
+summaryGeometryMaxEntriesDesc = "Maximale Anzahl von Website-Geometrien, die gespeichert werden, bevor die älteste entfernt wird"
+summaryModel = "Zusammenfassungsmodell"
+summaryModelDesc = "Modell zur Generierung von Seitenzusammenfassungen"
+title = "Zusammenfassungseinstellungen"
 
 [settings.prompt]
 title = "Eingabeaufforderungseinstellungen"
@@ -395,6 +411,7 @@ languages = "Sprachen"
 unsavedChanges = "Nicht gespeicherte Änderungen"
 unsavedChangesDesc = "Sie haben nicht gespeicherte Änderungen. Sind Sie sicher, dass Sie ohne Speichern schließen möchten?"
 discardChanges = "Änderungen verwerfen"
+enableSummary = "Zusammenfassung"
 
 [settings.about]
 title = "Über PairTranslate"
@@ -503,6 +520,18 @@ batchTranslate = "Batch-Übersetzung"
 inputTranslate = "Eingabe-Übersetzung"
 explain = "Erklären"
 dictionaryTranslate = "Wörterbuch-Übersetzung"
+summary = "Summary"
+
+[summary]
+addToExclusion = "Exclude from summary"
+contentTruncated = "Content was truncated due to length limits."
+
+generate = "Summarize"
+generating = "Generating summary..."
+noContent = "No content available to summarize on this page."
+noModel = "No summary model configured"
+panelTitle = "Page Summary"
+removeFromExclusion = "Allow summary"
 
 # Prompt Studio
 
@@ -637,6 +666,7 @@ alephAlpha = "Aleph Alpha"
 glm = "GLM"
 deepseek = "Deepseek"
 other = "Andere"
+minimax = "MiniMax"
 
 # Service Names
 
@@ -759,6 +789,7 @@ patternExample = "Stimmt mit gist.github.com überein"
 translationSettings = "Übersetzungseinstellungen"
 enableTranslation = "Immer übersetzen"
 enableTranslationDesc = "Diese Website immer übersetzen"
+enableSummary = "Zusammenfassung aktivieren"
 translationMode = "Übersetzungsmodus"
 translationModeDesc = "Wählen Sie den Anzeigemodus für die Übersetzung"
 modeParallel = "Nebeneinander liegende Übersetzung"
@@ -769,3 +800,5 @@ addRule = "Regel hinzufügen"
 deleteRule = "Regel löschen"
 deleteAllPatterns = "Alle löschen"
 patternsCount = "Muster"
+enableSummaryDesc = "Erlaubt die Seitenzusammenfassung auf dieser Website"
+summarySettings = "Zusammenfassungseinstellungen"

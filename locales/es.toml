@@ -16,6 +16,7 @@ advanced = "Configuración Avanzada"
 about = "Acerca de"
 debug = "Configuración de Depuración"
 website = "Sitio Web"
+summary = "Servicios de resumen"
 
 [popup.navigation]
 openOptions = "Más opciones"
@@ -155,6 +156,12 @@ keyboardShortcutConfigureDesc = "Abre la configuración de atajos del navegador 
 keyboardShortcutInvalid = "Formato de atajo inválido"
 keyboardShortcutTest = "Pruebe su atajo:"
 keyboardShortcutTestHint = "Haga clic aquí y presione su combinación de atajo"
+keyboardShortcutForSummary = "Atajo de teclado para resumen"
+keyboardShortcutForSummaryDesc = "Combinación de teclas para activar el resumen de página"
+keyboardShortcutSummarizes = "Activar atajo de resumen"
+keyboardShortcutSummarizesDesc = "Permite activar el resumen de página con un atajo de teclado"
+restorePageState = "Restaurar traducción y resumen al recargar"
+restorePageStateDesc = "Recuerda el interruptor de traducción y la ventana de resumen por página, y los restaura después de reiniciar el navegador"
 
 [commands]
 openTranslatorPopup = "Abrir popup del traductor"
@@ -228,6 +235,15 @@ inTextTranslateIcon = "Mostrar el icono de traducción en el texto"
 inTextTranslateIconDesc = "Mostrar el icono de traducción antes de cada párrafo traducido"
 selectionTranslateEnabled = "$1 + Clic/Arrastrar del ratón para traducir"
 selectionTranslateHintSuffix = "+ Clic/Arrastrar del ratón para traducir"
+
+[settings.summary]
+summaryDefaultPinned = "Fijar ventana de resumen por defecto"
+summaryDefaultPinnedDesc = "Mantener la ventana de resumen abierta al hacer clic fuera de ella"
+summaryGeometryMaxEntries = "Máximo de sitios a recordar"
+summaryGeometryMaxEntriesDesc = "Número máximo de geometrías de sitios web a mantener antes de eliminar la más antigua"
+summaryModel = "Modelo de resumen"
+summaryModelDesc = "Modelo utilizado para generar resúmenes de página"
+title = "Configuración de resumen"
 
 [settings.prompt]
 title = "Configuración de Prompts"
@@ -395,6 +411,7 @@ languages = "Idiomas"
 unsavedChanges = "Cambios sin Guardar"
 unsavedChangesDesc = "Tiene cambios sin guardar. ¿Está seguro de que desea cerrar sin guardar?"
 discardChanges = "Descartar Cambios"
+enableSummary = "Resumen"
 
 [settings.about]
 title = "Acerca de PairTranslate"
@@ -503,6 +520,18 @@ batchTranslate = "Traducción por lotes"
 inputTranslate = "Traducción de entrada"
 explain = "Explicar"
 dictionaryTranslate = "Traducción del diccionario"
+summary = "Summary"
+
+[summary]
+addToExclusion = "Exclude from summary"
+contentTruncated = "Content was truncated due to length limits."
+
+generate = "Summarize"
+generating = "Generating summary..."
+noContent = "No content available to summarize on this page."
+noModel = "No summary model configured"
+panelTitle = "Page Summary"
+removeFromExclusion = "Allow summary"
 
 # Prompt Studio
 
@@ -637,6 +666,7 @@ alephAlpha = "Aleph Alpha"
 glm = "GLM"
 deepseek = "Deepseek"
 other = "Otro"
+minimax = "MiniMax"
 
 # Service Names
 
@@ -759,6 +789,7 @@ patternExample = "Coincide con gist.github.com"
 translationSettings = "Configuración de Traducción"
 enableTranslation = "Siempre traducir"
 enableTranslationDesc = "Traducir siempre este sitio"
+enableSummary = "Activar resumen"
 translationMode = "Modo de Traducción"
 translationModeDesc = "Elija el modo de visualización de traducción"
 modeParallel = "Traducción Lado a Lado"
@@ -769,3 +800,5 @@ addRule = "Añadir Regla"
 deleteRule = "Eliminar Regla"
 deleteAllPatterns = "Eliminar Todo"
 patternsCount = "patrón(es)"
+enableSummaryDesc = "Permitir el resumen de página en este sitio web"
+summarySettings = "Configuración de resumen"

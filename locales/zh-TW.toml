@@ -16,6 +16,7 @@ advanced = "高級設置"
 about = "關於"
 debug = "調試設置"
 website = "網站"
+summary = "摘要服務"
 
 [popup.navigation]
 openOptions = "更多設置"
@@ -155,6 +156,12 @@ keyboardShortcutConfigureDesc = "打開瀏覽器的快捷鍵設置來更新此�
 keyboardShortcutInvalid = "無效的快捷鍵格式"
 keyboardShortcutTest = "測試您的快捷鍵："
 keyboardShortcutTestHint = "點擊此處並按下您的快捷鍵組合"
+keyboardShortcutForSummary = "摘要快捷鍵"
+keyboardShortcutForSummaryDesc = "觸發頁面摘要的按鍵組合"
+keyboardShortcutSummarizes = "啟用摘要快捷鍵"
+keyboardShortcutSummarizesDesc = "允許使用鍵盤快捷鍵觸發頁面摘要"
+restorePageState = "重新整理後恢復翻譯和摘要"
+restorePageStateDesc = "記住每個頁面的翻譯開關和摘要視窗狀態，瀏覽器重新啟動後恢復"
 
 [commands]
 openTranslatorPopup = "打開翻譯彈窗"
@@ -228,6 +235,15 @@ inTextTranslateIcon = "顯示翻譯圖示"
 inTextTranslateIconDesc = "在每個翻譯段落前顯示翻譯圖示"
 selectionTranslateEnabled = "$1 + 滑鼠點擊/拖動進行翻譯"
 selectionTranslateHintSuffix = "+ 滑鼠點擊/拖動進行翻譯"
+
+[settings.summary]
+summaryDefaultPinned = "預設固定摘要視窗"
+summaryDefaultPinnedDesc = "點擊摘要視窗外部時保持視窗開啟"
+summaryGeometryMaxEntries = "最多記憶站點數"
+summaryGeometryMaxEntriesDesc = "達到上限後移除最舊的站點位置記錄"
+summaryModel = "摘要模型"
+summaryModelDesc = "用於生成頁面摘要的模型"
+title = "摘要設定"
 
 [settings.prompt]
 title = "提示詞設置"
@@ -395,6 +411,7 @@ languages = "語言"
 unsavedChanges = "未保存的更改"
 unsavedChangesDesc = "您有未保存的更改。確定要關閉而不保存嗎？"
 discardChanges = "放棄更改"
+enableSummary = "摘要"
 
 [settings.about]
 title = "關於 PairTranslate"
@@ -503,6 +520,18 @@ batchTranslate = "批量翻譯"
 inputTranslate = "輸入框翻譯"
 explain = "解釋"
 dictionaryTranslate = "詞典釋義翻譯"
+summary = "Summary"
+
+[summary]
+addToExclusion = "Exclude from summary"
+contentTruncated = "Content was truncated due to length limits."
+
+generate = "Summarize"
+generating = "Generating summary..."
+noContent = "No content available to summarize on this page."
+noModel = "No summary model configured"
+panelTitle = "Page Summary"
+removeFromExclusion = "Allow summary"
 
 # Prompt Studio
 
@@ -637,6 +666,7 @@ alephAlpha = "Aleph Alpha"
 glm = "GLM"
 deepseek = "Deepseek"
 other = "其他"
+minimax = "MiniMax"
 
 # Service Names
 
@@ -759,6 +789,7 @@ patternExample = "匹配如 gist.github.com"
 translationSettings = "翻譯設置"
 enableTranslation = "始終翻譯"
 enableTranslationDesc = "始終翻譯此網站"
+enableSummary = "啟用摘要"
 translationMode = "翻譯模式"
 translationModeDesc = "選擇翻譯模式"
 modeParallel = "對照翻譯"
@@ -769,3 +800,5 @@ addRule = "添加規則"
 deleteRule = "刪除規則"
 deleteAllPatterns = "全部刪除"
 patternsCount = "個模式"
+enableSummaryDesc = "允許在此網站上生成頁面摘要"
+summarySettings = "摘要設定"

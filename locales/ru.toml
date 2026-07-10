@@ -16,6 +16,7 @@ advanced = "Дополнительные Параметры"
 about = "О Программе"
 debug = "Параметры Отладки"
 website = "Веб-сайт"
+summary = "Сервисы резюме"
 
 [popup.navigation]
 openOptions = "Больше параметров"
@@ -155,6 +156,12 @@ keyboardShortcutConfigureDesc = "Откройте параметры горяч�
 keyboardShortcutInvalid = "Неверный формат горячей клавиши"
 keyboardShortcutTest = "Протестируйте вашу горячую клавишу:"
 keyboardShortcutTestHint = "Нажмите здесь и нажмите вашу комбинацию горячих клавиш"
+keyboardShortcutForSummary = "Горячая клавиша для резюме"
+keyboardShortcutForSummaryDesc = "Комбинация клавиш для запуска резюме страницы"
+keyboardShortcutSummarizes = "Включить горячую клавишу резюме"
+keyboardShortcutSummarizesDesc = "Разрешить запуск резюме страницы с помощью горячей клавиши"
+restorePageState = "Восстановить перевод и резюме после перезагрузки"
+restorePageStateDesc = "Запоминает переключатель перевода и окно резюме для каждой страницы и восстанавливает их после перезапуска браузера"
 
 [commands]
 openTranslatorPopup = "Открыть всплывающее окно переводчика"
@@ -228,6 +235,15 @@ inTextTranslateIcon = "Показывать значок перевода в т�
 inTextTranslateIconDesc = "Показывать значок перевода перед каждым переведённым абзацем"
 selectionTranslateEnabled = "$1 + клик/перетаскивание мыши для перевода"
 selectionTranslateHintSuffix = "+ клик/перетаскивание мыши для перевода"
+
+[settings.summary]
+summaryDefaultPinned = "Закреплять окно резюме по умолчанию"
+summaryDefaultPinnedDesc = "Оставлять окно резюме открытым при клике вне его"
+summaryGeometryMaxEntries = "Максимум запоминаемых сайтов"
+summaryGeometryMaxEntriesDesc = "Максимальное количество сохраняемых геометрий сайтов перед удалением самой старой"
+summaryModel = "Модель резюме"
+summaryModelDesc = "Модель, используемая для генерации резюме страниц"
+title = "Настройки резюме"
 
 [settings.prompt]
 title = "Параметры Подсказок"
@@ -395,6 +411,7 @@ languages = "Языки"
 unsavedChanges = "Несохраненные Изменения"
 unsavedChangesDesc = "У вас есть несохраненные изменения. Вы уверены, что хотите закрыть без сохранения?"
 discardChanges = "Отменить Изменения"
+enableSummary = "Резюме"
 
 [settings.about]
 title = "О PairTranslate"
@@ -503,6 +520,18 @@ batchTranslate = "Пакетный Перевод"
 inputTranslate = "Перевод Входных Данных"
 explain = "Объяснить"
 dictionaryTranslate = "Словарный Перевод"
+summary = "Summary"
+
+[summary]
+addToExclusion = "Exclude from summary"
+contentTruncated = "Content was truncated due to length limits."
+
+generate = "Summarize"
+generating = "Generating summary..."
+noContent = "No content available to summarize on this page."
+noModel = "No summary model configured"
+panelTitle = "Page Summary"
+removeFromExclusion = "Allow summary"
 
 # Prompt Studio
 
@@ -637,6 +666,7 @@ alephAlpha = "Aleph Alpha"
 glm = "GLM"
 deepseek = "Deepseek"
 other = "Другое"
+minimax = "MiniMax"
 
 # Service Names
 
@@ -759,6 +789,7 @@ patternExample = "Совпадает с gist.github.com"
 translationSettings = "Параметры Перевода"
 enableTranslation = "Всегда переводить"
 enableTranslationDesc = "Всегда переводить этот сайт"
+enableSummary = "Включить резюме"
 translationMode = "Режим Перевода"
 translationModeDesc = "Выберите режим отображения перевода"
 modeParallel = "Параллельный Перевод"
@@ -769,3 +800,5 @@ addRule = "Добавить Правило"
 deleteRule = "Удалить Правило"
 deleteAllPatterns = "Удалить Все"
 patternsCount = "шаблон(ов)"
+enableSummaryDesc = "Разрешить резюме страницы на этом сайте"
+summarySettings = "Настройки резюме"

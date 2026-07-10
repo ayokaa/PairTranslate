@@ -106,6 +106,9 @@ export default (props: { navId: string }) => {
 									<th class="font-medium">
 										{t("options.websiteRules.languages")}
 									</th>
+									<th class="font-medium">
+										{t("options.websiteRules.enableSummary")}
+									</th>
 									<th
 										class="w-32 text-right font-medium"
 										aria-label={`${t("common.edit")}/${t("common.delete")}`}

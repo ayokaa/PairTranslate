@@ -16,6 +16,7 @@ advanced = "고급 설정"
 about = "정보"
 debug = "디버그 설정"
 website = "웹사이트"
+summary = "요약 서비스"
 
 [popup.navigation]
 openOptions = "추가 설정"
@@ -155,6 +156,12 @@ keyboardShortcutConfigureDesc = "브라우저의 단축키 설정을 열어 이 
 keyboardShortcutInvalid = "잘못된 단축키 형식입니다"
 keyboardShortcutTest = "단축키 테스트:"
 keyboardShortcutTestHint = "여기를 클릭하고 단축키를 누르세요"
+keyboardShortcutForSummary = "요약 단축키"
+keyboardShortcutForSummaryDesc = "페이지 요약을 실행하는 키 조합"
+keyboardShortcutSummarizes = "요약 단축키 활성화"
+keyboardShortcutSummarizesDesc = "키보드 단축키로 페이지 요약을 실행할 수 있도록 허용"
+restorePageState = "새로고침 후 번역 및 요약 복원"
+restorePageStateDesc = "페이지별 번역 스위치와 요약 창 상태를 기억하고 브라우저 재시작 후 복원합니다"
 
 [commands]
 openTranslatorPopup = "번역 팝업 열기"
@@ -228,6 +235,15 @@ inTextTranslateIcon = "본문 내 번역 아이콘 표시"
 inTextTranslateIconDesc = "번역된 각 문단 앞에 번역 아이콘 표시"
 selectionTranslateEnabled = "$1 + 마우스 클릭/드래그로 번역"
 selectionTranslateHintSuffix = "+ 마우스 클릭/드래그로 번역"
+
+[settings.summary]
+summaryDefaultPinned = "기본적으로 요약 창 고정"
+summaryDefaultPinnedDesc = "요약 창 외부를 클릭핏아도 창을 열린 상태로 유지"
+summaryGeometryMaxEntries = "기억할 최대 사이트 수"
+summaryGeometryMaxEntriesDesc = "오래된 항목을 제거하기 전에 유지할 최대 웹사이트 위치 수"
+summaryModel = "요약 모델"
+summaryModelDesc = "페이지 요약을 생성하는 데 사용되는 모델"
+title = "요약 설정"
 
 [settings.prompt]
 title = "프롬프트 설정"
@@ -395,6 +411,7 @@ languages = "언어"
 unsavedChanges = "저장되지 않은 변경 사항"
 unsavedChangesDesc = "저장되지 않은 변경 사항이 있습니다. 저장하지 않고 닫으시겠습니까?"
 discardChanges = "변경 사항 취소"
+enableSummary = "요약"
 
 [settings.about]
 title = "PairTranslate 정보"
@@ -503,6 +520,18 @@ batchTranslate = "배치 번역"
 inputTranslate = "입력 번역"
 explain = "설명"
 dictionaryTranslate = "사전 번역"
+summary = "Summary"
+
+[summary]
+addToExclusion = "Exclude from summary"
+contentTruncated = "Content was truncated due to length limits."
+
+generate = "Summarize"
+generating = "Generating summary..."
+noContent = "No content available to summarize on this page."
+noModel = "No summary model configured"
+panelTitle = "Page Summary"
+removeFromExclusion = "Allow summary"
 
 # Prompt Studio
 
@@ -637,6 +666,7 @@ alephAlpha = "Aleph Alpha"
 glm = "GLM"
 deepseek = "Deepseek"
 other = "기타"
+minimax = "MiniMax"
 
 # Service Names
 
@@ -759,6 +789,7 @@ patternExample = "gist.github.com처럼 일치"
 translationSettings = "번역 설정"
 enableTranslation = "항상 번역"
 enableTranslationDesc = "이 웹사이트를 항상 번역"
+enableSummary = "요약 활성화"
 translationMode = "번역 모드"
 translationModeDesc = "번역 표시 모드를 선택합니다"
 modeParallel = "나란히 번역"
@@ -769,3 +800,5 @@ addRule = "규칙 추가"
 deleteRule = "규칙 삭제"
 deleteAllPatterns = "모두 삭제"
 patternsCount = "개 패턴"
+enableSummaryDesc = "이 웹사이트에서 페이지 요약 허용"
+summarySettings = "요약 설정"

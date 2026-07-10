@@ -197,7 +197,7 @@ export default () => {
 								)
 							}
 						>
-							<option disabled>{t("settings.translation.summaryModel")}</option>
+							<option disabled>{t("settings.summary.summaryModel")}</option>
 							<For each={llmModelList()}>
 								{(option) => (
 									<option

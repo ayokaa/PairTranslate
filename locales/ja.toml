@@ -16,6 +16,7 @@ advanced = "詳細設定"
 about = "について"
 debug = "デバッグ設定"
 website = "ウェブサイト"
+summary = "要約サービス"
 
 [popup.navigation]
 openOptions = "その他の設定"
@@ -155,6 +156,12 @@ keyboardShortcutConfigureDesc = "ブラウザのショートカット設定を�
 keyboardShortcutInvalid = "無効なショートカット形式です"
 keyboardShortcutTest = "ショートカットをテスト："
 keyboardShortcutTestHint = "ここをクリックしてショートカットを押してください"
+keyboardShortcutForSummary = "要約ショートカット"
+keyboardShortcutForSummaryDesc = "ページ要約をトリガーするキーの組み合わせ"
+keyboardShortcutSummarizes = "要約ショートカットを有効化"
+keyboardShortcutSummarizesDesc = "キーボードショートカットでページ要約をトリガーできるようにする"
+restorePageState = "再読み込み後に翻訳と要約を復元"
+restorePageStateDesc = "ページごとの翻訳スイッチと要約ウィンドウを記憶し、ブラウザ再起動後に復元します"
 
 [commands]
 openTranslatorPopup = "翻訳ポップアップを開く"
@@ -228,6 +235,15 @@ inTextTranslateIcon = "本文内の翻訳アイコンを表示"
 inTextTranslateIconDesc = "翻訳された各段落の前に翻訳アイコンを表示"
 selectionTranslateEnabled = "$1 + マウスクリック/ドラッグで翻訳"
 selectionTranslateHintSuffix = "+ マウスクリック/ドラッグで翻訳"
+
+[settings.summary]
+summaryDefaultPinned = "デフォルトで要約ウィンドウを固定"
+summaryDefaultPinnedDesc = "要約ウィンドウの外側をクリックしても開いたままにする"
+summaryGeometryMaxEntries = "記憶する最大サイト数"
+summaryGeometryMaxEntriesDesc = "古いものから削除する前に保持するWebサイトジオメトリの最大数"
+summaryModel = "要約モデル"
+summaryModelDesc = "ページ要約を生成するために使用するモデル"
+title = "要約設定"
 
 [settings.prompt]
 title = "プロンプト設定"
@@ -395,6 +411,7 @@ languages = "言語"
 unsavedChanges = "未保存の変更"
 unsavedChangesDesc = "未保存の変更があります。保存せずに閉じますか？"
 discardChanges = "変更を破棄"
+enableSummary = "要約"
 
 [settings.about]
 title = "PairTranslateについて"
@@ -503,6 +520,18 @@ batchTranslate = "バッチ翻訳"
 inputTranslate = "入力翻訳"
 explain = "説明"
 dictionaryTranslate = "辞書翻訳"
+summary = "Summary"
+
+[summary]
+addToExclusion = "Exclude from summary"
+contentTruncated = "Content was truncated due to length limits."
+
+generate = "Summarize"
+generating = "Generating summary..."
+noContent = "No content available to summarize on this page."
+noModel = "No summary model configured"
+panelTitle = "Page Summary"
+removeFromExclusion = "Allow summary"
 
 # Prompt Studio
 
@@ -637,6 +666,7 @@ alephAlpha = "Aleph Alpha"
 glm = "GLM"
 deepseek = "Deepseek"
 other = "その他"
+minimax = "MiniMax"
 
 # Service Names
 
@@ -759,6 +789,7 @@ patternExample = "gist.github.com のようにマッチ"
 translationSettings = "翻訳設定"
 enableTranslation = "常に翻訳"
 enableTranslationDesc = "このウェブサイトを常に翻訳する"
+enableSummary = "要約を有効化"
 translationMode = "翻訳モード"
 translationModeDesc = "翻訳表示モードを選択します"
 modeParallel = "サイドバイサイド翻訳"
@@ -769,3 +800,5 @@ addRule = "ルールを追加"
 deleteRule = "ルールを削除"
 deleteAllPatterns = "すべて削除"
 patternsCount = "個のパターン"
+enableSummaryDesc = "このWebサイトでページ要約を許可する"
+summarySettings = "要約設定"
