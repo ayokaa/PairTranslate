@@ -100,8 +100,9 @@ export const Checkbox: Component<CheckboxProps> = (props) => {
 
 	return (
 		<div class="form-control">
-			<label class="label cursor-pointer">
-				<span class="label-text">{local.label}</span>
+			<label class="label cursor-pointer w-full">
+				<span class="label-text font-medium">{local.label}</span>
+				<div class="flex-1" />
 				<input
 					{...inputProps}
 					type="checkbox"
@@ -125,9 +126,11 @@ export const Checkbox: Component<CheckboxProps> = (props) => {
 				/>
 			</label>
 			{(local.helperText || local.error) && (
-				<span class="label label-text-alt text-wrap">
-					{local.error || local.helperText}
-				</span>
+				<div class="label text-wrap">
+					<span class={cn("label-text-alt", local.error && "text-error")}>
+						{local.error || local.helperText}
+					</span>
+				</div>
 			)}
 		</div>
 	);

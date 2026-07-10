@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import { reconcile } from "solid-js/store";
 import { browser } from "#imports";
 import { Button } from "~/components/Button";
@@ -85,12 +85,14 @@ export default (props: { navId: string }) => {
 					}
 				/>
 			</FormGrid>
+
 			<div class="divider" />
+
 			<FormGrid>
-				<div class="form-control">
-					<label class="label">
-						<span class="label-text">{t("settings.basic.theme")}</span>
-					</label>
+				<FormField
+					label={t("settings.basic.theme")}
+					helperText={t("settings.basic.themeDesc")}
+				>
 					<ButtonGroup
 						options={themeOptions}
 						value={settings.basic.theme}
@@ -101,22 +103,13 @@ export default (props: { navId: string }) => {
 								value as "light" | "dark" | "system",
 							)
 						}
-						title={t("settings.basic.themeDesc")}
 					/>
-					<br />
-					<label class="label">
-						<span class="label-text-alt text-xs">
-							{t("settings.basic.themeDesc")}
-						</span>
-					</label>
-				</div>
+				</FormField>
 
-				<div class="form-control">
-					<label class="label">
-						<span class="label-text">
-							{t("settings.basic.floatingBallPosition")}
-						</span>
-					</label>
+				<FormField
+					label={t("settings.basic.floatingBallPosition")}
+					helperText={t("settings.basic.floatingBallPositionDesc")}
+				>
 					<ButtonGroup
 						options={positionOptions}
 						value={settings.basic.floatingBallPosition.side}
@@ -128,40 +121,42 @@ export default (props: { navId: string }) => {
 								value as "left" | "right",
 							)
 						}
-						title={t("settings.basic.floatingBallPositionDesc")}
 					/>
-					<br />
-					<label class="label">
-						<span class="label-text-alt text-xs">
-							{t("settings.basic.floatingBallPositionDesc")}
-						</span>
-					</label>
-				</div>
-				<FormField label={t("settings.translation.styleTitle")}>
-					<div class="flex flex-col gap-1">
-						<TranslationStyleControls
-							value={settings.basic.translationStyle}
-							onChange={(style) => {
-								if (!style) return;
-								setSettings("basic", "translationStyle", reconcile(style));
-							}}
-						/>
-						<span class="text-[0.65rem] text-base-content/60">
-							{t("settings.translation.styleBackgroundDesc")}
-						</span>
-					</div>
+				</FormField>
+
+				<FormField
+					label={t("settings.translation.styleTitle")}
+					helperText={t("settings.translation.styleBackgroundDesc")}
+				>
+					<TranslationStyleControls
+						value={settings.basic.translationStyle}
+						onChange={(style) => {
+							if (!style) return;
+							setSettings("basic", "translationStyle", reconcile(style));
+						}}
+					/>
 				</FormField>
 			</FormGrid>
+
 			<div class="divider" />
+
 			<FormGrid>
+				<SettingsToggle
+					label={t("settings.basic.keyboardShortcutEnabled")}
+					helperText={t("settings.basic.keyboardShortcutEnabledDesc")}
+					checked={settings.basic.keyboardShortcutEnabled}
+					onChange={(e) =>
+						setSettings("basic", "keyboardShortcutEnabled", e.target.checked)
+					}
+				/>
+
 				<ShortcutInput
+					label={t("settings.basic.keyboardShortcut")}
+					description={t("settings.basic.keyboardShortcutDesc")}
 					value={settings.basic.keyboardShortcut}
-					enabled={settings.basic.keyboardShortcutEnabled}
+					disabled={!settings.basic.keyboardShortcutEnabled}
 					onChange={(shortcut) =>
 						setSettings("basic", "keyboardShortcut", shortcut)
-					}
-					onEnabledChange={(enabled) =>
-						setSettings("basic", "keyboardShortcutEnabled", enabled)
 					}
 				/>
 
@@ -190,16 +185,22 @@ export default (props: { navId: string }) => {
 					}
 				/>
 
+				<SettingsToggle
+					label={t("settings.basic.keyboardShortcutSummarizes")}
+					helperText={t("settings.basic.keyboardShortcutSummarizesDesc")}
+					checked={settings.basic.keyboardShortcutSummarizes}
+					onChange={(e) =>
+						setSettings("basic", "keyboardShortcutSummarizes", e.target.checked)
+					}
+				/>
+
 				<ShortcutInput
 					label={t("settings.basic.keyboardShortcutForSummary")}
 					description={t("settings.basic.keyboardShortcutForSummaryDesc")}
 					value={settings.basic.keyboardShortcutForSummary}
-					enabled={settings.basic.keyboardShortcutSummarizes}
+					disabled={!settings.basic.keyboardShortcutSummarizes}
 					onChange={(shortcut) =>
 						setSettings("basic", "keyboardShortcutForSummary", shortcut)
-					}
-					onEnabledChange={(enabled) =>
-						setSettings("basic", "keyboardShortcutSummarizes", enabled)
 					}
 				/>
 
@@ -225,33 +226,11 @@ export default (props: { navId: string }) => {
 					label={t("settings.basic.selectionTranslateEnabled")}
 					helperText={t("settings.basic.selectionTranslateEnabledDesc")}
 				>
-					<div class="flex items-center gap-2 text-sm">
-						<select
-							class="select select-xs"
-							disabled={!settings.basic.selectionTranslateEnabled}
-							value={selectionModifier()}
-							on:change={(e) =>
-								setSettings(
-									"basic",
-									"selectionTranslateModifier",
-									e.target.value as SelectionTranslateModifier,
-								)
-							}
-						>
-							<For each={modifierOptions}>
-								{(option) => (
-									<option value={option.value}>{option.label}</option>
-								)}
-							</For>
-						</select>
-						<span class="text-xs">
-							{t("settings.translation.selectionTranslateHintSuffix")}
-						</span>
-						<div class="flex-1" />
+					<div class="flex flex-col gap-2">
 						<input
 							type="checkbox"
 							checked={settings.basic.selectionTranslateEnabled}
-							class="toggle"
+							class="toggle toggle-success"
 							onChange={(e) =>
 								setSettings(
 									"basic",
@@ -260,6 +239,30 @@ export default (props: { navId: string }) => {
 								)
 							}
 						/>
+						<Show when={settings.basic.selectionTranslateEnabled}>
+							<div class="flex flex-wrap items-center gap-2 text-sm">
+								<select
+									class="select select-xs"
+									value={selectionModifier()}
+									on:change={(e) =>
+										setSettings(
+											"basic",
+											"selectionTranslateModifier",
+											e.target.value as SelectionTranslateModifier,
+										)
+									}
+								>
+									<For each={modifierOptions}>
+										{(option) => (
+											<option value={option.value}>{option.label}</option>
+										)}
+									</For>
+								</select>
+								<span class="text-xs text-base-content/70">
+									{t("settings.translation.selectionTranslateHintSuffix")}
+								</span>
+							</div>
+						</Show>
 					</div>
 				</FormField>
 			</FormGrid>

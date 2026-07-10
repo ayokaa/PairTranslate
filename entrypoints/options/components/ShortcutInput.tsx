@@ -4,11 +4,10 @@ import { t } from "~/utils/i18n";
 
 interface ShortcutInputProps {
 	value: string;
-	enabled: boolean;
 	onChange: (shortcut: string) => void;
-	onEnabledChange: (enabled: boolean) => void;
 	label?: string;
 	description?: string;
+	disabled?: boolean;
 }
 
 export default (props: ShortcutInputProps) => {
@@ -151,15 +150,6 @@ export default (props: ShortcutInputProps) => {
 						{props.label || t("settings.basic.keyboardShortcut")}
 					</span>
 				</label>
-				<label class="label cursor-pointer">
-					<span class="label-text mr-2">{t("common.enabled")}</span>
-					<input
-						type="checkbox"
-						class="toggle toggle-primary"
-						checked={props.enabled}
-						onChange={(e) => props.onEnabledChange(e.target.checked)}
-					/>
-				</label>
 			</div>
 
 			<div class="label-text-alt text-xs mb-2 block">
@@ -173,6 +163,7 @@ export default (props: ShortcutInputProps) => {
 					value={recording() ? tempShortcut() : formatShortcut(props.value)}
 					placeholder={t("settings.basic.keyboardShortcutHint")}
 					readOnly
+					disabled={props.disabled}
 					classList={{
 						"input-error": !!error(),
 						"input-primary": recording(),
@@ -182,7 +173,7 @@ export default (props: ShortcutInputProps) => {
 					type="button"
 					class="btn btn-primary join-item"
 					onClick={recording() ? cancelRecording : startRecording}
-					disabled={!props.enabled}
+					disabled={props.disabled}
 				>
 					{recording() ? t("shortcuts.cancel") : t("shortcuts.record")}
 				</button>

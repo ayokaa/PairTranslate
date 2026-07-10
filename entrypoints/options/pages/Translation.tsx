@@ -4,6 +4,7 @@ import { createEffect, createMemo, createSignal, on } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import type z from "zod";
 import { ButtonGroup } from "~/components/settings/ButtonGroup";
+import { FormField } from "~/components/settings/FormField";
 import { FormGrid } from "~/components/settings/FormGrid";
 import {
 	OptionSelect,
@@ -11,7 +12,6 @@ import {
 } from "~/components/settings/OptionSelect";
 import { SectionResetButton } from "~/components/settings/SectionResetButton";
 import { SettingsCard } from "~/components/settings/SettingsCard";
-import { SettingsCheckbox } from "~/components/settings/SettingsCheckbox";
 import { SettingsToggle } from "~/components/settings/SettingsToggle";
 import { useSettings } from "~/hooks/settings";
 import { SUPPORTED_LANGUAGES } from "~/utils/constants";
@@ -115,12 +115,10 @@ export default (props: { navId: string }) => {
 			actions={<SectionResetButton onReset={handleReset} />}
 		>
 			<FormGrid gap="lg">
-				<div class="form-control">
-					<label class="label">
-						<span class="label-text">
-							{t("settings.translation.translationMode")}
-						</span>
-					</label>
+				<FormField
+					label={t("settings.translation.translationMode")}
+					helperText={t("settings.translation.translationModeDesc")}
+				>
 					<ButtonGroup
 						options={[
 							{
@@ -139,17 +137,10 @@ export default (props: { navId: string }) => {
 								value as "parallel" | "replace",
 							)
 						}
-						title={t("settings.translation.translationModeDesc")}
 					/>
-					<br />
-					<label class="label">
-						<span class="label-text-alt text-xs">
-							{t("settings.translation.translationModeDesc")}
-						</span>
-					</label>
-				</div>
+				</FormField>
 
-				<SettingsCheckbox
+				<SettingsToggle
 					label={t("settings.translation.filterInteractive")}
 					helperText={t("settings.translation.filterInteractiveDesc")}
 					checked={localSettings.filterInteractive}
@@ -158,7 +149,7 @@ export default (props: { navId: string }) => {
 					}
 				/>
 
-				<SettingsCheckbox
+				<SettingsToggle
 					label={t("settings.translation.translateFullPage")}
 					helperText={t("settings.translation.translateFullPageDesc")}
 					checked={localSettings.translateFullPage}

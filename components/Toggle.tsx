@@ -52,29 +52,22 @@ export const Toggle: Component<ToggleProps> = (props) => {
 				error: !!local.error,
 			}),
 			local.class,
-			"mx-2",
 		);
 
 	if (local.label || local.helperText || local.error) {
 		return (
 			<div class="form-control">
 				<label class="label cursor-pointer w-full">
-					<span class="label-text">{local.label}</span>
+					<span class="label-text font-medium">{local.label}</span>
 					<div class="flex-1" />
 					<input {...inputProps} type="checkbox" class={toggleClasses()} />
 				</label>
 				{(local.helperText || local.error) && (
-					<>
-						<br />
-						<span
-							class={cn(
-								"label label-text-alt text-wrap",
-								local.error && "text-error",
-							)}
-						>
+					<div class="label text-wrap">
+						<span class={cn("label-text-alt", local.error && "text-error")}>
 							{local.error || local.helperText}
 						</span>
-					</>
+					</div>
 				)}
 			</div>
 		);

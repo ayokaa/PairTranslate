@@ -10,7 +10,7 @@ import {
 } from "~/components/settings/OptionSelect";
 import { SectionResetButton } from "~/components/settings/SectionResetButton";
 import { SettingsCard } from "~/components/settings/SettingsCard";
-import { SettingsCheckbox } from "~/components/settings/SettingsCheckbox";
+import { SettingsToggle } from "~/components/settings/SettingsToggle";
 import { useSettings } from "~/hooks/settings";
 import { t } from "~/utils/i18n";
 import { generateSummarySettings } from "~/utils/settings";
@@ -89,7 +89,7 @@ export default (props: { navId: string }) => {
 						setLocalSettings("summaryModel", value);
 					}}
 				/>
-				<SettingsCheckbox
+				<SettingsToggle
 					label={t("settings.summary.summaryDefaultPinned")}
 					helperText={t("settings.summary.summaryDefaultPinnedDesc")}
 					checked={localSettings.summaryDefaultPinned ?? false}
