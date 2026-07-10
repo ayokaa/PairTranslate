@@ -77,7 +77,37 @@ export interface State<M, T, E> {
 	logger: Logger;
 }
 
-export const generateId = () => crypto.randomUUID();
+const generateUUIDv4Fallback = (): string => {
+	const bytes = new Uint8Array(16);
+	crypto.getRandomValues(bytes);
+	// Version 4: 0100xxxx
+	bytes[6] = (bytes[6] & 0x0f) | 0x40;
+	// Variant 10: 10xxxxxx
+	bytes[8] = (bytes[8] & 0x3f) | 0x80;
+	const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
+		"",
+	);
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
+export const generateId = () => {
+	if (
+		typeof crypto !== "undefined" &&
+		typeof crypto.randomUUID === "function"
+	) {
+		return crypto.randomUUID();
+	}
+	// crypto.randomUUID is restricted to secure contexts. Use getRandomValues
+	// (available in non-secure contexts like HTTP pages) to produce a v4 UUID.
+	if (
+		typeof crypto !== "undefined" &&
+		typeof crypto.getRandomValues === "function"
+	) {
+		return generateUUIDv4Fallback();
+	}
+	// Last-resort fallback for environments without any crypto API.
+	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+};
 
 export class TransportationError extends Error {
 	constructor(error: unknown) {
