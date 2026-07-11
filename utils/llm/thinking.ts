@@ -75,6 +75,30 @@ export const getOpenAIReasoningConfig = (thinkingBudget?: ThinkingBudget) => {
 	};
 };
 
+type MinimaxThinkingType = "adaptive" | "disabled";
+
+export const getMinimaxReasoningConfig = (thinkingBudget?: ThinkingBudget) => {
+	if (!thinkingBudget) {
+		return {};
+	}
+
+	const effort = mapOpenAIReasoningEffort(thinkingBudget);
+	const type: MinimaxThinkingType =
+		thinkingBudget === "off" ? "disabled" : "adaptive";
+
+	return {
+		reasoningEffort: effort,
+		extraBody: {
+			reasoning: {
+				effort,
+			},
+			thinking: {
+				type,
+			},
+		},
+	};
+};
+
 export const getAnthropicThinkingConfig = (
 	thinkingBudget: ThinkingBudget | undefined,
 	maxTokens: number,

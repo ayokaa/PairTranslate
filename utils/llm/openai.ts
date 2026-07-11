@@ -1,6 +1,9 @@
 import OpenAI from "openai";
 import { autoStripMarkdown } from "../json-autocomplete";
-import { getOpenAIReasoningConfig } from "./thinking";
+import {
+	getMinimaxReasoningConfig,
+	getOpenAIReasoningConfig,
+} from "./thinking";
 import type {
 	ChatRequest,
 	ClientConfig,
@@ -29,6 +32,12 @@ export function createOpenAIClient(config: ClientConfig): LLMClient {
 		baseURL: config.baseUrl,
 		dangerouslyAllowBrowser: true,
 	});
+
+	const baseUrl = config.baseUrl ?? "";
+	const isMinimax = baseUrl.includes("minimaxi.com");
+	const getReasoningConfig = isMinimax
+		? getMinimaxReasoningConfig
+		: getOpenAIReasoningConfig;
 
 	const handleError = (error: unknown): LLMError => {
 		if (error instanceof OpenAI.APIError) {
@@ -89,9 +98,7 @@ export function createOpenAIClient(config: ClientConfig): LLMClient {
 		) {
 			try {
 				const messages = request.messages;
-				const reasoningConfig = getOpenAIReasoningConfig(
-					request.thinkingBudget,
-				);
+				const reasoningConfig = getReasoningConfig(request.thinkingBudget);
 
 				const response = await client.chat.completions.create(
 					{
@@ -153,9 +160,7 @@ export function createOpenAIClient(config: ClientConfig): LLMClient {
 		): AsyncGenerator<StreamChunk, EndResponse> {
 			try {
 				const messages = request.messages;
-				const reasoningConfig = getOpenAIReasoningConfig(
-					request.thinkingBudget,
-				);
+				const reasoningConfig = getReasoningConfig(request.thinkingBudget);
 
 				const stream = await client.chat.completions.create(
 					{

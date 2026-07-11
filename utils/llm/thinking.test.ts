@@ -4,6 +4,7 @@ import { SettingsSchema } from "~/utils/settings/def";
 import {
 	getAnthropicThinkingConfig,
 	getGoogleThinkingConfig,
+	getMinimaxReasoningConfig,
 	getOpenAIReasoningConfig,
 	isGemini3Model,
 } from "./thinking";
@@ -103,6 +104,32 @@ test("openai reasoning config includes all combined fields", () => {
 			},
 			thinking: {
 				type: "enabled",
+			},
+		},
+	});
+});
+
+test("minimax reasoning config uses adaptive thinking type", () => {
+	expect(getMinimaxReasoningConfig("off")).toEqual({
+		reasoningEffort: "none",
+		extraBody: {
+			reasoning: {
+				effort: "none",
+			},
+			thinking: {
+				type: "disabled",
+			},
+		},
+	});
+
+	expect(getMinimaxReasoningConfig("high")).toEqual({
+		reasoningEffort: "high",
+		extraBody: {
+			reasoning: {
+				effort: "high",
+			},
+			thinking: {
+				type: "adaptive",
 			},
 		},
 	});
