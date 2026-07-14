@@ -1,4 +1,5 @@
 import { domListener } from "./parser/base";
+import adi from "./parser/website/adi";
 import arxiv from "./parser/website/arxiv";
 import docsRs from "./parser/website/docs-rs";
 import github from "./parser/website/github";
@@ -13,6 +14,7 @@ import x from "./parser/website/x";
 import youtube from "./parser/website/youtube";
 
 export const PARSER_LIST = [
+	adi(),
 	github(),
 	reddit(),
 	youtube(),

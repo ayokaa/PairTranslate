@@ -153,12 +153,13 @@ export async function* elementWalker(state: State): SectionGenerator {
 	const judgeText = (el: Element): boolean => {
 		if (!state.textTags.has(el.tagName)) return false;
 		if (hasDirectText(el)) return true;
-		if (hasBlockDescendant(el, state.blockTags)) return false;
-		if (NOT_EMPTY_REGEX.test(el.textContent || "")) return true;
 
 		const mathSelector =
 			"mjx-container, math, .katex, .math.inline, .math.display";
 		if (el.querySelector(mathSelector)) return true;
+		if (!state.promoteTextTags.has(el.tagName)) return false;
+		if (hasBlockDescendant(el, state.blockTags)) return false;
+		if (NOT_EMPTY_REGEX.test(el.textContent || "")) return true;
 
 		return false;
 	};
@@ -429,6 +430,9 @@ export function getState(options: Options = {}): State {
 		].join(", "),
 		textTags: new Set(
 			[...(options.textTags || []), ...TEXT_TAGS].map((s) => s.toUpperCase()),
+		),
+		promoteTextTags: new Set(
+			(options.promoteTextTags || []).map((s) => s.toUpperCase()),
 		),
 		blockTags: new Set(
 			[...(options.blockTags || []), ...BLOCK_TAGS].map((s) => s.toUpperCase()),

@@ -3,6 +3,7 @@ export interface State {
 	signal?: AbortSignal;
 	excludedSelector: string;
 	textTags: Set<string>;
+	promoteTextTags: Set<string>;
 	blockTags: Set<string>;
 	listenNew: boolean;
 	judgeFn?: JudgeFn;
@@ -17,6 +18,7 @@ export interface Options {
 	signal?: AbortSignal;
 	excludedSelectors?: string[];
 	textTags?: string[];
+	promoteTextTags?: string[];
 	blockTags?: string[];
 	listenNew?: boolean;
 	extraTextFilters?: RegExp[];
