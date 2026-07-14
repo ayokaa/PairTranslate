@@ -71,8 +71,10 @@ type ElementHandler = (
 function* iterateMarkdown(node: Node): Generator<string, void, unknown> {
 	// 1. Handle Text Nodes
 	if (node.nodeType === Node.TEXT_NODE) {
-		const text = node.nodeValue?.trim() || "";
+		const text = node.nodeValue || "";
 
+		// Preserve separators between adjacent inline nodes, such as the
+		// whitespace between word-highlighting spans.
 		yield text.replace(/\s+/g, " ");
 	}
 	// 2. Handle Element Nodes

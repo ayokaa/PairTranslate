@@ -50,22 +50,50 @@ const hasDirectText = (el: Element): boolean => {
 	return false;
 };
 
-const skipSubtree = (walker: TreeWalker): Element | null => {
-	// 1. Try to go to the immediate sibling
-	const sibling = walker.nextSibling();
-	if (sibling) return sibling as Element;
+// Inline wrappers such as word-highlighting spans should be translated with
+// their surrounding paragraph. Block descendants still define boundaries.
+const hasBlockDescendant = (el: Element, blockTags: Set<string>): boolean => {
+	let node = el.firstChild;
+	while (node) {
+		if (node.nodeType === Node.ELEMENT_NODE) {
+			const child = node as Element;
+			if (
+				blockTags.has(child.tagName) ||
+				hasBlockDescendant(child, blockTags)
+			) {
+				return true;
+			}
+		}
+		node = node.nextSibling;
+	}
+	return false;
+};
 
-	// 2. If no sibling, we are at the end of a branch.
-	// We need to climb up until we find an uncle (parent's sibling).
-	// Note: We check walker.parentNode() to ensure we don't go past the root.
-	let parent = walker.parentNode();
-	while (parent) {
-		const uncle = walker.nextSibling();
-		if (uncle) return uncle as Element;
-		parent = walker.parentNode();
+const skipSubtree = (walker: TreeWalker): Element | null => {
+	// Browsers provide sibling traversal that can skip a subtree without
+	// walking every descendant.
+	if (typeof walker.nextSibling === "function") {
+		const sibling = walker.nextSibling();
+		if (sibling) return sibling as Element;
+
+		let parent = walker.parentNode();
+		while (parent) {
+			const uncle = walker.nextSibling();
+			if (uncle) return uncle as Element;
+			parent = walker.parentNode();
+		}
+
+		return null;
 	}
 
-	return null; // Reached end of document
+	// Some lightweight DOM implementations omit nextSibling(). Continue with
+	// nextNode() until the walker leaves the current element.
+	const current = walker.currentNode;
+	let next = walker.nextNode();
+	while (next && current.contains(next)) {
+		next = walker.nextNode();
+	}
+	return (next as Element | null) ?? null;
 };
 
 const getTextFromSection = (section: DOMSection): string => {
@@ -125,6 +153,8 @@ export async function* elementWalker(state: State): SectionGenerator {
 	const judgeText = (el: Element): boolean => {
 		if (!state.textTags.has(el.tagName)) return false;
 		if (hasDirectText(el)) return true;
+		if (hasBlockDescendant(el, state.blockTags)) return false;
+		if (NOT_EMPTY_REGEX.test(el.textContent || "")) return true;
 
 		const mathSelector =
 			"mjx-container, math, .katex, .math.inline, .math.display";
