@@ -8,6 +8,8 @@ import { mountOverlay } from "./overlay";
 
 export default defineContentScript({
 	matches: ["<all_urls>"],
+	allFrames: true,
+	matchAboutBlank: true,
 	main: () =>
 		untilAlive().then(() =>
 			requestIdleCallback(

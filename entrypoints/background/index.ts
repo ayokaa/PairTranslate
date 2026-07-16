@@ -5,6 +5,7 @@ import { cleanupDomainTimers } from "~/utils/domain-timers";
 import { type AllServices, type Server, setupWxtServer } from "~/utils/rpc";
 import { initializeSettings } from "~/utils/settings/init";
 import { openTranslatorPopup } from "~/utils/translator-window";
+import { FrameTranslationRelay } from "./frame-translation";
 import { createDictionaryService } from "./services/dictionary";
 import { createMatchService } from "./services/match";
 import { createStyleService } from "./services/style";
@@ -14,6 +15,8 @@ export default defineBackground(() => {
 	console.log("Pair Translate background script loaded", {
 		id: browser.runtime.id,
 	});
+	const frameTranslationRelay = new FrameTranslationRelay();
+	browser.runtime.onConnect.addListener(frameTranslationRelay.connect);
 
 	let ready = false;
 	const promise = async () => {

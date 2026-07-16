@@ -10,7 +10,11 @@ import InputTranslator from "./InputTranslator";
 import InTextTranslator from "./InTextTranslator";
 import SelectionInTextTranslator from "./SelectionInTextTranslator";
 
-export default () => {
+interface Props {
+	onTranslationStateChange?: (enabled: boolean) => void;
+}
+
+export default (props: Props) => {
 	const { settings } = useSettings();
 	const websiteRule = useWebsiteRule();
 	const [inTextTranslateEnabled, setInTextTranslateEnabled] =
@@ -27,6 +31,9 @@ export default () => {
 	const [remaining] = createDomainEnabledTimer();
 	createEffect(() => {
 		if ((remaining() || 0) > 0) setInTextTranslateEnabled(true);
+	});
+	createEffect(() => {
+		props.onTranslationStateChange?.(inTextTranslateEnabled());
 	});
 
 	// Website rules act as defaults: they only apply when the user has not made

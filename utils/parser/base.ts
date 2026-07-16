@@ -1,7 +1,6 @@
 import { hasMeaningfulChars } from "~/utils/blank";
 import {
 	BLOCK_TAGS,
-	DATA_IFRAME,
 	EXCLUDED_SELECTORS,
 	INTERACTIVE_SELECTORS,
 	TEXT_TAGS,
@@ -198,7 +197,6 @@ export async function* elementWalker(state: State): SectionGenerator {
 	const observer = state.listenNew
 		? new MutationObserver(mutationHandler)
 		: null;
-	const cleaners: (() => void)[] = [];
 
 	const observeElement = (el: Node) =>
 		observer?.observe(el, {
@@ -210,13 +208,10 @@ export async function* elementWalker(state: State): SectionGenerator {
 
 	const cleanup = () => {
 		observer?.disconnect();
-		for (const fn of cleaners) {
-			fn();
-		}
 	};
 
-	const processedIframes = new WeakSet<HTMLIFrameElement>();
-	// Handle shadow DOM and iframes
+	// Iframes run their own content script. Only shadow roots need traversal
+	// from their containing document.
 	const findTextElementsInSpecialContainer = function* (
 		element: Node,
 	): Generator<Element> {
@@ -227,30 +222,6 @@ export async function* elementWalker(state: State): SectionGenerator {
 		if (root) {
 			yield* findTextElements(root);
 			observeElement(root);
-		} else if (
-			el.tagName === "IFRAME" &&
-			el.getAttribute(DATA_IFRAME) === null
-		) {
-			const iframe = el as HTMLIFrameElement;
-			new Promise<Element | undefined>((resolve) => {
-				if (iframe.contentDocument) resolve(iframe.contentDocument.body);
-				else {
-					const handler = () => resolve(iframe.contentDocument?.body);
-					iframe.addEventListener("load", handler);
-					const weakRef = new WeakRef(iframe);
-					cleaners.push(() =>
-						weakRef.deref()?.removeEventListener("load", handler),
-					);
-				}
-			}).then((doc) => {
-				if (doc && !processedIframes.has(iframe)) {
-					rootsList.push(new WeakRef(doc));
-					notifier.notify();
-
-					observeElement(doc);
-					processedIframes.add(iframe);
-				}
-			});
 		}
 	};
 
