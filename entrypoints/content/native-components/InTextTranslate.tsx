@@ -5,7 +5,9 @@ import {
 	createSignal,
 	For,
 	Index,
+	type JSX,
 	on,
+	onCleanup,
 	Show,
 } from "solid-js";
 import { createIdleDebounce } from "@/hooks/throttle";
@@ -16,6 +18,7 @@ import { createBatchTranslation } from "~/hooks/translation";
 import { useWebsiteRule } from "~/hooks/website-rule";
 import { DATA_TRANSLATION_TEXT, PROMPT_ID } from "~/utils/constants";
 import { copyToClipboard } from "~/utils/copy";
+import { t } from "~/utils/i18n";
 import { getMarkdownFromSection } from "~/utils/markdown";
 import { getPageContext } from "~/utils/page-context";
 import type { DOMSection } from "~/utils/parser/types";
@@ -24,6 +27,8 @@ import InTextTooltip from "../components/InTextTooltip";
 import { NativeLoading } from "./Loading";
 
 const NEW_LINE_THRESHOLD = 10;
+
+let closeActiveTooltip: (() => void) | undefined;
 
 type SectionTextPair = [DOMSection, string];
 
@@ -163,6 +168,9 @@ const BatchRender = (props: BatchRenderProps) => {
 	const showLanguageIcon = createMemo(
 		() => settings.translate.inTextTranslateIconEnabled ?? true,
 	);
+	const showTranslationActions = createMemo(
+		() => settings.translate.inTextTranslationActionsEnabled,
+	);
 
 	return (
 		<For each={getter()}>
@@ -175,6 +183,7 @@ const BatchRender = (props: BatchRenderProps) => {
 					section={props.sections[index()][0]}
 					hideOriginal={hideOriginal()}
 					showLanguageIcon={showLanguageIcon()}
+					showTranslationActions={showTranslationActions()}
 					onRetry={() => {
 						if (getter().every((i) => i.error)) {
 							retry();
@@ -197,6 +206,7 @@ interface TranslationRenderProps {
 	hideOriginal: boolean;
 	section: DOMSection;
 	showLanguageIcon: boolean;
+	showTranslationActions: boolean;
 	onRetry?: () => void;
 	onDelete?: () => void;
 }
@@ -207,28 +217,39 @@ const TranslationRender = (props: TranslationRenderProps) => {
 		(props.loading ||
 			!!props.error ||
 			(props.text !== undefined && props.text !== ""));
-	const createTooltip = (e: MouseEvent | TouchEvent) => {
+	const closeTooltip = () => {
+		setTooltipPos(undefined);
+		if (closeActiveTooltip === closeTooltip) closeActiveTooltip = undefined;
+	};
+	const createTooltip = (e: MouseEvent | TouchEvent | FocusEvent) => {
 		e.preventDefault();
 		e.stopPropagation();
 
-		if (props.loading) return;
+		if (props.loading || !props.showTranslationActions) return;
 		if (tooltipPos()) return;
 		let x: number, y: number;
 		if (e instanceof MouseEvent) {
 			x = e.clientX;
 			y = e.clientY;
-		} else {
+		} else if (e instanceof TouchEvent) {
 			x = e.changedTouches[0].clientX;
 			y = e.changedTouches[0].clientY;
+		} else {
+			const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+			x = rect.left + rect.width / 2;
+			y = rect.top + rect.height / 2;
 		}
+		closeActiveTooltip?.();
 		setTooltipPos({
 			x,
 			y,
 		});
+		closeActiveTooltip = closeTooltip;
 	};
-	const closeTooltip = () => {
-		setTooltipPos(undefined);
-	};
+	createEffect(() => {
+		if (!props.showTranslationActions) closeTooltip();
+	});
+	onCleanup(closeTooltip);
 
 	const swapLine = createMemo(
 		() =>
@@ -238,48 +259,71 @@ const TranslationRender = (props: TranslationRenderProps) => {
 			((props.text || "").length > NEW_LINE_THRESHOLD ||
 				props.text?.includes("\n")),
 	);
+	const hasLeadingContent = createMemo(
+		() => props.loading || !!props.error || props.showLanguageIcon,
+	);
 	const leadingContent = createMemo(() => {
 		if (props.loading) return <NativeLoading />;
 		if (props.error) return <CircleX style={ERROR_ICON_STYLE} size="12px" />;
 		if (props.showLanguageIcon) {
 			return <Languages style={ICON_STYLE} size="12px" />;
 		}
-		return <>&nbsp;</>;
+		return null;
 	});
 
 	return (
 		<Show when={shouldRender()}>
-			<InTextTooltip
-				pos={tooltipPos()}
-				error={props.error}
-				onClose={closeTooltip}
-				onCopyMarkdown={() => {
-					if (props.text) {
-						copyToClipboard(props.text);
-					}
-					closeTooltip();
-				}}
-				onRetry={() => {
-					props.onRetry?.();
-					closeTooltip();
-				}}
-				onDelete={() => {
-					props.onDelete?.();
-					closeTooltip();
-				}}
-			/>
+			<Show when={props.showTranslationActions && hasLeadingContent()}>
+				<InTextTooltip
+					pos={tooltipPos()}
+					error={props.error}
+					onClose={closeTooltip}
+					onCopyMarkdown={() => {
+						if (props.text) {
+							copyToClipboard(props.text);
+						}
+						closeTooltip();
+					}}
+					onRetry={() => {
+						props.onRetry?.();
+						closeTooltip();
+					}}
+					onDelete={() => {
+						props.onDelete?.();
+						closeTooltip();
+					}}
+				/>
+			</Show>
 			<TranslateNodePortal
 				section={props.section}
 				hideOriginal={props.hideOriginal && !props.loading && !props.error}
 			>
 				{swapLine() && <br />}
-				<span
-					on:mouseenter={createTooltip}
-					on:touchend={createTooltip}
-					style={{ display: "inline-block" }}
-				>
-					{leadingContent()}
-				</span>
+				<Show when={hasLeadingContent()}>
+					<Show
+						when={props.showTranslationActions}
+						fallback={
+							<span style={{ display: "inline-block" }}>
+								{leadingContent()}
+							</span>
+						}
+					>
+						<button
+							type="button"
+							aria-label={t("actions.translationActions")}
+							disabled={props.loading}
+							on:mouseenter={createTooltip}
+							on:touchend={createTooltip}
+							on:focus={createTooltip}
+							on:keydown={(event) => {
+								if (event.key === "Escape") closeTooltip();
+							}}
+							style={ACTION_TRIGGER_STYLE}
+						>
+							{leadingContent()}
+						</button>
+					</Show>
+				</Show>
 				{!props.loading && !props.error && (
 					<span {...{ [DATA_TRANSLATION_TEXT]: "" }}>
 						<Md text={props.text || ""} />
@@ -301,4 +345,20 @@ const ICON_STYLE = {
 const ERROR_ICON_STYLE = {
 	...ICON_STYLE,
 	background: "rgba(255, 0, 0, 0.1)",
+};
+
+const ACTION_TRIGGER_STYLE: JSX.CSSProperties = {
+	display: "inline-block",
+	appearance: "none" as const,
+	padding: "0",
+	margin: "0",
+	border: "0",
+	background: "transparent",
+	color: "inherit",
+	font: "inherit",
+	"line-height": "inherit",
+	"min-width": "0",
+	"min-height": "0",
+	"box-shadow": "none",
+	cursor: "pointer",
 };

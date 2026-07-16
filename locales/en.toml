@@ -233,6 +233,8 @@ translateFullPage = "Translation Scope"
 translateFullPageDesc = "When checked, translate entire page content; when unchecked, only translate visible content"
 inTextTranslateIcon = "Show in-text translation icon"
 inTextTranslateIconDesc = "Show the translation icon before each translated paragraph"
+inTextTranslationActions = "Show translation action menu"
+inTextTranslationActionsDesc = "Show retry, delete, and copy as Markdown actions when hovering or focusing an in-text translation icon"
 selectionTranslateEnabled = "$1 + mouse click/drag to translate"
 selectionTranslateHintSuffix = "+ mouse click/drag to translate"
 
@@ -484,6 +486,7 @@ contextMean = "Context meaning"
 mean = "Meaning"
 fetchModels = "Fetch Models"
 copyAsMarkdown = "Copy as Markdown"
+translationActions = "Translation actions"
 
 [dictionary.tabs]
 overview = "Overview"

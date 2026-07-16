@@ -233,6 +233,8 @@ translateFullPage = "翻译范围"
 translateFullPageDesc = "勾选后翻译全部页面内容；不勾选则仅翻译可见内容"
 inTextTranslateIcon = "显示翻译图标"
 inTextTranslateIconDesc = "在每个翻译段落前显示翻译图标"
+inTextTranslationActions = "显示译文操作菜单"
+inTextTranslationActionsDesc = "悬停或聚焦页面内翻译图标时，显示重试、删除和复制为 Markdown 操作"
 selectionTranslateEnabled = "$1 + 鼠标点击/拖动进行翻译"
 selectionTranslateHintSuffix = "+ 鼠标点击/拖动进行翻译"
 
@@ -486,6 +488,7 @@ contextMean = "上下文含义"
 mean = "含义"
 fetchModels = "获取模型"
 copyAsMarkdown = "复制为 Markdown"
+translationActions = "译文操作"
 
 [dictionary.tabs]
 overview = "概览"

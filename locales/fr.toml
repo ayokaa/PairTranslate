@@ -233,6 +233,8 @@ translateFullPage = "Portée de Traduction"
 translateFullPageDesc = "Lorsque coché, traduit le contenu de la page complète; lorsque non coché, traduit uniquement le contenu visible"
 inTextTranslateIcon = "Afficher l’icône de traduction dans le texte"
 inTextTranslateIconDesc = "Afficher l’icône de traduction avant chaque paragraphe traduit"
+inTextTranslationActions = "Afficher le menu d’actions de traduction"
+inTextTranslationActionsDesc = "Afficher les actions Réessayer, Supprimer et Copier en Markdown au survol ou à la mise au point d’une icône de traduction"
 selectionTranslateEnabled = "$1 + Clic/Glissement de souris pour traduire"
 selectionTranslateHintSuffix = "+ Clic/Glissement de souris pour traduire"
 
@@ -486,6 +488,7 @@ contextMean = "Signification du Contexte"
 mean = "Signification"
 fetchModels = "Récupérer les Modèles"
 copyAsMarkdown = "Copier en Markdown"
+translationActions = "Actions de traduction"
 
 [dictionary.tabs]
 overview = "Aperçu"

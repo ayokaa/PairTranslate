@@ -233,6 +233,8 @@ translateFullPage = "Область Перевода"
 translateFullPageDesc = "Когда отмечено, переводить весь контент страницы; когда не отмечено, переводить только видимый контент"
 inTextTranslateIcon = "Показывать значок перевода в тексте"
 inTextTranslateIconDesc = "Показывать значок перевода перед каждым переведённым абзацем"
+inTextTranslationActions = "Показывать меню действий перевода"
+inTextTranslationActionsDesc = "Показывать повтор, удаление и копирование в Markdown при наведении или фокусе на значке перевода"
 selectionTranslateEnabled = "$1 + клик/перетаскивание мыши для перевода"
 selectionTranslateHintSuffix = "+ клик/перетаскивание мыши для перевода"
 
@@ -486,6 +488,7 @@ contextMean = "Значение Контекста"
 mean = "Значение"
 fetchModels = "Получить Модели"
 copyAsMarkdown = "Копировать как Markdown"
+translationActions = "Действия перевода"
 
 [dictionary.tabs]
 overview = "Обзор"

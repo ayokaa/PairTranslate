@@ -75,6 +75,7 @@ describe("migrateSettings", () => {
 		expect(result.basic.restorePageState).toBe(true);
 		expect(result.summary.summaryDefaultPinned).toBe(false);
 		expect(result.summary.summaryGeometryMaxEntries).toBe(1000);
+		expect(result.translate.inTextTranslationActionsEnabled).toBe(true);
 		expect(result.websiteRules).toEqual([]);
 		expect(result.translate).not.toHaveProperty("summaryModel");
 		expect(result.translate).not.toHaveProperty("summaryExcludedSites");

@@ -233,6 +233,8 @@ translateFullPage = "Übersetzungsbereich"
 translateFullPageDesc = "Wenn aktiviert, wird der gesamte Seiteninhalt übersetzt; wenn deaktiviert, wird nur der sichtbare Inhalt übersetzt"
 inTextTranslateIcon = "Übersetzungssymbol im Text anzeigen"
 inTextTranslateIconDesc = "Das Übersetzungssymbol vor jedem übersetzten Absatz anzeigen"
+inTextTranslationActions = "Übersetzungsaktionsmenü anzeigen"
+inTextTranslationActionsDesc = "Beim Überfahren oder Fokussieren eines Übersetzungssymbols Aktionen zum Wiederholen, Löschen und Kopieren als Markdown anzeigen"
 selectionTranslateEnabled = "$1 + Mausklick/Ziehen zum Übersetzen"
 selectionTranslateHintSuffix = "+ Mausklick/Ziehen zum Übersetzen"
 
@@ -486,6 +488,7 @@ contextMean = "Kontextbedeutung"
 mean = "Bedeutung"
 fetchModels = "Modelle abrufen"
 copyAsMarkdown = "Als Markdown kopieren"
+translationActions = "Übersetzungsaktionen"
 
 [dictionary.tabs]
 overview = "Übersicht"

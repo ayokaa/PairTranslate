@@ -233,6 +233,8 @@ translateFullPage = "Alcance de Traducción"
 translateFullPageDesc = "Cuando esté marcado, traduce el contenido de la página completa; cuando no esté marcado, solo traduce el contenido visible"
 inTextTranslateIcon = "Mostrar el icono de traducción en el texto"
 inTextTranslateIconDesc = "Mostrar el icono de traducción antes de cada párrafo traducido"
+inTextTranslationActions = "Mostrar menú de acciones de traducción"
+inTextTranslationActionsDesc = "Mostrar las acciones de reintentar, eliminar y copiar como Markdown al pasar el cursor o enfocar un icono de traducción"
 selectionTranslateEnabled = "$1 + Clic/Arrastrar del ratón para traducir"
 selectionTranslateHintSuffix = "+ Clic/Arrastrar del ratón para traducir"
 
@@ -486,6 +488,7 @@ contextMean = "Significado del contexto"
 mean = "Significado"
 fetchModels = "Obtener Modelos"
 copyAsMarkdown = "Copiar como Markdown"
+translationActions = "Acciones de traducción"
 
 [dictionary.tabs]
 overview = "Descripción General"

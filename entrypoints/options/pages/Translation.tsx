@@ -166,6 +166,18 @@ export default (props: { navId: string }) => {
 						setLocalSettings("inTextTranslateIconEnabled", e.target.checked)
 					}
 				/>
+
+				<SettingsToggle
+					label={t("settings.translation.inTextTranslationActions")}
+					helperText={t("settings.translation.inTextTranslationActionsDesc")}
+					checked={localSettings.inTextTranslationActionsEnabled}
+					onChange={(e) =>
+						setLocalSettings(
+							"inTextTranslationActionsEnabled",
+							e.target.checked,
+						)
+					}
+				/>
 			</FormGrid>
 			<div class="divider m-0" />
 			<FormGrid gap="lg">

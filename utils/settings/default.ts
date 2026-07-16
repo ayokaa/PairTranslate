@@ -57,6 +57,7 @@ export function generateTranslateSettings(): s.TranslateSettings {
 		filterInteractive: true,
 		translationMode: "parallel",
 		inTextTranslateIconEnabled: true,
+		inTextTranslationActionsEnabled: true,
 		translateFullPage: false,
 		inTextTranslateModel: MS_TRANSLATOR_ID,
 		floatingTranslateModel: MS_TRANSLATOR_ID,

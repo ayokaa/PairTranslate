@@ -82,6 +82,9 @@ export default (props: Props) => {
 				orientation="vertical"
 				size="sm"
 				ref={setRef}
+				on:keydown={(event) => {
+					if (event.key === "Escape") props.onClose?.();
+				}}
 			>
 				<Menu.Item>
 					<Button
@@ -89,10 +92,11 @@ export default (props: Props) => {
 						data-tip={t("actions.copyAsMarkdown")}
 						variant="ghost"
 						size="xs"
+						aria-label={t("actions.copyAsMarkdown")}
 						disabled={props.loading || !!props.error}
 						onClick={props.onCopyMarkdown}
 					>
-						<ClipboardCopy size={16} />
+						<ClipboardCopy size={16} aria-hidden="true" />
 					</Button>
 				</Menu.Item>
 				<Menu.Item>
@@ -101,10 +105,11 @@ export default (props: Props) => {
 						data-tip={props.error ?? t("common.retry")}
 						variant={props.error ? "error" : "ghost"}
 						size="xs"
+						aria-label={props.error ?? t("common.retry")}
 						disabled={props.loading}
 						onClick={props.onRetry}
 					>
-						<RotateCcw size={16} />
+						<RotateCcw size={16} aria-hidden="true" />
 					</Button>
 				</Menu.Item>
 				<Menu.Item>
@@ -113,9 +118,10 @@ export default (props: Props) => {
 						data-tip={t("common.delete")}
 						variant="warning"
 						size="xs"
+						aria-label={t("common.delete")}
 						onClick={props.onDelete}
 					>
-						<Trash2 size={16} />
+						<Trash2 size={16} aria-hidden="true" />
 					</Button>
 				</Menu.Item>
 			</Menu.Root>

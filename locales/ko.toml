@@ -233,6 +233,8 @@ translateFullPage = "번역 범위"
 translateFullPageDesc = "체크하면 전체 페이지 콘텐츠를 번역하고, 체크하지 않으면 보이는 콘텐츠만 번역합니다"
 inTextTranslateIcon = "본문 내 번역 아이콘 표시"
 inTextTranslateIconDesc = "번역된 각 문단 앞에 번역 아이콘 표시"
+inTextTranslationActions = "번역 작업 메뉴 표시"
+inTextTranslationActionsDesc = "번역 아이콘에 마우스를 올리거나 포커스할 때 다시 시도, 삭제, Markdown으로 복사 작업을 표시합니다"
 selectionTranslateEnabled = "$1 + 마우스 클릭/드래그로 번역"
 selectionTranslateHintSuffix = "+ 마우스 클릭/드래그로 번역"
 
@@ -486,6 +488,7 @@ contextMean = "문맥적 의미"
 mean = "의미"
 fetchModels = "모델 가져오기"
 copyAsMarkdown = "Markdown으로 복사"
+translationActions = "번역 작업"
 
 [dictionary.tabs]
 overview = "개요"
