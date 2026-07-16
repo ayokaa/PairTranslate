@@ -1,4 +1,4 @@
-const REGEX = /^[\d\s\-_.,;:!?()[\]{}'"]*$/;
+const MEANINGFUL_CHAR_REGEX = /\p{L}/u;
 
 export const hasMeaningfulChars = (
 	text: string | null | undefined,
@@ -7,6 +7,6 @@ export const hasMeaningfulChars = (
 		text !== null &&
 		text !== undefined &&
 		text.trim().length > 1 &&
-		!REGEX.test(text)
+		MEANINGFUL_CHAR_REGEX.test(text)
 	);
 };

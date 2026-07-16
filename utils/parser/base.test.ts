@@ -87,4 +87,21 @@ describe("domListener", () => {
 		expect(sections[0][0]).toBe(link.firstChild as Node);
 		expect(getMarkdownFromSection(sections[0])).toBe("A story title");
 	});
+
+	test("skips numeric table cells containing Unicode symbols", async () => {
+		const root = document.createElement("table");
+		const row = document.createElement("tr");
+		for (const text of ["Benchmark", "56.6%", "61.1 ± 0.79", "–"]) {
+			const cell = document.createElement("td");
+			cell.textContent = text;
+			row.append(cell);
+		}
+		root.append(row);
+		document.body.append(root);
+
+		const sections = await collectSections(root, 1);
+
+		expect(sections).toHaveLength(1);
+		expect(getMarkdownFromSection(sections[0])).toBe("Benchmark");
+	});
 });
