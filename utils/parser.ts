@@ -2,6 +2,7 @@ import { domListener } from "./parser/base";
 import adi from "./parser/website/adi";
 import arxiv from "./parser/website/arxiv";
 import docsRs from "./parser/website/docs-rs";
+import feeder from "./parser/website/feeder";
 import github from "./parser/website/github";
 import google from "./parser/website/google";
 import hackernews from "./parser/website/hackernews";
@@ -27,6 +28,7 @@ export const PARSER_LIST = [
 	docsRs(),
 	hackernews(),
 	arxiv(),
+	feeder(),
 ];
 
 export const PARSER_PATTERNS = PARSER_LIST.flatMap(
