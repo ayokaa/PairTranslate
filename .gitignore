@@ -27,3 +27,6 @@ web-ext.config.ts
 *.sw?
 
 .worktrees/
+
+# Docs (do not commit)
+docs/
