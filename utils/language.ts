@@ -13,12 +13,19 @@ export function getBrowserLanguage(): string {
  * Converts "en-US" to "en", "zh-CN" to "zh-CN", etc.
  */
 export function normalizeLanguageCode(language: string): string {
+	const normalized = language.replace("_", "-");
+	const lower = normalized.toLowerCase();
+	if (["zh-cn", "zh-sg", "zh-hans"].includes(lower)) return "zh-CN";
+	if (["zh-tw", "zh-hk", "zh-mo", "zh-hant"].includes(lower)) return "zh-TW";
+
 	// Check for exact match first
-	const exactMatch = SUPPORTED_LANGUAGES.find((lang) => lang.code === language);
-	if (exactMatch) return language;
+	const exactMatch = SUPPORTED_LANGUAGES.find(
+		(lang) => lang.code.toLowerCase() === lower,
+	);
+	if (exactMatch) return exactMatch.code;
 
 	// Extract primary language (e.g., "en" from "en-US")
-	const primaryLanguage = language.split("-")[0];
+	const primaryLanguage = lower.split("-")[0];
 	const primaryMatch = SUPPORTED_LANGUAGES.find(
 		(lang) => lang.code === primaryLanguage,
 	);
@@ -46,8 +53,12 @@ export function getTargetLanguage(): string {
  * Check if a language code is supported
  */
 export function isLanguageSupported(language: string): boolean {
+	const normalized = language.replace("_", "-").toLowerCase();
+	const primary = normalized.split("-")[0];
 	return SUPPORTED_LANGUAGES.some(
-		(lang) => lang.code === language || lang.code === language.split("-")[0],
+		(lang) =>
+			lang.code.toLowerCase() === normalized ||
+			lang.code.toLowerCase().split("-")[0] === primary,
 	);
 }
 
@@ -85,6 +96,15 @@ export function areLanguagesSame(
 
 	if (!isLanguageSupported(resolvedA) || !isLanguageSupported(resolvedB)) {
 		return false;
+	}
+
+	// tinyld reports both Simplified and Traditional Chinese as bare "zh".
+	// Keep that code variant-unknown so local detection cannot suppress an
+	// actual Simplified/Traditional conversion.
+	const normalizedA = resolvedA.toLowerCase();
+	const normalizedB = resolvedB.toLowerCase();
+	if (normalizedA === "zh" || normalizedB === "zh") {
+		return normalizedA === normalizedB;
 	}
 
 	return normalizeLanguageCode(resolvedA) === normalizeLanguageCode(resolvedB);

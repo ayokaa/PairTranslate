@@ -1,5 +1,5 @@
 import { createQueueHub } from "~/utils/async/queue-hub";
-import { PROMPT_ID, STORAGE_KEYS } from "~/utils/constants";
+import { STORAGE_KEYS } from "~/utils/constants";
 import {
 	convertFromLLMError,
 	convertFromTranslationError,
@@ -11,7 +11,7 @@ import type {
 	UnaryResult,
 } from "~/utils/flow-control/model-queue";
 import { computeCacheKey } from "~/utils/hasher";
-import { areLanguagesSame, normalizeLanguageCode } from "~/utils/language";
+import { areLanguagesSame } from "~/utils/language";
 import { detectSourceLanguage } from "~/utils/language-detection";
 import type {
 	ChatRequest,
@@ -46,6 +46,11 @@ import {
 	translate as runTraditionalService,
 	type TranslationConfig,
 } from "~/utils/translate";
+import {
+	createTranslationResponse,
+	shouldSkipSameLanguage,
+	skippedForPayload,
+} from "~/utils/translation-result";
 import type { TranslateContext } from "~/utils/types";
 
 const SINGLE_TEXT_SERVICES = new Set(["deeplx", "browser"]);
@@ -621,11 +626,13 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		if (srcLang !== "auto") return { srcLang, skip: false };
 		const detected = await detectSourceLanguage(text);
 		if (!detected) return { srcLang: "auto", skip: false };
-		const resolved = normalizeLanguageCode(detected);
-		if (promptId !== PROMPT_ID.summary && areLanguagesSame(resolved, dstLang)) {
-			return { srcLang: resolved, skip: true };
+		if (
+			shouldSkipSameLanguage(promptId) &&
+			areLanguagesSame(detected, dstLang)
+		) {
+			return { srcLang: detected, skip: true };
 		}
-		return { srcLang: resolved, skip: false };
+		return { srcLang: detected, skip: false };
 	};
 
 	const executeUnary = async (
@@ -668,10 +675,12 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				);
 				if (resolved.skip) {
 					return {
-						value: {
-							output: Array.isArray(payload) ? payload.map(() => "") : "",
-							reasoning: undefined,
-						},
+						value: createTranslationResponse(
+							payload,
+							Array.isArray(payload) ? payload.map(() => "") : "",
+							promptId,
+							{ skipped: skippedForPayload(payload) },
+						),
 						completionTokens: 0,
 					};
 				}
@@ -749,10 +758,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						entries: cachedValue.length,
 					});
 					return {
-						value: {
-							output: cachedValue,
-							reasoning: undefined,
-						},
+						value: createTranslationResponse(payload, cachedValue, promptId),
 						completionTokens: 0,
 					};
 				}
@@ -767,7 +773,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					type: "full",
 				});
 				return {
-					value: cached,
+					value: createTranslationResponse(payload, cached.output, promptId, {
+						reasoning: cached.reasoning,
+					}),
 					completionTokens: 0,
 				};
 			}
@@ -795,10 +803,11 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			);
 			if (texts.length === 0) {
 				return {
-					value: {
-						output: expectsArray ? [] : "",
-						reasoning: undefined,
-					},
+					value: createTranslationResponse(
+						payload,
+						expectsArray ? [] : "",
+						promptId,
+					),
 					completionTokens: 0,
 				};
 			}
@@ -880,10 +889,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			reasoning: Boolean(reasoning),
 		});
 		return {
-			value: {
-				output: finalValue,
+			value: createTranslationResponse(payload, finalValue, promptId, {
 				reasoning,
-			},
+			}),
 			completionTokens,
 		};
 	};
@@ -947,7 +955,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 							promptId,
 						);
 						if (resolved.skip) {
-							yield { content: "" };
+							yield { content: "", skipped: true };
 							return;
 						}
 						if (service.type === "llm") {

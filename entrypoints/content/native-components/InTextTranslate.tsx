@@ -6,6 +6,7 @@ import {
 	For,
 	Index,
 	on,
+	Show,
 } from "solid-js";
 import { createIdleDebounce } from "@/hooks/throttle";
 import { Md } from "~/components/MD/Md";
@@ -169,6 +170,7 @@ const BatchRender = (props: BatchRenderProps) => {
 				<TranslationRender
 					text={item()}
 					loading={item.loading}
+					skipped={item.skipped}
 					error={item.error?.message}
 					section={props.sections[index()][0]}
 					hideOriginal={hideOriginal()}
@@ -190,6 +192,7 @@ const BatchRender = (props: BatchRenderProps) => {
 interface TranslationRenderProps {
 	text?: string;
 	loading?: boolean;
+	skipped: boolean;
 	error?: string;
 	hideOriginal: boolean;
 	section: DOMSection;
@@ -198,8 +201,12 @@ interface TranslationRenderProps {
 	onDelete?: () => void;
 }
 const TranslationRender = (props: TranslationRenderProps) => {
-	if (!props.loading && !props.error && props.text === "") return null;
 	const [tooltipPos, setTooltipPos] = createSignal<{ x: number; y: number }>();
+	const shouldRender = () =>
+		!props.skipped &&
+		(props.loading ||
+			!!props.error ||
+			(props.text !== undefined && props.text !== ""));
 	const createTooltip = (e: MouseEvent | TouchEvent) => {
 		e.preventDefault();
 		e.stopPropagation();
@@ -241,7 +248,7 @@ const TranslationRender = (props: TranslationRenderProps) => {
 	});
 
 	return (
-		<>
+		<Show when={shouldRender()}>
 			<InTextTooltip
 				pos={tooltipPos()}
 				error={props.error}
@@ -279,7 +286,7 @@ const TranslationRender = (props: TranslationRenderProps) => {
 					</span>
 				)}
 			</TranslateNodePortal>
-		</>
+		</Show>
 	);
 };
 

@@ -7,7 +7,6 @@ import {
 	untrack,
 } from "solid-js";
 import { createStore } from "solid-js/store";
-import { PROMPT_ID } from "~/utils/constants";
 import {
 	convertGenericError,
 	createTranslateError,
@@ -18,10 +17,14 @@ import { t } from "~/utils/i18n";
 import { areLanguagesSame } from "~/utils/language";
 import { detectSourceLanguage } from "~/utils/language-detection";
 import { createThinkingFilter } from "~/utils/llm/thinking-filter";
+import {
+	shouldSkipSameLanguage,
+	type TranslationResponse,
+	type TranslationSkipped,
+	type TranslationStreamChunk,
+} from "~/utils/translation-result";
 import type { TranslateContext } from "~/utils/types";
 import { mightUseProgressIndicator } from "./progress-indicator";
-
-const shouldSkipSameLang = (promptId: string) => promptId !== PROMPT_ID.summary;
 
 const detectAndSkip = async (
 	text: string,
@@ -29,7 +32,7 @@ const detectAndSkip = async (
 	dstLang: string,
 	promptId: string,
 ): Promise<boolean> => {
-	if (!shouldSkipSameLang(promptId)) return false;
+	if (!shouldSkipSameLanguage(promptId)) return false;
 	const currentSrc = srcLang || "auto";
 	if (currentSrc !== "auto") return areLanguagesSame(currentSrc, dstLang);
 	const detected = await detectSourceLanguage(text);
@@ -41,46 +44,50 @@ type Pending = {
 	(): undefined;
 	loading: true;
 	error: undefined;
+	skipped: false;
+};
+type Skipped = {
+	(): undefined;
+	loading: false;
+	error: undefined;
+	skipped: true;
 };
 type Error = {
 	(): undefined;
 	loading: false;
 	error: TranslateError;
+	skipped: false;
 };
 type Success<T> = {
 	(): T;
 	loading: false;
 	error: undefined;
+	skipped: false;
 };
-type Result<T> = Pending | Error | Success<T>;
+type Result<T> = Pending | Skipped | Error | Success<T>;
 
 type BatchReturn = readonly [
 	() => Result<string>[],
 	retry: (index?: number) => void,
 ];
 
-type TranslateUnaryPayload<T> =
-	| T
-	| {
-			output: T;
-			reasoning?: string;
-	  };
+type TranslateUnaryPayload<T> = T | TranslationResponse<T>;
 
 const normalizeUnaryResponse = <T>(
 	resp: TranslateUnaryPayload<T>,
-): { output: T; reasoning?: string } => {
+): TranslationResponse<T> => {
 	if (resp && typeof resp === "object" && "output" in resp) {
-		return resp as { output: T; reasoning?: string };
+		const response = resp as TranslationResponse<T>;
+		return {
+			...response,
+			skipped: response.skipped ?? false,
+		};
 	}
 	return {
 		output: resp as T,
 		reasoning: undefined,
+		skipped: false,
 	};
-};
-
-type TranslationStreamChunk = {
-	content?: string;
-	reasoning?: string;
 };
 
 const noModelError = () =>
@@ -115,28 +122,53 @@ export function createBatchTranslation(
 
 	const [textResult, setTextResult] = createStore<(string | undefined)[]>([]);
 	const [error, setError] = createStore<(TranslateError | undefined)[]>([]);
+	const [skipped, setSkipped] = createStore<boolean[]>([]);
+
+	const normalizeSkipped = (
+		value: TranslationSkipped,
+		len: number,
+	): boolean[] =>
+		Array.isArray(value)
+			? Array.from({ length: len }, (_, index) => value[index] === true)
+			: Array.from({ length: len }, () => value === true);
 
 	const setAllError = (e: TranslateError, len: number) =>
 		batch(() => {
 			setError({ to: len - 1 }, e);
 			setTextResult({ to: len - 1 }, undefined);
+			setSkipped(Array.from({ length: len }, () => false));
 		});
 
 	const setAllLoading = (len: number) =>
 		batch(() => {
 			setError({ to: len - 1 }, undefined);
 			setTextResult({ to: len - 1 }, undefined);
+			setSkipped(Array.from({ length: len }, () => false));
 		});
 
-	const setResultTexts = (texts: string[]) =>
+	const setResultTexts = (
+		texts: string[],
+		skippedState: TranslationSkipped = false,
+	) =>
 		batch(() => {
+			const skippedItems = normalizeSkipped(skippedState, texts.length);
 			setError({ to: texts.length - 1 }, undefined);
-			setTextResult(texts);
+			setTextResult(
+				texts.map((text, index) => (skippedItems[index] ? undefined : text)),
+			);
+			setSkipped(skippedItems);
+		});
+	const setAllSkipped = (len: number) =>
+		batch(() => {
+			setError({ to: len - 1 }, undefined);
+			setTextResult(Array.from({ length: len }, () => undefined));
+			setSkipped(Array.from({ length: len }, () => true));
 		});
 	const clearAll = () =>
 		batch(() => {
 			setError([]);
 			setTextResult([]);
+			setSkipped([]);
 		});
 
 	const translate = async (texts: string[], cleanCache = false) => {
@@ -154,7 +186,7 @@ export function createBatchTranslation(
 				promptId,
 			)
 		) {
-			setResultTexts(texts.map(() => ""));
+			setAllSkipped(texts.length);
 			return;
 		}
 
@@ -181,7 +213,7 @@ export function createBatchTranslation(
 				const translated = Array.isArray(normalized.output)
 					? normalized.output
 					: [normalized.output];
-				setResultTexts(translated);
+				setResultTexts(translated, normalized.skipped);
 				translated.length < texts.length &&
 					batch(() => {
 						setError(
@@ -216,7 +248,8 @@ export function createBatchTranslation(
 		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
 			batch(() => {
 				setError(index, undefined);
-				setTextResult(index, "");
+				setTextResult(index, undefined);
+				setSkipped(index, true);
 			});
 			return;
 		}
@@ -225,6 +258,7 @@ export function createBatchTranslation(
 		batch(() => {
 			setError(index, undefined);
 			setTextResult(index, undefined);
+			setSkipped(index, false);
 		});
 
 		const abortController = new AbortController();
@@ -248,7 +282,11 @@ export function createBatchTranslation(
 					: normalized.output;
 				batch(() => {
 					setError(index, undefined);
-					setTextResult(index, value);
+					const responseSkipped = Array.isArray(normalized.skipped)
+						? normalized.skipped[0] === true
+						: normalized.skipped === true;
+					setTextResult(index, responseSkipped ? undefined : value);
+					setSkipped(index, responseSkipped);
 				});
 			})
 			.catch((e) => {
@@ -256,6 +294,7 @@ export function createBatchTranslation(
 				batch(() => {
 					setError(index, convertGenericError(e));
 					setTextResult(index, undefined);
+					setSkipped(index, false);
 				});
 			})
 			.finally(() => endTracking?.());
@@ -298,7 +337,13 @@ export function createBatchTranslation(
 							// Access each store explicitly to track reactivity
 							const hasResult = textResult[i] !== undefined;
 							const hasError = error[i] !== undefined;
-							return !hasResult && !hasError;
+							const wasSkipped = skipped[i] === true;
+							return !hasResult && !hasError && !wasSkipped;
+						},
+					},
+					skipped: {
+						get() {
+							return skipped[i] === true;
 						},
 					},
 				});
@@ -362,6 +407,7 @@ export function createTranslation<T>(
 	const [result, setResult] = createSignal<T>();
 	const [error, setError] = createSignal<TranslateError>();
 	const [reasoning, setReasoning] = createSignal<string>();
+	const [isSkipped, setIsSkipped] = createSignal(false);
 
 	const [len, setLen] = isStream ? createSignal(0) : [() => 0, () => {}];
 	const [streaming, setStreaming] = isStream
@@ -373,6 +419,7 @@ export function createTranslation<T>(
 			setError(undefined);
 			setResult(undefined);
 			setReasoning(undefined);
+			setIsSkipped(false);
 		});
 
 	const setResultVal = (val: T, reasoning?: string) =>
@@ -380,6 +427,17 @@ export function createTranslation<T>(
 			setError(undefined);
 			setResult(() => val);
 			setReasoning(reasoning);
+			setIsSkipped(false);
+		});
+
+	const setSkippedVal = () =>
+		batch(() => {
+			setError(undefined);
+			setResult(undefined);
+			setReasoning(undefined);
+			setIsSkipped(true);
+			setLen(0);
+			setStreaming(false);
 		});
 
 	const setErrorVal = (e: TranslateError) =>
@@ -387,6 +445,7 @@ export function createTranslation<T>(
 			setError(e);
 			setResult(undefined);
 			setReasoning(undefined);
+			setIsSkipped(false);
 		});
 
 	const translateStream = async (text_: string, cleanCache?: boolean) => {
@@ -397,7 +456,7 @@ export function createTranslation<T>(
 		}
 
 		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
-			setResultVal("" as unknown as T);
+			setSkippedVal();
 			return;
 		}
 
@@ -426,6 +485,10 @@ export function createTranslation<T>(
 				batch(() => {
 					setError(undefined);
 					if (!chunk) return;
+					if (chunk.skipped) {
+						setSkippedVal();
+						return;
+					}
 					const content = chunk.content;
 					const reasoning = chunk.reasoning;
 
@@ -457,7 +520,7 @@ export function createTranslation<T>(
 		}
 
 		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
-			setResultVal("" as unknown as T);
+			setSkippedVal();
 			return;
 		}
 
@@ -480,6 +543,13 @@ export function createTranslation<T>(
 			)
 			.then((resp) => {
 				const normalized = normalizeUnaryResponse<T>(resp);
+				const responseSkipped = Array.isArray(normalized.skipped)
+					? normalized.skipped[0] === true
+					: normalized.skipped === true;
+				if (responseSkipped) {
+					setSkippedVal();
+					return;
+				}
 				const filter = createThinkingFilter();
 				const filtered =
 					typeof normalized.output === "string"
@@ -512,6 +582,7 @@ export function createTranslation<T>(
 				setError(undefined);
 				setResult(undefined);
 				setReasoning(undefined);
+				setIsSkipped(false);
 			}),
 		);
 		doTranslate(text_);
@@ -539,8 +610,11 @@ export function createTranslation<T>(
 				// Access each signal explicitly to track reactivity
 				const hasResult = result() !== undefined;
 				const hasError = error() !== undefined;
-				return !hasResult && !hasError;
+				return !hasResult && !hasError && !isSkipped();
 			},
+		},
+		skipped: {
+			get: isSkipped,
 		},
 		...(options.stream && {
 			len: {

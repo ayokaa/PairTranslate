@@ -2,6 +2,10 @@
 
 import type { DictionaryResponse } from "./dictionary";
 import type { RpcService } from "./rpc/factory";
+import type {
+	TranslationResponse,
+	TranslationStreamChunk,
+} from "./translation-result";
 import type { TranslateContext, TranslateQueueStatus } from "./types";
 
 export interface CoreService extends RpcService {
@@ -13,12 +17,12 @@ export interface TranslateService extends RpcService {
 		ctx: TranslateContext,
 		options: TranslateOptions,
 		text?: string | string[],
-	): Promise<any>;
+	): Promise<TranslationResponse<any>>;
 	stream(
 		ctx: TranslateContext,
 		options: TranslateOptions,
 		text?: string | string[],
-	): AsyncGenerator<any, void, unknown>;
+	): AsyncGenerator<TranslationStreamChunk, void, unknown>;
 	queueStatus(modelId: string): AsyncGenerator<TranslateQueueStatus>;
 	clearCache(): Promise<void>;
 }
