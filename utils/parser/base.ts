@@ -153,9 +153,18 @@ export async function* elementWalker(state: State): SectionGenerator {
 		if (!state.textTags.has(el.tagName)) return false;
 		if (hasDirectText(el)) return true;
 
+		// Math may live in a leaf container with no direct text (e.g. p >
+		// span.math). Promote those leaves so formulas are still captured.
+		// Do NOT promote layout ancestors that merely contain math somewhere
+		// deeper: that would skipSubtree the whole article (Quarto, etc.).
 		const mathSelector =
 			"mjx-container, math, .katex, .math.inline, .math.display";
-		if (el.querySelector(mathSelector)) return true;
+		if (
+			el.querySelector(mathSelector) &&
+			!hasBlockDescendant(el, state.blockTags)
+		) {
+			return true;
+		}
 		if (!state.promoteTextTags.has(el.tagName)) return false;
 		if (hasBlockDescendant(el, state.blockTags)) return false;
 		if (NOT_EMPTY_REGEX.test(el.textContent || "")) return true;
