@@ -225,7 +225,11 @@ const TranslationRender = (props: TranslationRenderProps) => {
 		e.preventDefault();
 		e.stopPropagation();
 
-		if (props.loading || !props.showTranslationActions) return;
+		// Loading never pops a menu (avoid covering the loading state).
+		// When the action menu is disabled, still allow the error icon to
+		// pop a minimal menu so users can see the cause and retry/delete.
+		if (props.loading || (!props.showTranslationActions && !props.error))
+			return;
 		if (tooltipPos()) return;
 		let x: number, y: number;
 		if (e instanceof MouseEvent) {
@@ -247,7 +251,9 @@ const TranslationRender = (props: TranslationRenderProps) => {
 		closeActiveTooltip = closeTooltip;
 	};
 	createEffect(() => {
-		if (!props.showTranslationActions) closeTooltip();
+		// Closing the action menu at runtime only dismisses the normal-state
+		// tooltip; the error-state menu stays so users can still act on errors.
+		if (!props.showTranslationActions && !props.error) closeTooltip();
 	});
 	onCleanup(closeTooltip);
 
@@ -273,7 +279,11 @@ const TranslationRender = (props: TranslationRenderProps) => {
 
 	return (
 		<Show when={shouldRender()}>
-			<Show when={props.showTranslationActions && hasLeadingContent()}>
+			<Show
+				when={
+					(props.showTranslationActions || !!props.error) && hasLeadingContent()
+				}
+			>
 				<InTextTooltip
 					pos={tooltipPos()}
 					error={props.error}
@@ -301,7 +311,7 @@ const TranslationRender = (props: TranslationRenderProps) => {
 				{swapLine() && <br />}
 				<Show when={hasLeadingContent()}>
 					<Show
-						when={props.showTranslationActions}
+						when={props.showTranslationActions || !!props.error}
 						fallback={
 							<span style={{ display: "inline-block" }}>
 								{leadingContent()}

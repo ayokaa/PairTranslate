@@ -180,10 +180,6 @@ describe("domListener", () => {
 		const sections = await collectSections(shell, 3);
 		const texts = sections.map((s) => getMarkdownFromSection(s).trim());
 
-		expect(texts).toEqual([
-			"Lead-in.",
-			"Inside main one.",
-			"Inside main two.",
-		]);
+		expect(texts).toEqual(["Lead-in.", "Inside main one.", "Inside main two."]);
 	});
 });
