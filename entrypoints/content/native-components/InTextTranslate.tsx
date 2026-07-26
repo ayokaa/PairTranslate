@@ -169,7 +169,12 @@ interface BatchRenderProps {
 const BatchRender = (props: BatchRenderProps) => {
 	const { settings } = useSettings();
 	const websiteRule = useWebsiteRule();
-	const texts = createMemo(() => props.sections.map(([, text]) => text));
+	// A batch never gains members after it is dispatched, it only loses them as
+	// sections leave the viewport. Freeze the members it was created with so a
+	// removal re-renders without re-requesting translations for the survivors.
+	const members = props.sections;
+	const active = createMemo(() => new Set(props.sections));
+	const texts = createMemo(() => members.map(([, text]) => text));
 	const [getter, retry] = createBatchTranslation(texts, {
 		promptId: PROMPT_ID.batchTranslate,
 		modelId: () => settings.translate.inTextTranslateModel,
@@ -195,24 +200,26 @@ const BatchRender = (props: BatchRenderProps) => {
 	return (
 		<For each={getter()}>
 			{(item, index) => (
-				<TranslationRender
-					text={item()}
-					loading={item.loading}
-					skipped={item.skipped}
-					error={item.error?.message}
-					section={props.sections[index()][0]}
-					hideOriginal={hideOriginal()}
-					showLanguageIcon={showLanguageIcon()}
-					showTranslationActions={showTranslationActions()}
-					onRetry={() => {
-						if (getter().every((i) => i.error)) {
-							retry();
-						} else {
-							retry(index());
-						}
-					}}
-					onDelete={() => props.onDelete?.(props.sections[index()][0])}
-				/>
+				<Show when={active().has(members[index()])}>
+					<TranslationRender
+						text={item()}
+						loading={item.loading}
+						skipped={item.skipped}
+						error={item.error?.message}
+						section={members[index()][0]}
+						hideOriginal={hideOriginal()}
+						showLanguageIcon={showLanguageIcon()}
+						showTranslationActions={showTranslationActions()}
+						onRetry={() => {
+							if (getter().every((i) => i.error)) {
+								retry();
+							} else {
+								retry(index());
+							}
+						}}
+						onDelete={() => props.onDelete?.(members[index()][0])}
+					/>
+				</Show>
 			)}
 		</For>
 	);
