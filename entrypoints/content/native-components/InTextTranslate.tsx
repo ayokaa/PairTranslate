@@ -30,6 +30,26 @@ const NEW_LINE_THRESHOLD = 10;
 
 let closeActiveTooltip: (() => void) | undefined;
 
+/**
+ * Where to anchor the action menu for a trigger event.
+ *
+ * Uses duck typing rather than `instanceof`: `TouchEvent` is undefined on
+ * desktop Firefox, so an `instanceof TouchEvent` test throws a ReferenceError
+ * for every non-mouse event and leaves the menu unopenable. Keyboard-driven
+ * clicks report (0, 0), so those fall back to the trigger's own box.
+ */
+const pointerPosition = (e: MouseEvent | TouchEvent | FocusEvent) => {
+	const touch = "changedTouches" in e ? e.changedTouches[0] : undefined;
+	if (touch) return { x: touch.clientX, y: touch.clientY };
+
+	if ("clientX" in e && (e.clientX !== 0 || e.clientY !== 0)) {
+		return { x: e.clientX, y: e.clientY };
+	}
+
+	const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+	return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+};
+
 type SectionTextPair = [DOMSection, string];
 
 interface BatchProps {
@@ -210,13 +230,22 @@ interface TranslationRenderProps {
 	onRetry?: () => void;
 	onDelete?: () => void;
 }
-const TranslationRender = (props: TranslationRenderProps) => {
+export const TranslationRender = (props: TranslationRenderProps) => {
 	const [tooltipPos, setTooltipPos] = createSignal<{ x: number; y: number }>();
 	const shouldRender = () =>
 		!props.skipped &&
 		(props.loading ||
 			!!props.error ||
 			(props.text !== undefined && props.text !== ""));
+	const hasLeadingContent = createMemo(
+		() => props.loading || !!props.error || props.showLanguageIcon,
+	);
+	// The action menu is normally opt-in, but an errored translation always keeps
+	// its menu so the cause stays visible and retry/delete stay reachable.
+	const canOpenMenu = createMemo(
+		() =>
+			(props.showTranslationActions || !!props.error) && hasLeadingContent(),
+	);
 	const closeTooltip = () => {
 		setTooltipPos(undefined);
 		if (closeActiveTooltip === closeTooltip) closeActiveTooltip = undefined;
@@ -226,23 +255,9 @@ const TranslationRender = (props: TranslationRenderProps) => {
 		e.stopPropagation();
 
 		// Loading never pops a menu (avoid covering the loading state).
-		// When the action menu is disabled, still allow the error icon to
-		// pop a minimal menu so users can see the cause and retry/delete.
-		if (props.loading || (!props.showTranslationActions && !props.error))
-			return;
+		if (props.loading || !canOpenMenu()) return;
 		if (tooltipPos()) return;
-		let x: number, y: number;
-		if (e instanceof MouseEvent) {
-			x = e.clientX;
-			y = e.clientY;
-		} else if (e instanceof TouchEvent) {
-			x = e.changedTouches[0].clientX;
-			y = e.changedTouches[0].clientY;
-		} else {
-			const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-			x = rect.left + rect.width / 2;
-			y = rect.top + rect.height / 2;
-		}
+		const { x, y } = pointerPosition(e);
 		closeActiveTooltip?.();
 		setTooltipPos({
 			x,
@@ -251,9 +266,9 @@ const TranslationRender = (props: TranslationRenderProps) => {
 		closeActiveTooltip = closeTooltip;
 	};
 	createEffect(() => {
-		// Closing the action menu at runtime only dismisses the normal-state
-		// tooltip; the error-state menu stays so users can still act on errors.
-		if (!props.showTranslationActions && !props.error) closeTooltip();
+		// Keep the open menu in sync with the condition that renders it, so a
+		// dangling position can never block the trigger from opening it again.
+		if (!canOpenMenu()) closeTooltip();
 	});
 	onCleanup(closeTooltip);
 
@@ -264,9 +279,6 @@ const TranslationRender = (props: TranslationRenderProps) => {
 			!props.hideOriginal &&
 			((props.text || "").length > NEW_LINE_THRESHOLD ||
 				props.text?.includes("\n")),
-	);
-	const hasLeadingContent = createMemo(
-		() => props.loading || !!props.error || props.showLanguageIcon,
 	);
 	const leadingContent = createMemo(() => {
 		if (props.loading) return <NativeLoading />;
@@ -279,11 +291,7 @@ const TranslationRender = (props: TranslationRenderProps) => {
 
 	return (
 		<Show when={shouldRender()}>
-			<Show
-				when={
-					(props.showTranslationActions || !!props.error) && hasLeadingContent()
-				}
-			>
+			<Show when={canOpenMenu()}>
 				<InTextTooltip
 					pos={tooltipPos()}
 					error={props.error}
@@ -311,7 +319,7 @@ const TranslationRender = (props: TranslationRenderProps) => {
 				{swapLine() && <br />}
 				<Show when={hasLeadingContent()}>
 					<Show
-						when={props.showTranslationActions || !!props.error}
+						when={canOpenMenu()}
 						fallback={
 							<span style={{ display: "inline-block" }}>
 								{leadingContent()}
@@ -323,6 +331,7 @@ const TranslationRender = (props: TranslationRenderProps) => {
 							aria-label={t("actions.translationActions")}
 							disabled={props.loading}
 							on:mouseenter={createTooltip}
+							on:click={createTooltip}
 							on:touchend={createTooltip}
 							on:focus={createTooltip}
 							on:keydown={(event) => {
