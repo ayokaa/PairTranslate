@@ -25,7 +25,10 @@ export function resolveLLMModel(
 	if (!modelId) return undefined;
 	for (const [serviceId, service] of Object.entries(services)) {
 		if (service.type !== "llm") continue;
-		const model = service.models[modelId];
+		// Tolerate pre-migration (v9) data that still lacks `models`: a page
+		// can read storage before the background worker finishes migrating.
+		const models: Record<string, LLMModelSettings> | undefined = service.models;
+		const model = models?.[modelId];
 		if (model) {
 			return { serviceId, service, modelId, model };
 		}
@@ -61,7 +64,9 @@ export function selectLLMModelOptions(
 	const options: Array<{ value: string; label: string }> = [];
 	for (const service of Object.values(services)) {
 		if (service.type !== "llm") continue;
-		for (const [modelId, model] of Object.entries(service.models)) {
+		// See resolveLLMModel: pre-migration data may lack `models`.
+		const models: Record<string, LLMModelSettings> | undefined = service.models;
+		for (const [modelId, model] of Object.entries(models ?? {})) {
 			options.push({
 				value: modelId,
 				label: formatLLMModelLabel(service.name, model.name),

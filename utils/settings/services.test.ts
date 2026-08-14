@@ -77,3 +77,28 @@ describe("selectLLMModelOptions", () => {
 		]);
 	});
 });
+
+describe("pre-migration tolerance", () => {
+	// A page can read storage before the background worker finishes migrating
+	// v9 data, whose LLM services lack `models`. Deliberately cast the legacy
+	// shape to exercise the guard.
+	const legacy = {
+		"11111111-1111-4111-8111-111111111111": {
+			type: "llm",
+			name: "LegacyOpenAI",
+			apiSpec: "openai",
+			model: "gpt-5",
+		},
+	} as unknown as Record<string, ServiceSettings>;
+
+	test("helpers degrade to empty results instead of throwing", () => {
+		expect(() => selectLLMModelOptions(legacy)).not.toThrow();
+		expect(selectLLMModelOptions(legacy)).toEqual([]);
+		expect(
+			resolveLLMModel(legacy, "22222222-2222-4222-8222-222222222222"),
+		).toBeUndefined();
+		expect(
+			findServiceForModelRef(legacy, "22222222-2222-4222-8222-222222222222"),
+		).toBeUndefined();
+	});
+});

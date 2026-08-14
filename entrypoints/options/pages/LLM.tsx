@@ -6,7 +6,7 @@ import { SectionResetButton } from "~/components/settings/SectionResetButton";
 import { ServiceManager } from "~/components/settings/ServiceManager";
 import { useSettings } from "~/hooks/settings";
 import { t } from "~/utils/i18n";
-import type { ServicesSettings } from "~/utils/settings";
+import type { LLMModelSettings, ServicesSettings } from "~/utils/settings";
 import {
 	type ServiceByType,
 	selectServicesByType,
@@ -44,62 +44,67 @@ export default (props: { navId: string }) => {
 		service: LLMService;
 		onEdit: () => void;
 		onDelete: () => void;
-	}) => (
-		<div class="card border border-base-200 bg-base-100 shadow-sm">
-			<div class="card-body p-5">
-				<div class="flex items-start justify-between gap-4">
-					<div class="flex items-center gap-3">
-						<div class="rounded-lg bg-primary/10 p-2 text-primary">
-							<Box size={20} />
+	}) => {
+		// Pre-migration (v9) data may lack `models` while a page renders
+		// before the background worker finishes migrating.
+		const models: Record<string, LLMModelSettings> | undefined = service.models;
+		return (
+			<div class="card border border-base-200 bg-base-100 shadow-sm">
+				<div class="card-body p-5">
+					<div class="flex items-start justify-between gap-4">
+						<div class="flex items-center gap-3">
+							<div class="rounded-lg bg-primary/10 p-2 text-primary">
+								<Box size={20} />
+							</div>
+							<div>
+								<h3 class="card-title text-lg">{service.name}</h3>
+								<p class="text-xs uppercase tracking-wide text-base-content/60">
+									{service.apiSpec.toUpperCase()}
+								</p>
+							</div>
 						</div>
-						<div>
-							<h3 class="card-title text-lg">{service.name}</h3>
-							<p class="text-xs uppercase tracking-wide text-base-content/60">
-								{service.apiSpec.toUpperCase()}
-							</p>
+						<div class="join">
+							<button
+								type="button"
+								class="btn btn-sm btn-ghost join-item tooltip"
+								data-tip={t("common.edit")}
+								onClick={onEdit}
+							>
+								<Pencil size={16} />
+							</button>
+							<button
+								type="button"
+								class="btn btn-sm btn-ghost text-error join-item tooltip"
+								data-tip={t("common.delete")}
+								onClick={onDelete}
+							>
+								<Trash2 size={16} />
+							</button>
 						</div>
 					</div>
-					<div class="join">
-						<button
-							type="button"
-							class="btn btn-sm btn-ghost join-item tooltip"
-							data-tip={t("common.edit")}
-							onClick={onEdit}
-						>
-							<Pencil size={16} />
-						</button>
-						<button
-							type="button"
-							class="btn btn-sm btn-ghost text-error join-item tooltip"
-							data-tip={t("common.delete")}
-							onClick={onDelete}
-						>
-							<Trash2 size={16} />
-						</button>
-					</div>
-				</div>
 
-				<div class="mt-4 flex flex-wrap gap-2">
-					{service.baseUrl && (
-						<div class="badge badge-neutral gap-1 p-3 text-xs">
-							<Link size={12} />
-							<span class="truncate max-w-40">{service.baseUrl}</span>
-						</div>
-					)}
-					<For each={Object.values(service.models)}>
-						{(model) => (
-							<div class="badge badge-outline gap-1 p-3 text-xs">
-								<Cpu size={12} />
-								{model.name}
+					<div class="mt-4 flex flex-wrap gap-2">
+						{service.baseUrl && (
+							<div class="badge badge-neutral gap-1 p-3 text-xs">
+								<Link size={12} />
+								<span class="truncate max-w-40">{service.baseUrl}</span>
 							</div>
 						)}
-					</For>
-				</div>
+						<For each={Object.values(models ?? {})}>
+							{(model) => (
+								<div class="badge badge-outline gap-1 p-3 text-xs">
+									<Cpu size={12} />
+									{model.name}
+								</div>
+							)}
+						</For>
+					</div>
 
-				<QueueSummary queue={service.queue} defaults={settings.queue} />
+					<QueueSummary queue={service.queue} defaults={settings.queue} />
+				</div>
 			</div>
-		</div>
-	);
+		);
+	};
 
 	const handleReset = () => setLLMServices(() => ({}));
 
