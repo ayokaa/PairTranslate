@@ -38,8 +38,13 @@ import {
 	tokensToString,
 } from "~/utils/prompt/parser";
 import type { TranslateOptions, TranslateService } from "~/utils/rpc";
-import type { ServiceSettings } from "~/utils/settings";
+import type { LLMModelSettings, ServiceSettings } from "~/utils/settings";
 import { getSettings, listenSettings } from "~/utils/settings/helper";
+import {
+	findServiceForModelRef,
+	type ResolvedLLMModel,
+	resolveLLMModel,
+} from "~/utils/settings/services";
 import { createLRUStorage } from "~/utils/storage";
 import { estimateTokens } from "~/utils/token-estimate";
 import {
@@ -108,30 +113,17 @@ const isStructuredOutput = (
 	"type" in output &&
 	output.type === "structured";
 
-const ensureServiceModel = (
-	service: Extract<ServiceSettings, { type: "llm" }>,
-): string => {
-	const model = service.model;
-	if (model) {
-		return model;
-	}
-	throw createTranslateError(
-		TranslateErrorType.VALIDATION_ERROR,
-		`Model not configured for ${service.name}`,
-	);
-};
-
 const createChatRequest = (
-	service: Extract<ServiceSettings, { type: "llm" }>,
+	model: LLMModelSettings,
 	messages: ChatRequest["messages"],
 	overrides?: Partial<Pick<ChatRequest, "stream">>,
 ): ChatRequest => ({
-	model: ensureServiceModel(service),
+	model: model.name,
 	messages,
-	temperature: service.temperature,
-	maxTokens: service.maxOutputTokens,
-	thinkingBudget: service.thinkingBudget,
-	extraBody: service.extraBody,
+	temperature: model.temperature,
+	maxTokens: model.maxOutputTokens,
+	thinkingBudget: model.thinkingBudget,
+	extraBody: model.extraBody,
 	...overrides,
 });
 
@@ -216,8 +208,11 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		);
 	};
 
+	const findService = (modelId: string): ServiceSettings | undefined =>
+		findServiceForModelRef(settings.services, modelId);
+
 	const resolveService = (modelId: string): ServiceSettings => {
-		const service = settings.services[modelId];
+		const service = findService(modelId);
 		if (!service) {
 			throw createTranslateError(
 				TranslateErrorType.MODEL_NOT_FOUND,
@@ -225,6 +220,29 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			);
 		}
 		return service;
+	};
+
+	type ServiceTarget =
+		| {
+				kind: "traditional";
+				service: Extract<ServiceSettings, { type: "traditional" }>;
+		  }
+		| ({ kind: "llm" } & ResolvedLLMModel);
+
+	// modelId may be a traditional service UUID or an LLM model UUID.
+	const resolveTarget = (modelId: string): ServiceTarget => {
+		const direct = settings.services[modelId];
+		if (direct?.type === "traditional") {
+			return { kind: "traditional", service: direct };
+		}
+		const resolved = resolveLLMModel(settings.services, modelId);
+		if (resolved) {
+			return { kind: "llm", ...resolved };
+		}
+		throw createTranslateError(
+			TranslateErrorType.MODEL_NOT_FOUND,
+			`Model ${modelId} not found. Please check your settings.`,
+		);
 	};
 
 	const getPrompt = (promptId: string): CompiledPrompt => {
@@ -244,7 +262,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 
 	const getQueueConfig = (modelId: string) => {
 		const base = settings.queue;
-		const override = settings.services[modelId]?.queue;
+		const override = findService(modelId)?.queue;
 		return {
 			requestConcurrency:
 				override?.requestConcurrency ?? base.requestConcurrency,
@@ -253,17 +271,17 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 	};
 
 	const ensureLLMClient = (
-		modelId: string,
+		serviceId: string,
 		service: Extract<ServiceSettings, { type: "llm" }>,
 	): LLMClient => {
-		const cached = clientCache.get(modelId);
+		const cached = clientCache.get(serviceId);
 		if (cached) return cached;
 		const baseUrl = service.baseUrl;
 		const client = buildLLMClient(service.apiSpec, {
 			apiKey: service.apiKey,
 			baseUrl,
 		});
-		clientCache.set(modelId, client);
+		clientCache.set(serviceId, client);
 		return client;
 	};
 
@@ -383,8 +401,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 	};
 
 	const runLLMSteps = async (
-		modelId: string,
-		service: Extract<ServiceSettings, { type: "llm" }>,
+		target: ResolvedLLMModel,
 		prompt: CompiledPrompt,
 		textPayload: TranslatePayload,
 		ctx: TranslateContext,
@@ -392,7 +409,8 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		dstLang: string,
 		signal?: AbortSignal,
 	): Promise<{ result: unknown; tokens: number; reasoning?: string }> => {
-		const client = ensureLLMClient(modelId, service);
+		const { serviceId, service, model } = target;
+		const client = ensureLLMClient(serviceId, service);
 		const promptCtx = buildContextWithTranslateParams(
 			ctx,
 			{ src: srcLang, dst: dstLang },
@@ -411,13 +429,13 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				content: tokensToString(promptCtx, step.messageTokens),
 			});
 			const request = createChatRequest(
-				service,
+				model,
 				snapshotConversation(conversation),
 			);
 			const latestMessage = conversation.at(-1);
 			traceLlms("request", {
 				service: service.name,
-				model: service.model ?? "(unset)",
+				model: model.name,
 				step: stepIndex,
 				stream: false,
 				snippet:
@@ -441,7 +459,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				});
 				traceLlms("response", {
 					service: service.name,
-					model: service.model ?? "(unset)",
+					model: model.name,
 					step: stepIndex,
 					stream: false,
 					snippet:
@@ -471,8 +489,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 	};
 
 	const runLLMStream = (
-		modelId: string,
-		service: Extract<ServiceSettings, { type: "llm" }>,
+		target: ResolvedLLMModel,
 		prompt: CompiledPrompt,
 		textPayload: TranslatePayload,
 		ctx: TranslateContext,
@@ -484,7 +501,8 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			await applyDebugLatency();
 			signal?.throwIfAborted();
 
-			const client = ensureLLMClient(modelId, service);
+			const { serviceId, service, model } = target;
+			const client = ensureLLMClient(serviceId, service);
 			const promptCtx = buildContextWithTranslateParams(
 				ctx,
 				{ src: srcLang, dst: dstLang },
@@ -507,7 +525,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				const latestMessage = conversation.at(-1);
 				traceLlms("request", {
 					service: service.name,
-					model: service.model ?? "(unset)",
+					model: model.name,
 					step: index + 1,
 					stream: false,
 					snippet:
@@ -528,7 +546,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					});
 					traceLlms("response", {
 						service: service.name,
-						model: service.model ?? "(unset)",
+						model: model.name,
 						step: index + 1,
 						stream: false,
 						snippet:
@@ -557,14 +575,14 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				content: tokensToString(promptCtx, finalStep.messageTokens),
 			});
 			const request = createChatRequest(
-				service,
+				model,
 				snapshotConversation(conversation),
 				{ stream: true },
 			);
 			const latestPrompt = conversation.at(-1);
 			traceLlms("request", {
 				service: service.name,
-				model: service.model ?? "(unset)",
+				model: model.name,
 				step: prompt.steps.length,
 				stream: true,
 				snippet:
@@ -587,7 +605,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 								}
 								traceLlms("response", {
 									service: service.name,
-									model: service.model ?? "(unset)",
+									model: model.name,
 									stream: true,
 									tokens: next.value?.usage?.completionTokens ?? 0,
 									reasoningChars: next.value?.reasoning?.length ?? 0,
@@ -650,16 +668,16 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				"Prompt ID is required",
 			);
 		}
-		const service = resolveService(modelId);
+		const target = resolveTarget(modelId);
 		const payload = text ?? "";
 		const expectsArray = Array.isArray(payload);
-		const compiled = service.type === "llm" ? getPrompt(promptId) : undefined;
+		const compiled = target.kind === "llm" ? getPrompt(promptId) : undefined;
 		const payloadArray = Array.isArray(payload) ? payload : undefined;
 		const supportsThinCache =
 			Boolean(options.thinCache) &&
 			!!payloadArray &&
-			(service.type === "traditional" ||
-				(service.type === "llm" && compiled?.input === "stringArray"));
+			(target.kind === "traditional" ||
+				(target.kind === "llm" && compiled?.input === "stringArray"));
 
 		let effectiveSrcLang = options.srcLang;
 		if (effectiveSrcLang === "auto") {
@@ -684,7 +702,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						completionTokens: 0,
 					};
 				}
-				if (service.type === "llm") {
+				if (target.kind === "llm") {
 					effectiveSrcLang = resolved.srcLang;
 				}
 			}
@@ -786,7 +804,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				? thinCacheState.missing.map((index) => payloadArray[index])
 				: payload;
 		const normalizedPayload =
-			service.type === "llm" && compiled
+			target.kind === "llm" && compiled
 				? normalizePromptInput(compiled, executionPayload)
 				: Array.isArray(executionPayload)
 					? executionPayload
@@ -795,7 +813,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		let completionTokens = 0;
 		let reasoning: string | undefined;
 
-		if (service.type === "traditional") {
+		if (target.kind === "traditional") {
 			const texts = toTextArray(
 				Array.isArray(normalizedPayload)
 					? normalizedPayload
@@ -812,7 +830,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				};
 			}
 			const traditionalResult = await runTraditional(
-				service,
+				target.service,
 				texts,
 				effectiveSrcLang,
 				options.dstLang,
@@ -823,8 +841,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		} else {
 			const compiledPrompt = compiled ?? getPrompt(promptId);
 			const llmResult = await runLLMSteps(
-				modelId,
-				service,
+				target,
 				compiledPrompt,
 				normalizedPayload,
 				ctx,
@@ -905,9 +922,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			signal?: AbortSignal,
 		) {
 			const payload = text ?? "";
-			const service = resolveService(options.modelId);
+			const target = resolveTarget(options.modelId);
 			const prompt =
-				service.type === "llm" ? getPrompt(options.promptId) : undefined;
+				target.kind === "llm" ? getPrompt(options.promptId) : undefined;
 			const normalized = prompt
 				? normalizePromptInput(prompt, payload)
 				: (payload ?? "");
@@ -927,12 +944,12 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		) {
 			const modelId = options.modelId;
 			const promptId = options.promptId;
-			const service = resolveService(modelId);
+			const target = resolveTarget(modelId);
 			const payload = text ?? "";
 			const compiledPrompt =
-				service.type === "llm" ? getPrompt(promptId) : undefined;
+				target.kind === "llm" ? getPrompt(promptId) : undefined;
 			const normalized =
-				service.type === "llm" && compiledPrompt
+				target.kind === "llm" && compiledPrompt
 					? normalizePromptInput(compiledPrompt, payload)
 					: payload;
 
@@ -958,7 +975,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 							yield { content: "", skipped: true };
 							return;
 						}
-						if (service.type === "llm") {
+						if (target.kind === "llm") {
 							effectiveSrcLang = resolved.srcLang;
 						}
 					}
@@ -999,10 +1016,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				const finalStep = compiledPrompt?.steps.at(-1);
 				let traditionalResult: string[] | undefined;
 				const streamRunner =
-					service.type === "llm"
+					target.kind === "llm"
 						? runLLMStream(
-								modelId,
-								service,
+								target,
 								compiledPrompt ?? getPrompt(promptId),
 								normalized,
 								ctx,
@@ -1011,7 +1027,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 								signal,
 							)
 						: runTraditionalStream(
-								service,
+								target.service,
 								normalized,
 								effectiveSrcLang,
 								options.dstLang,
@@ -1034,7 +1050,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						}
 						yield chunk;
 					}
-					if (service.type === "llm") {
+					if (target.kind === "llm") {
 						const normalizedOutput = normalizeStreamAggregate(
 							finalStep,
 							translationAggregate,
