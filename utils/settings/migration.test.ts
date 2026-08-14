@@ -344,4 +344,124 @@ describe("migrateSettings", () => {
 			enableSummary: false,
 		});
 	});
+
+	test("migrates from v9 to v10 nesting LLM models under services", () => {
+		const v9Settings = {
+			__v: 9,
+			basic: {
+				enabled: true,
+				theme: "system",
+				selectionPopupEnabled: true,
+				autoPin: false,
+				floatingBallEnabled: true,
+				floatingBallPosition: { side: "right", top: 20 },
+				keyboardShortcutEnabled: true,
+				keyboardShortcut: "Alt+T",
+				selectionTranslateEnabled: true,
+				selectionTranslateModifier: "Alt",
+				inputTranslateEnabled: true,
+				progressIndicationEnabled: true,
+				translationStyle: {},
+				keyboardShortcutSummarizes: false,
+				keyboardShortcutForSummary: "Alt+T",
+				restorePageState: true,
+			},
+			translate: {
+				sourceLang: "auto",
+				targetLang: "en",
+				filterInteractive: true,
+				translationMode: "parallel",
+				inTextTranslateIconEnabled: true,
+				inTextTranslationActionsEnabled: true,
+				translateFullPage: false,
+				inputTranslateLang: "en",
+				inTextTranslateModel: "11111111-1111-4111-8111-111111111111",
+			},
+			summary: {
+				summaryModel: "11111111-1111-4111-8111-111111111111",
+				summaryDefaultPinned: false,
+				summaryGeometryMaxEntries: 1000,
+			},
+			services: {
+				"11111111-1111-4111-8111-111111111111": {
+					type: "llm",
+					name: "OpenAI",
+					apiSpec: "openai",
+					baseUrl: "https://api.openai.com/v1",
+					apiKey: "sk-test",
+					model: "gpt-5",
+					temperature: 0.7,
+					maxOutputTokens: 2048,
+					thinkingBudget: "high",
+					extraBody: { top_k: 3 },
+				},
+				"33333333-3333-4333-8333-333333333333": {
+					type: "llm",
+					name: "NoModel",
+					apiSpec: "anthropic",
+					baseUrl: "https://api.anthropic.com",
+				},
+				"44444444-4444-4444-8444-444444444444": {
+					type: "traditional",
+					name: "DeepL",
+					apiSpec: "deepl",
+					apiKey: "deepl-key",
+				},
+			},
+			queue: {
+				requestConcurrency: 4,
+				tokensPerMinute: 80000,
+				maxBatchSize: 8,
+				maxTokensPerBatch: 8000,
+				cacheSize: 1000,
+			},
+			prompts: {},
+			websiteRules: [],
+			debug: {
+				verboseLogging: false,
+				traceLlms: false,
+				traceTraditional: false,
+				disableCache: false,
+				simulateLatencyMs: 0,
+			},
+		};
+
+		const result = migrateSettings(v9Settings);
+		expect(result.__v).toBe(SETTINGS_VERSION);
+
+		const service = result.services["11111111-1111-4111-8111-111111111111"];
+		expect(service.type).toBe("llm");
+		if (service.type !== "llm") throw new Error("unreachable");
+		// Model key reuses the service UUID so existing references keep working.
+		expect(Object.keys(service.models)).toEqual([
+			"11111111-1111-4111-8111-111111111111",
+		]);
+		expect(service.models["11111111-1111-4111-8111-111111111111"]).toEqual({
+			name: "gpt-5",
+			temperature: 0.7,
+			maxOutputTokens: 2048,
+			thinkingBudget: "high",
+			extraBody: { top_k: 3 },
+		});
+		expect(service).not.toHaveProperty("model");
+		expect(service).not.toHaveProperty("temperature");
+
+		const emptyService =
+			result.services["33333333-3333-4333-8333-333333333333"];
+		expect(emptyService.type).toBe("llm");
+		if (emptyService.type !== "llm") throw new Error("unreachable");
+		expect(emptyService.models).toEqual({});
+
+		const traditional = result.services["44444444-4444-4444-8444-444444444444"];
+		expect(traditional.type).toBe("traditional");
+		expect(traditional).not.toHaveProperty("models");
+
+		// References pointing at the old service UUID remain valid.
+		expect(result.translate.inTextTranslateModel).toBe(
+			"11111111-1111-4111-8111-111111111111",
+		);
+		expect(result.summary.summaryModel).toBe(
+			"11111111-1111-4111-8111-111111111111",
+		);
+	});
 });

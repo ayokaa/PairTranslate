@@ -45,7 +45,11 @@ test("settings schema accepts missing and configured thinkingBudget", () => {
 				name: "OpenAI",
 				apiSpec: "openai",
 				baseUrl: "https://api.openai.com/v1",
-				model: "gpt-5",
+				models: {
+					"22222222-2222-4222-8222-222222222222": {
+						name: "gpt-5",
+					},
+				},
 			},
 		},
 		queue: {
@@ -75,8 +79,12 @@ test("settings schema accepts missing and configured thinkingBudget", () => {
 				name: "OpenAI",
 				apiSpec: "openai",
 				baseUrl: "https://api.openai.com/v1",
-				model: "gpt-5",
-				thinkingBudget: "xhigh",
+				models: {
+					"22222222-2222-4222-8222-222222222222": {
+						name: "gpt-5",
+						thinkingBudget: "xhigh",
+					},
+				},
 			},
 		},
 	});
