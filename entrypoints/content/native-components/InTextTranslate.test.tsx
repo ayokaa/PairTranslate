@@ -113,16 +113,19 @@ describe("in-text translation error state", () => {
 			() => new TestMouseEvent("click", { clientX: 100, clientY: 100 }),
 		],
 		["focus", () => new DomEvent("focus")],
-	])("opens the retry menu on %s without a global TouchEvent", (_name, make) => {
-		expect(globalThis).not.toHaveProperty("TouchEvent");
+	])(
+		"opens the retry menu on %s without a global TouchEvent",
+		(_name, make) => {
+			expect(globalThis).not.toHaveProperty("TouchEvent");
 
-		const harness = mount(false);
-		fail(harness);
+			const harness = mount(false);
+			fail(harness);
 
-		harness.trigger()?.dispatchEvent(make());
+			harness.trigger()?.dispatchEvent(make());
 
-		expect(harness.menuVisible()).toBe(true);
-	});
+			expect(harness.menuVisible()).toBe(true);
+		},
+	);
 
 	test("recovering from an error closes a menu that can no longer render", () => {
 		const harness = mount(false);
