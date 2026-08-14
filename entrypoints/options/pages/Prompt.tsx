@@ -57,8 +57,12 @@ import {
 	templateToTokens,
 	tokensToString,
 } from "~/utils/prompt/parser";
-import type { PromptSettings, ServiceSettings } from "~/utils/settings/def";
+import type { PromptSettings } from "~/utils/settings/def";
 import { generatePromptSettings } from "~/utils/settings/default";
+import {
+	resolveLLMModel,
+	selectLLMModelOptions,
+} from "~/utils/settings/services";
 import type { TranslateContext } from "~/utils/types";
 
 type StepExecutionState = {
@@ -72,8 +76,6 @@ type StepExecutionState = {
 type StepExecutionMap = Record<number, StepExecutionState>;
 
 type CustomVariableEntry = { id: string; key: string; value: string };
-
-type LLMService = Extract<ServiceSettings, { type: "llm" }>;
 
 const TEMPLATE_SNIPPETS = [
 	{
@@ -432,26 +434,19 @@ const PromptPage = () => {
 		setActiveSection("system");
 	});
 
-	const serviceEntries = createMemo(() => Object.entries(settings.services));
-	const llmServices = createMemo(
-		() =>
-			serviceEntries().filter(([, service]) => service.type === "llm") as Array<
-				[string, LLMService]
-			>,
-	);
 	const [selectedModelId, setSelectedModelId] = createSignal<
 		string | undefined
 	>();
 	createEffect(() => {
-		const entries = llmServices();
-		if (entries.length === 0) {
+		const options = selectLLMModelOptions(settings.services);
+		if (options.length === 0) {
 			setSelectedModelId(undefined);
 			return;
 		}
 		const current = selectedModelId();
-		const stillValid = entries.some(([id]) => id === current);
+		const stillValid = options.some((option) => option.value === current);
 		if (!stillValid) {
-			setSelectedModelId(entries[0][0]);
+			setSelectedModelId(options[0].value);
 		}
 	});
 
@@ -621,11 +616,6 @@ const PromptPage = () => {
 	>("output");
 
 	let previewRunId = 0;
-
-	const getLLMService = (id: string | undefined): LLMService | undefined => {
-		const service = id ? settings.services[id] : undefined;
-		return service?.type === "llm" ? (service as LLMService) : undefined;
-	};
 
 	const promptLibraryDefaults = createMemo(() => generatePromptSettings());
 
@@ -812,19 +802,16 @@ const PromptPage = () => {
 		const runId = ++previewRunId;
 		const prompt = selectedPrompt();
 		const promptId = selectedPromptId();
-		const service = getLLMService(selectedModelId());
+		const resolved = resolveLLMModel(settings.services, selectedModelId());
 		if (!prompt || !promptId) {
 			setPreviewError(t("promptStudio.selectPrompt"));
 			return;
 		}
-		if (!service) {
+		if (!resolved) {
 			setPreviewError(t("promptStudio.selectLLM"));
 			return;
 		}
-		if (!service.model) {
-			setPreviewError(t("promptStudio.modelMissing"));
-			return;
-		}
+		const { service, model } = resolved;
 
 		try {
 			setPreviewLoading(true);
@@ -878,12 +865,12 @@ const PromptPage = () => {
 					: undefined;
 
 				const request = {
-					model: service.model,
+					model: model.name,
 					messages: snapshotConversation(conversation),
-					temperature: service.temperature,
-					maxTokens: service.maxOutputTokens,
-					thinkingBudget: service.thinkingBudget,
-					extraBody: service.extraBody,
+					temperature: model.temperature,
+					maxTokens: model.maxOutputTokens,
+					thinkingBudget: model.thinkingBudget,
+					extraBody: model.extraBody,
 				};
 
 				try {
@@ -1004,10 +991,7 @@ const PromptPage = () => {
 	};
 
 	const llmServiceOptions = createMemo<SelectOption[]>(() =>
-		llmServices().map(([id, service]) => ({
-			value: id,
-			label: service.name,
-		})),
+		selectLLMModelOptions(settings.services),
 	);
 
 	const _editorTitle = createMemo(() => {

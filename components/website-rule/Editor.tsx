@@ -13,7 +13,10 @@ import { useSettings } from "~/hooks/settings";
 import { SUPPORTED_LANGUAGES } from "~/utils/constants";
 import { t } from "~/utils/i18n";
 import type { WebsiteRuleSettings } from "~/utils/settings";
-import { selectServicesByType } from "~/utils/settings/services";
+import {
+	selectLLMModelOptions,
+	selectServicesByType,
+} from "~/utils/settings/services";
 
 interface Props {
 	s: WebsiteRuleSettings;
@@ -42,18 +45,13 @@ export const WebsiteRuleEditor = (props: Props) => {
 			{ value: "default", label: t("common.globalDefault") },
 		];
 
-		const llmServices = selectServicesByType(settings.services, "llm");
 		const traditionalServices = selectServicesByType(
 			settings.services,
 			"traditional",
 		);
 
-		for (const [uuid, service] of Object.entries(llmServices)) {
-			options.push({
-				value: uuid,
-				label: service.name,
-				disabled: false,
-			});
+		for (const option of selectLLMModelOptions(settings.services)) {
+			options.push({ ...option, disabled: false });
 		}
 
 		for (const [uuid, service] of Object.entries(traditionalServices)) {

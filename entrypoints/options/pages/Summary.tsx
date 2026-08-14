@@ -15,7 +15,7 @@ import { useSettings } from "~/hooks/settings";
 import { t } from "~/utils/i18n";
 import { generateSummarySettings } from "~/utils/settings";
 import * as s from "~/utils/settings/def";
-import { selectServicesByType } from "~/utils/settings/services";
+import { selectLLMModelOptions } from "~/utils/settings/services";
 
 export default (props: { navId: string }) => {
 	const { settings, setSettings } = useSettings();
@@ -44,15 +44,14 @@ export default (props: { navId: string }) => {
 	createEffect(() => {
 		trackStore(settings.services);
 		const services = unwrap(settings.services);
-		const llmServices = selectServicesByType(services, "llm");
 
 		const options: SelectOption[] = [
 			{ value: "", label: t("settings.translation.noModel"), disabled: false },
 		];
 
-		Object.entries(llmServices).forEach(([uuid, service]) => {
-			options.push({ value: uuid, label: service.name, disabled: false });
-		});
+		for (const option of selectLLMModelOptions(services)) {
+			options.push({ ...option, disabled: false });
+		}
 
 		setLLMOptions(options);
 	});

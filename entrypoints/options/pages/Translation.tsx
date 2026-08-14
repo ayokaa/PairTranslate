@@ -18,7 +18,10 @@ import { SUPPORTED_LANGUAGES } from "~/utils/constants";
 import { t } from "~/utils/i18n";
 import { generateTranslateSettings } from "~/utils/settings";
 import * as s from "~/utils/settings/def";
-import { selectServicesByType } from "~/utils/settings/services";
+import {
+	selectLLMModelOptions,
+	selectServicesByType,
+} from "~/utils/settings/services";
 
 export default (props: { navId: string }) => {
 	const { settings, setSettings } = useSettings();
@@ -49,7 +52,6 @@ export default (props: { navId: string }) => {
 	createEffect(() => {
 		trackStore(settings.services);
 		const services = unwrap(settings.services);
-		const llmServices = selectServicesByType(services, "llm");
 		const traditionalServices = selectServicesByType(services, "traditional");
 
 		const options: SelectOption[] = [
@@ -57,13 +59,9 @@ export default (props: { navId: string }) => {
 		];
 		const lLMOptions = [...options];
 
-		Object.entries(llmServices).forEach(([uuid, service]) => {
-			lLMOptions.push({
-				value: uuid,
-				label: service.name,
-				disabled: false,
-			});
-		});
+		for (const option of selectLLMModelOptions(services)) {
+			lLMOptions.push({ ...option, disabled: false });
+		}
 
 		const allOptions = [...lLMOptions];
 
