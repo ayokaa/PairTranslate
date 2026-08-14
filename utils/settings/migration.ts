@@ -1,4 +1,8 @@
-import type { ServicesSettings } from "./def";
+import type {
+	LLMModelSettings,
+	ServiceSettings,
+	ServicesSettings,
+} from "./def";
 import { SettingsSchema } from "./def";
 import {
 	generateDebugSettings,
@@ -69,6 +73,23 @@ type LegacySettingsV8 = Omit<SettingsSchema, "translate" | "summary"> & {
 	translate: LegacyTranslateSettingsV8;
 };
 
+// v9 LLM service: provider config plus a single inline `model` and
+// service-level generation params. v10 nests models under `models`.
+type LegacyLLMServiceV9 = Omit<
+	Extract<ServiceSettings, { type: "llm" }>,
+	"models"
+> & {
+	model?: string;
+	temperature?: number;
+	maxOutputTokens?: number;
+	thinkingBudget?: LLMModelSettings["thinkingBudget"];
+	extraBody?: Record<string, unknown>;
+};
+
+type LegacySettingsV9 = Omit<SettingsSchema, "services"> & {
+	services: Record<string, LegacyLLMServiceV9 | ServiceSettings>;
+};
+
 export const migrateSettings = (raw: unknown): SettingsSchema => {
 	if (!raw || typeof raw !== "object") {
 		throw new Error("Cannot migrate invalid settings payload");
@@ -121,6 +142,11 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 		if (version === 8) {
 			working = migrateV8ToV9(working as LegacySettingsV8);
 			version = 9;
+			continue;
+		}
+		if (version === 9) {
+			working = migrateV9ToV10(working as LegacySettingsV9);
+			version = 10;
 			continue;
 		}
 
@@ -190,15 +216,26 @@ function convertLegacyServices(legacy?: LegacyServices): ServicesSettings {
 	const next: ServicesSettings = {};
 	const llmEntries = legacy?.llmServices ?? {};
 	Object.entries(llmEntries).forEach(([id, service]) => {
+		const models: Record<string, LLMModelSettings> = {};
+		if (service.model) {
+			// Reuse the service UUID as the model key so legacy references keep working.
+			models[id] = {
+				name: service.model,
+				...(service.temperature !== undefined && {
+					temperature: service.temperature,
+				}),
+				...(service.maxOutputTokens !== undefined && {
+					maxOutputTokens: service.maxOutputTokens,
+				}),
+			};
+		}
 		next[id] = {
 			type: "llm",
 			name: service.name,
 			baseUrl: service.baseUrl,
 			apiSpec: service.apiSpec,
 			apiKey: service.apiKey,
-			model: service.model,
-			temperature: service.temperature,
-			maxOutputTokens: service.maxOutputTokens,
+			models,
 		};
 	});
 
@@ -319,6 +356,43 @@ function migrateV8ToV9(oldSettings: LegacySettingsV8): SettingsSchema {
 		websiteRules: [...oldSettings.websiteRules, ...summaryRules],
 		__v: 9,
 	};
+}
+
+function migrateV9ToV10(oldSettings: LegacySettingsV9): SettingsSchema {
+	const services: ServicesSettings = {};
+	for (const [id, service] of Object.entries(oldSettings.services)) {
+		if (service.type !== "llm") {
+			services[id] = service;
+			continue;
+		}
+		// Already in the v10 shape (produced by convertLegacyServices on the v0 path).
+		if ("models" in service) {
+			services[id] = service;
+			continue;
+		}
+		const {
+			model,
+			temperature,
+			maxOutputTokens,
+			thinkingBudget,
+			extraBody,
+			...rest
+		} = service;
+		const models: Record<string, LLMModelSettings> = {};
+		if (model) {
+			// Reuse the service UUID as the model key so every existing reference
+			// (translate.*, summary.summaryModel, websiteRules) keeps pointing at it.
+			models[id] = {
+				name: model,
+				...(temperature !== undefined && { temperature }),
+				...(maxOutputTokens !== undefined && { maxOutputTokens }),
+				...(thinkingBudget !== undefined && { thinkingBudget }),
+				...(extraBody !== undefined && { extraBody }),
+			};
+		}
+		services[id] = { ...rest, models };
+	}
+	return { ...oldSettings, services, __v: 10 };
 }
 
 function getSettingsVersion(raw: unknown): number {

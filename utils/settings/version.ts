@@ -1,1 +1,1 @@
-export const SETTINGS_VERSION = 9;
+export const SETTINGS_VERSION = 10;

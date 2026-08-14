@@ -62,14 +62,19 @@ export const BaseServiceSettings = z.object({
 	queue: QueueOverrideSettings,
 });
 
-export const LLMServiceSettings = BaseServiceSettings.extend({
-	type: z.literal("llm"),
-	apiSpec: z.enum(["openai", "anthropic", "google"]),
-	model: z.string().optional(),
+export const LLMModelSettings = z.object({
+	name: z.string().min(1),
 	temperature: z.number().optional(),
 	maxOutputTokens: z.number().optional(),
 	thinkingBudget: z.enum(THINKING_BUDGET_LEVELS).optional(),
 	extraBody: z.record(z.string(), z.unknown()).optional(),
+});
+export type LLMModelSettings = z.infer<typeof LLMModelSettings>;
+
+export const LLMServiceSettings = BaseServiceSettings.extend({
+	type: z.literal("llm"),
+	apiSpec: z.enum(["openai", "anthropic", "google"]),
+	models: z.record(z.uuid(), LLMModelSettings).default({}),
 });
 
 export const TraditionalServiceSettings = BaseServiceSettings.extend({
