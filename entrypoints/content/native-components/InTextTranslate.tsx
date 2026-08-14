@@ -22,6 +22,7 @@ import { t } from "~/utils/i18n";
 import { getMarkdownFromSection } from "~/utils/markdown";
 import { getPageContext } from "~/utils/page-context";
 import type { DOMSection } from "~/utils/parser/types";
+import { findServiceForModelRef } from "~/utils/settings/services";
 import { estimateTokens } from "~/utils/token-estimate";
 import InTextTooltip from "../components/InTextTooltip";
 import { NativeLoading } from "./Loading";
@@ -80,12 +81,11 @@ export const BatchInTextTranslation = (props: BatchProps) => {
 				}
 
 				createIdleDebounce(() => {
-					const currentModelQueueSettings =
-						settings.services[
-							websiteRule.inTextTranslateModel ||
-								settings.translate.inTextTranslateModel ||
-								""
-						]?.queue;
+					const currentModelQueueSettings = findServiceForModelRef(
+						settings.services,
+						websiteRule.inTextTranslateModel ||
+							settings.translate.inTextTranslateModel,
+					)?.queue;
 					const maxBatchSize =
 						currentModelQueueSettings?.maxBatchSize ||
 						settings.queue.maxBatchSize;

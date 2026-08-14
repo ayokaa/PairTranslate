@@ -33,6 +33,10 @@ import { t } from "~/utils/i18n";
 import { autoParseJson, jsonAutocomplete } from "~/utils/json-autocomplete";
 import { getPageContext } from "~/utils/page-context";
 import type { ExplainOutput } from "~/utils/prompt";
+import {
+	formatLLMModelLabel,
+	resolveLLMModel,
+} from "~/utils/settings/services";
 import type { TextContext } from "~/utils/types";
 
 interface Props extends JSX.HTMLAttributes<HTMLDivElement> {
@@ -96,11 +100,15 @@ const Explain = (props: { textContext: TextContext }) => {
 
 	const dict = createDictionary(() => props.textContext.text);
 
-	const currentModelName = createMemo(
-		() =>
-			settings.services[settings.translate.floatingExplainModel ?? ""]?.name ||
-			"",
-	);
+	const currentModelName = createMemo(() => {
+		const resolved = resolveLLMModel(
+			settings.services,
+			settings.translate.floatingExplainModel,
+		);
+		return resolved
+			? formatLLMModelLabel(resolved.service.name, resolved.model.name)
+			: "";
+	});
 
 	return (
 		<div class="p-2 py-4 space-y-2">
@@ -215,11 +223,15 @@ const Translate = (props: { textContext: TextContext }) => {
 		stream: true,
 	});
 
-	const currentModelName = createMemo(
-		() =>
-			settings.services[settings.translate.floatingTranslateModel ?? ""]
-				?.name || "",
-	);
+	const currentModelName = createMemo(() => {
+		const resolved = resolveLLMModel(
+			settings.services,
+			settings.translate.floatingTranslateModel,
+		);
+		return resolved
+			? formatLLMModelLabel(resolved.service.name, resolved.model.name)
+			: "";
+	});
 
 	return (
 		<div class="p-2 py-4">

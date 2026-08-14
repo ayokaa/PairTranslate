@@ -36,7 +36,10 @@ import {
 } from "~/utils/constants";
 import { t } from "~/utils/i18n";
 import { isApple } from "~/utils/isapple";
-import { selectServicesByType } from "~/utils/settings/services";
+import {
+	selectLLMModelOptions,
+	selectServicesByType,
+} from "~/utils/settings/services";
 import {
 	addSidebarHistoryEntry,
 	clearSidebarHistory,
@@ -85,16 +88,12 @@ const SidebarContent = () => {
 	const modelOptions = createMemo<SelectOption[]>(() => {
 		trackStore(settingsCtx.settings.services);
 		const services = unwrap(settingsCtx.settings.services);
-		const llmServices = selectServicesByType(services, "llm");
 		const traditionalServices = selectServicesByType(services, "traditional");
 
 		const options: SelectOption[] = [];
-		Object.entries(llmServices).forEach(([uuid, service]) => {
-			options.push({
-				value: uuid,
-				label: service.name,
-			});
-		});
+		for (const option of selectLLMModelOptions(services)) {
+			options.push(option);
+		}
 		Object.entries(traditionalServices).forEach(([uuid, service]) => {
 			options.push({
 				value: uuid,

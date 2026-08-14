@@ -15,7 +15,10 @@ import {
 	getModifierOptions,
 	type SelectionTranslateModifier,
 } from "~/utils/modifier";
-import { selectServicesByType } from "~/utils/settings/services";
+import {
+	selectLLMModelOptions,
+	selectServicesByType,
+} from "~/utils/settings/services";
 import { getCurrentDomain } from "../get-current";
 
 export default () => {
@@ -81,19 +84,14 @@ export default () => {
 	const modelList = createMemo(() => {
 		trackStore(settings.services);
 		const services = unwrap(settings.services);
-		const llmServices = selectServicesByType(services, "llm");
 		const traditionalServices = selectServicesByType(services, "traditional");
 
 		const options = [
 			{ value: "", label: t("settings.translation.noModel"), disabled: false },
 		];
-		Object.entries(llmServices).forEach(([uuid, service]) => {
-			options.push({
-				value: uuid,
-				label: service.name,
-				disabled: false,
-			});
-		});
+		for (const option of selectLLMModelOptions(services)) {
+			options.push({ ...option, disabled: false });
+		}
 		Object.entries(traditionalServices).forEach(([uuid, service]) => {
 			options.push({
 				value: uuid,
@@ -107,18 +105,13 @@ export default () => {
 	const llmModelList = createMemo(() => {
 		trackStore(settings.services);
 		const services = unwrap(settings.services);
-		const llmServices = selectServicesByType(services, "llm");
 
 		const options = [
 			{ value: "", label: t("settings.translation.noModel"), disabled: false },
 		];
-		Object.entries(llmServices).forEach(([uuid, service]) => {
-			options.push({
-				value: uuid,
-				label: service.name,
-				disabled: false,
-			});
-		});
+		for (const option of selectLLMModelOptions(services)) {
+			options.push({ ...option, disabled: false });
+		}
 
 		return options;
 	});

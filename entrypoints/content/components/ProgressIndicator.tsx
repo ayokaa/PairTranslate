@@ -6,6 +6,10 @@ import { createAnimatedAppearance } from "~/hooks/animation";
 import { useProgressIndicator } from "~/hooks/progress-indicator";
 import { useSettings } from "~/hooks/settings";
 import { t } from "~/utils/i18n";
+import {
+	formatLLMModelLabel,
+	resolveLLMModel,
+} from "~/utils/settings/services";
 
 export default function ProgressIndicator() {
 	const { settings } = useSettings();
@@ -13,19 +17,17 @@ export default function ProgressIndicator() {
 	const [ref, setRef] = createSignal<HTMLDivElement>();
 
 	const queueStatus = progress.status;
-	const activeService = createMemo(() => {
+	const modelLabel = createMemo(() => {
 		const status = queueStatus();
 		const modelId = status?.modelId ?? progress.modelId();
-		if (!modelId) return undefined;
-		return {
-			id: modelId,
-			service: settings.services[modelId],
-		};
-	});
-	const modelLabel = createMemo(() => {
-		const current = activeService();
-		if (!current) return null;
-		return current.service?.name || current.id;
+		if (!modelId) return null;
+		const direct = settings.services[modelId];
+		if (direct) return direct.name;
+		const resolved = resolveLLMModel(settings.services, modelId);
+		if (resolved) {
+			return formatLLMModelLabel(resolved.service.name, resolved.model.name);
+		}
+		return modelId;
 	});
 	const backgroundProgress = createMemo(() => {
 		const status = queueStatus();
