@@ -1,4 +1,5 @@
 import { Box, Cpu, Link, Pencil, Trash2 } from "lucide-solid";
+import { For } from "solid-js";
 import type { StoreSetter } from "solid-js/store";
 import { QueueSummary } from "~/components/settings/QueueSummary";
 import { SectionResetButton } from "~/components/settings/SectionResetButton";
@@ -85,32 +86,14 @@ export default (props: { navId: string }) => {
 							<span class="truncate max-w-40">{service.baseUrl}</span>
 						</div>
 					)}
-					{service.model && (
-						<div class="badge badge-outline gap-1 p-3 text-xs">
-							<Cpu size={12} />
-							{service.model}
-						</div>
-					)}
-					{typeof service.temperature === "number" && (
-						<div class="badge badge-ghost gap-1 p-3 text-xs">
-							{t("settings.llmServices.serviceDetails.temperature")}{" "}
-							{service.temperature}
-						</div>
-					)}
-					{service.thinkingBudget && (
-						<div class="badge badge-ghost gap-1 p-3 text-xs">
-							{t("settings.llmServices.serviceDetails.thinkingBudget")}{" "}
-							{t(
-								`settings.llmModal.thinkingBudgetOptions.${service.thinkingBudget}`,
-							)}
-						</div>
-					)}
-					{service.extraBody && (
-						<div class="badge badge-ghost gap-1 p-3 text-xs">
-							<Box size={12} />
-							{t("settings.llmServices.serviceDetails.extraBody")}
-						</div>
-					)}
+					<For each={Object.values(service.models)}>
+						{(model) => (
+							<div class="badge badge-outline gap-1 p-3 text-xs">
+								<Cpu size={12} />
+								{model.name}
+							</div>
+						)}
+					</For>
 				</div>
 
 				<QueueSummary queue={service.queue} defaults={settings.queue} />
