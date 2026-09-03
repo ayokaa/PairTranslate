@@ -3,6 +3,7 @@ import {
 	Activity,
 	BrainCircuit,
 	Bug,
+	ChartColumn,
 	Cog,
 	FileText,
 	Globe,
@@ -31,6 +32,7 @@ import Debug from "./pages/Debug";
 import FlowControl from "./pages/FlowControl";
 import LLM from "./pages/LLM";
 import PromptSettings from "./pages/PromptSettings";
+import Stats from "./pages/Stats";
 import Summary from "./pages/Summary";
 import Traditional from "./pages/Traditional";
 import Translation from "./pages/Translation";
@@ -98,6 +100,7 @@ const SettingsPage = () => {
 					<PromptSettings navId="promptSettings" />
 					<Traditional navId="traditional" />
 					<FlowControl navId="flowControl" />
+					<Stats navId="stats" />
 					<WebsiteRules navId="websiteRules" />
 					<Advanced navId="advanced" />
 					{debugVisible() && <Debug navId="debug" />}
@@ -137,6 +140,10 @@ const SettingsPage = () => {
 				<Nav.Item navId="flowControl">
 					<Activity size={16} />
 					{t("nav.flowControl")}
+				</Nav.Item>
+				<Nav.Item navId="stats">
+					<ChartColumn size={16} />
+					{t("nav.stats")}
 				</Nav.Item>
 				<Nav.Item navId="websiteRules">
 					<FileText size={16} />

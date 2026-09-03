@@ -56,6 +56,7 @@ import {
 	shouldSkipSameLanguage,
 	skippedForPayload,
 } from "~/utils/translation-result";
+import { recordTranslationStats } from "~/utils/translation-stats";
 import type { TranslateContext } from "~/utils/types";
 
 const SINGLE_TEXT_SERVICES = new Set(["deeplx", "browser"]);
@@ -74,6 +75,11 @@ type CachedValue<T = unknown> = {
 	output: T;
 	reasoning?: string;
 };
+
+const payloadChars = (payload: TranslatePayload): number =>
+	Array.isArray(payload)
+		? payload.reduce((sum, entry) => sum + entry.length, 0)
+		: payload.length;
 
 const toStreamChunk = (value: unknown): string => {
 	if (typeof value === "string") {
@@ -357,6 +363,10 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			items: result.length,
 			tokens: tokenEstimate,
 		});
+		recordTranslationStats({
+			traditionalRequests: 1,
+			chars: payloadChars(texts),
+		});
 		return { result, tokens: tokenEstimate };
 	};
 
@@ -419,7 +429,12 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		const outputs: unknown[] = [];
 		promptCtx.output = outputs;
 		const conversation = initializeConversation(prompt, promptCtx);
-		let totalTokens = 0;
+		const usage = {
+			promptTokens: 0,
+			completionTokens: 0,
+			totalTokens: 0,
+			cachedTokens: 0,
+		};
 		let reasoning: string | undefined;
 		let stepIndex = 0;
 		for (const step of prompt.steps) {
@@ -448,8 +463,11 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					? (step.output.schema as JSONSchema)
 					: undefined;
 				const response = await client.chat(request, schema, signal);
-				totalTokens +=
+				usage.promptTokens += response.usage?.promptTokens ?? 0;
+				usage.completionTokens += response.usage?.completionTokens ?? 0;
+				usage.totalTokens +=
 					response.usage?.totalTokens ?? response.usage?.promptTokens ?? 0;
+				usage.cachedTokens += response.usage?.cachedTokens ?? 0;
 				reasoning = appendReasoningContent(reasoning, response.reasoning);
 				const output = normalizeLLMStepOutput(step, response.output);
 				outputs.push(output);
@@ -481,9 +499,17 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				throw convertFromLLMError(error);
 			}
 		}
+		recordTranslationStats({
+			llmRequests: 1,
+			promptTokens: usage.promptTokens,
+			completionTokens: usage.completionTokens,
+			totalTokens: usage.totalTokens,
+			cachedTokens: usage.cachedTokens,
+			chars: payloadChars(textPayload),
+		});
 		return {
 			result: outputs.at(-1),
-			tokens: totalTokens,
+			tokens: usage.totalTokens,
 			reasoning,
 		};
 	};
@@ -511,6 +537,12 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			const outputs: unknown[] = [];
 			promptCtx.output = outputs;
 			const conversation = initializeConversation(prompt, promptCtx);
+			const usage = {
+				promptTokens: 0,
+				completionTokens: 0,
+				totalTokens: 0,
+				cachedTokens: 0,
+			};
 			const lastIndex = prompt.steps.length - 1;
 			for (let index = 0; index < lastIndex; index++) {
 				const step = prompt.steps[index];
@@ -538,6 +570,11 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						? (step.output.schema as JSONSchema)
 						: undefined;
 					const response = await client.chat(request, schema, signal);
+					usage.promptTokens += response.usage?.promptTokens ?? 0;
+					usage.completionTokens += response.usage?.completionTokens ?? 0;
+					usage.totalTokens +=
+						response.usage?.totalTokens ?? response.usage?.promptTokens ?? 0;
+					usage.cachedTokens += response.usage?.cachedTokens ?? 0;
 					const output = normalizeLLMStepOutput(step, response.output);
 					outputs.push(output);
 					conversation.push({
@@ -609,6 +646,22 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 									stream: true,
 									tokens: next.value?.usage?.completionTokens ?? 0,
 									reasoningChars: next.value?.reasoning?.length ?? 0,
+								});
+								usage.promptTokens += next.value?.usage?.promptTokens ?? 0;
+								usage.completionTokens +=
+									next.value?.usage?.completionTokens ?? 0;
+								usage.totalTokens +=
+									next.value?.usage?.totalTokens ??
+									next.value?.usage?.promptTokens ??
+									0;
+								usage.cachedTokens += next.value?.usage?.cachedTokens ?? 0;
+								recordTranslationStats({
+									llmRequests: 1,
+									promptTokens: usage.promptTokens,
+									completionTokens: usage.completionTokens,
+									totalTokens: usage.totalTokens,
+									cachedTokens: usage.cachedTokens,
+									chars: payloadChars(textPayload),
 								});
 								resolveCompletion(next.value?.usage?.completionTokens ?? 0);
 								return;
@@ -775,6 +828,10 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						type: "thin",
 						entries: cachedValue.length,
 					});
+					recordTranslationStats({
+						cacheHits: 1,
+						chars: payloadChars(payload),
+					});
 					return {
 						value: createTranslationResponse(payload, cachedValue, promptId),
 						completionTokens: 0,
@@ -789,6 +846,10 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					modelId,
 					promptId,
 					type: "full",
+				});
+				recordTranslationStats({
+					cacheHits: 1,
+					chars: payloadChars(payload),
 				});
 				return {
 					value: createTranslationResponse(payload, cached.output, promptId, {
@@ -998,6 +1059,10 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						debugLog("stream/cache-hit", {
 							modelId,
 							promptId,
+						});
+						recordTranslationStats({
+							cacheHits: 1,
+							chars: payloadChars(payload),
 						});
 						yield {
 							content:

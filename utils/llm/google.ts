@@ -137,6 +137,7 @@ export function createGoogleClient(config: ClientConfig): LLMClient {
 							completionTokens:
 								response.usageMetadata.candidatesTokenCount || 0,
 							totalTokens: response.usageMetadata.totalTokenCount || 0,
+							cachedTokens: response.usageMetadata.cachedContentTokenCount ?? 0,
 						},
 					}),
 					providerResponse: response,
@@ -183,6 +184,7 @@ export function createGoogleClient(config: ClientConfig): LLMClient {
 					promptTokens: 0,
 					completionTokens: 0,
 					totalTokens: 0,
+					cachedTokens: 0,
 				};
 
 				for await (const chunk of stream) {
@@ -204,6 +206,7 @@ export function createGoogleClient(config: ClientConfig): LLMClient {
 							promptTokens: chunk.usageMetadata.promptTokenCount || 0,
 							completionTokens: chunk.usageMetadata.candidatesTokenCount || 0,
 							totalTokens: chunk.usageMetadata.totalTokenCount || 0,
+							cachedTokens: chunk.usageMetadata.cachedContentTokenCount ?? 0,
 						};
 					}
 				}

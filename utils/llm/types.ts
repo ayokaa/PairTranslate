@@ -34,6 +34,8 @@ export interface EndResponse {
 		promptTokens: number;
 		completionTokens: number;
 		totalTokens: number;
+		/** Input tokens served from the provider-side prompt cache, if reported. */
+		cachedTokens?: number;
 	};
 	/** Optional reasoning or thinking traces returned by the provider. */
 	reasoning?: string;

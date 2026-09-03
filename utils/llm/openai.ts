@@ -141,6 +141,8 @@ export function createOpenAIClient(config: ClientConfig): LLMClient {
 							promptTokens: response.usage.prompt_tokens,
 							completionTokens: response.usage.completion_tokens,
 							totalTokens: response.usage.total_tokens,
+							cachedTokens:
+								response.usage.prompt_tokens_details?.cached_tokens ?? 0,
 						},
 					}),
 					providerResponse: response,
@@ -208,6 +210,8 @@ export function createOpenAIClient(config: ClientConfig): LLMClient {
 								promptTokens: chunk.usage.prompt_tokens,
 								completionTokens: chunk.usage.completion_tokens,
 								totalTokens: chunk.usage.total_tokens,
+								cachedTokens:
+									chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
 							},
 						};
 					}

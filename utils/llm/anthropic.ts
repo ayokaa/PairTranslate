@@ -134,6 +134,7 @@ export function createAnthropicClient(config: ClientConfig): LLMClient {
 						completionTokens: response.usage.output_tokens,
 						totalTokens:
 							response.usage.input_tokens + response.usage.output_tokens,
+						cachedTokens: response.usage.cache_read_input_tokens ?? 0,
 					},
 					providerResponse: response,
 				};
@@ -183,6 +184,7 @@ export function createAnthropicClient(config: ClientConfig): LLMClient {
 					promptTokens: 0,
 					completionTokens: 0,
 					totalTokens: 0,
+					cachedTokens: 0,
 				};
 
 				for await (const chunk of responseStream) {
@@ -197,6 +199,8 @@ export function createAnthropicClient(config: ClientConfig): LLMClient {
 							break;
 						case "message_start":
 							usage.promptTokens = chunk.message.usage.input_tokens;
+							usage.cachedTokens =
+								chunk.message.usage.cache_read_input_tokens ?? 0;
 							break;
 						case "message_delta":
 							usage.completionTokens = chunk.usage.output_tokens;
