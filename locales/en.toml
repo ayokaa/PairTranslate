@@ -243,6 +243,8 @@ selectionTranslateHintSuffix = "+ mouse click/drag to translate"
 title = "Summary Settings"
 summaryModel = "Summary Model"
 summaryModelDesc = "Model used to generate page summaries"
+pageContextModel = "Page Context Model"
+pageContextModelDesc = "Model used to describe the page topic and domain in the target language. The description is shared with every translation batch as context. Leave empty to disable."
 summaryDefaultPinned = "Pin summary window by default"
 summaryDefaultPinnedDesc = "Keep the summary window open when clicking outside of it"
 summaryGeometryMaxEntries = "Max sites to remember"
@@ -546,6 +548,7 @@ inputTranslate = "Input Translate"
 explain = "Explain"
 dictionaryTranslate = "Dictionary Translate"
 summary = "Summary"
+pageContext = "Page Context"
 
 # Prompt Studio
 

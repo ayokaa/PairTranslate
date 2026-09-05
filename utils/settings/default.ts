@@ -8,6 +8,7 @@ import {
 	EXPLAIN,
 	EXPLAIN_SCHEMA,
 	INPUT,
+	PAGE_CONTEXT,
 	SUMMARY,
 	UNARY,
 } from "~/utils/prompt";
@@ -202,6 +203,18 @@ export function generatePromptSettings(): s.PromptsSettings {
 			steps: [
 				{
 					message: SUMMARY().user,
+					output: "string",
+				},
+			],
+		},
+		[PROMPT_ID.pageContext]: {
+			name: t("prompts.defaultNames.pageContext"),
+			systemPrompt: PAGE_CONTEXT().system,
+			input: "string",
+			output: "string",
+			steps: [
+				{
+					message: PAGE_CONTEXT().user,
 					output: "string",
 				},
 			],

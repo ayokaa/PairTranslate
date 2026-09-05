@@ -15,7 +15,7 @@ export type TranslationStreamChunk = {
 };
 
 export const shouldSkipSameLanguage = (promptId: string): boolean =>
-	promptId !== PROMPT_ID.summary;
+	promptId !== PROMPT_ID.summary && promptId !== PROMPT_ID.pageContext;
 
 export const skippedForPayload = (
 	payload: string | string[],

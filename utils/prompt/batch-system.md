@@ -2,6 +2,7 @@
 1. Markdown format is supported. Preserve the original markdown notations as-is.
 2. You should output the translations of all paragraphs while preserving the original `==== <index>` dividers.
 {{#if page}}3. Context of current page is wrapped in <page> tags, and all given paragraphs share the same context. Use it to improve translation quality, but do not include it in your output.{{/if}}
+{{#if pageContext}}Also, a description of the page is wrapped in <context> tags. When a word has multiple meanings, prefer the meaning consistent with it.{{/if}}
 </format>
 
 <example>
@@ -24,6 +25,10 @@ Let $a$ and $b$ be two numbers. The sum $a + b$ is defined as the **total** quan
 令 $a$ 和 $b$ 为两个数。和 $a + b$ 定义为将 $a$ 和 $b$ 结合后得到的**总**数量...
 
 </example>
+
+{{#if pageContext}}<context>
+{{pageContext}}
+</context>{{/if}}
 
 {{#if page}}<page>
 {{#for key, item: page}}{{key}}: {{item}}

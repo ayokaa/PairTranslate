@@ -21,6 +21,10 @@ export const computeCacheKey = async (
 		str += ctx.page.domain;
 	}
 
+	if (ctx.pageContext) {
+		str += `${D}pageContext:${ctx.pageContext}`;
+	}
+
 	if (srcLang) str += `${D}src:${srcLang}`;
 	if (dstLang) str += `${D}dst:${dstLang}`;
 

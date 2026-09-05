@@ -246,6 +246,8 @@ summaryGeometryMaxEntries = "Maximal zu merkende Seiten"
 summaryGeometryMaxEntriesDesc = "Maximale Anzahl von Website-Geometrien, die gespeichert werden, bevor die älteste entfernt wird"
 summaryModel = "Zusammenfassungsmodell"
 summaryModelDesc = "Modell zur Generierung von Seitenzusammenfassungen"
+pageContextModel = "Seitenkontext-Modell"
+pageContextModelDesc = "Modell, das Thema und Domäne der Seite in der Zielsprache beschreibt. Die Beschreibung wird als Kontext mit jedem Übersetzungsbatch geteilt. Leer lassen zum Deaktivieren."
 title = "Zusammenfassungseinstellungen"
 
 [settings.prompt]
@@ -537,6 +539,7 @@ inputTranslate = "Eingabe-Übersetzung"
 explain = "Erklären"
 dictionaryTranslate = "Wörterbuch-Übersetzung"
 summary = "Summary"
+pageContext = "Seitenkontext"
 
 [summary]
 addToExclusion = "Exclude from summary"

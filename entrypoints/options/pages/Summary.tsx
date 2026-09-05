@@ -88,6 +88,17 @@ export default (props: { navId: string }) => {
 						setLocalSettings("summaryModel", value);
 					}}
 				/>
+				<OptionSelect
+					label={t("settings.summary.pageContextModel")}
+					helperText={t("settings.summary.pageContextModelDesc")}
+					options={lLMOptions()}
+					value={localSettings.pageContextModel || ""}
+					error={getFieldError(["pageContextModel"])?.message}
+					onChange={(e) => {
+						const value = e.target.value === "" ? undefined : e.target.value;
+						setLocalSettings("pageContextModel", value);
+					}}
+				/>
 				<SettingsToggle
 					label={t("settings.summary.summaryDefaultPinned")}
 					helperText={t("settings.summary.summaryDefaultPinnedDesc")}

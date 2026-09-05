@@ -1,3 +1,4 @@
+import { PROMPT_ID } from "../constants";
 import type {
 	LLMModelSettings,
 	ServiceSettings,
@@ -147,6 +148,11 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 		if (version === 9) {
 			working = migrateV9ToV10(working as LegacySettingsV9);
 			version = 10;
+			continue;
+		}
+		if (version === 10) {
+			working = migrateV10ToV11(working as SettingsSchema);
+			version = 11;
 			continue;
 		}
 
@@ -393,6 +399,23 @@ function migrateV9ToV10(oldSettings: LegacySettingsV9): SettingsSchema {
 		services[id] = { ...rest, models };
 	}
 	return { ...oldSettings, services, __v: 10 };
+}
+
+function migrateV10ToV11(oldSettings: SettingsSchema): SettingsSchema {
+	const prompts = generatePromptSettings();
+	return {
+		...oldSettings,
+		// Reset the prompts that gain the optional <context> block, following
+		// the migrateV2ToV3 precedent. Other user-customized prompts are kept.
+		prompts: {
+			...oldSettings.prompts,
+			[PROMPT_ID.batchTranslate]: prompts[PROMPT_ID.batchTranslate],
+			[PROMPT_ID.translate]: prompts[PROMPT_ID.translate],
+			[PROMPT_ID.explain]: prompts[PROMPT_ID.explain],
+			[PROMPT_ID.pageContext]: prompts[PROMPT_ID.pageContext],
+		},
+		__v: 11,
+	};
 }
 
 function getSettingsVersion(raw: unknown): number {

@@ -25,6 +25,7 @@ import { MdStyled } from "~/components/MD";
 import { ScrollableReasoning } from "~/components/Reasoning";
 import { createAnimatedAppearance } from "~/hooks/animation";
 import { createDictionary } from "~/hooks/dictionary";
+import { getCachedPageContext } from "~/hooks/page-context";
 import { useSettings } from "~/hooks/settings";
 import { createTranslation } from "~/hooks/translation";
 import { cn } from "~/utils/cn";
@@ -82,6 +83,12 @@ const Explain = (props: { textContext: TextContext }) => {
 		ctx: () => ({
 			surr: props.textContext.surr,
 			page: getPageContext(),
+			pageContext: getCachedPageContext(
+				window.location.href,
+				settings.summary?.pageContextModel,
+				settings.translate.sourceLang,
+				settings.translate.targetLang,
+			),
 		}),
 		stream: true,
 	});
@@ -219,6 +226,12 @@ const Translate = (props: { textContext: TextContext }) => {
 		ctx: () => ({
 			surr: props.textContext.surr,
 			page: getPageContext(),
+			pageContext: getCachedPageContext(
+				window.location.href,
+				settings.summary?.pageContextModel,
+				settings.translate.sourceLang,
+				settings.translate.targetLang,
+			),
 		}),
 		stream: true,
 	});

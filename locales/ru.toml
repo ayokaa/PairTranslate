@@ -246,6 +246,8 @@ summaryGeometryMaxEntries = "Максимум запоминаемых сайт�
 summaryGeometryMaxEntriesDesc = "Максимальное количество сохраняемых геометрий сайтов перед удалением самой старой"
 summaryModel = "Модель резюме"
 summaryModelDesc = "Модель, используемая для генерации резюме страниц"
+pageContextModel = "Модель контекста страницы"
+pageContextModelDesc = "Модель для описания темы и области страницы на целевом языке. Описание передаётся как контекст каждому пакету перевода. Оставьте пустым, чтобы отключить."
 title = "Настройки резюме"
 
 [settings.prompt]
@@ -537,6 +539,7 @@ inputTranslate = "Перевод Входных Данных"
 explain = "Объяснить"
 dictionaryTranslate = "Словарный Перевод"
 summary = "Summary"
+pageContext = "Контекст страницы"
 
 [summary]
 addToExclusion = "Exclude from summary"

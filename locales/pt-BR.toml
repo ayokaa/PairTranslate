@@ -246,6 +246,8 @@ summaryGeometryMaxEntries = "Máximo de sites para lembrar"
 summaryGeometryMaxEntriesDesc = "Número máximo de geometrias de sites a manter antes de remover a mais antiga"
 summaryModel = "Modelo de resumo"
 summaryModelDesc = "Modelo usado para gerar resumos de página"
+pageContextModel = "Modelo de contexto da página"
+pageContextModelDesc = "Modelo usado para descrever o tema e o domínio da página no idioma de destino. A descrição é compartilhada como contexto com cada lote de tradução. Deixe vazio para desativar."
 title = "Configurações de resumo"
 
 [settings.prompt]
@@ -537,6 +539,7 @@ inputTranslate = "Tradução de entrada"
 explain = "Explicar"
 dictionaryTranslate = "Tradução do dicionário"
 summary = "Summary"
+pageContext = "Contexto da página"
 
 [summary]
 addToExclusion = "Exclude from summary"

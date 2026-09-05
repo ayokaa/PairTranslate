@@ -7,13 +7,18 @@ mock.module("~/utils/i18n", () => ({
 }));
 
 const mockBrowser = {
-	i18n: { getMessage: (key: string) => key },
+	i18n: {
+		getMessage: (key: string) => key,
+		getUILanguage: () => "en",
+	},
 	runtime: { getBrowserInfo: async () => ({}) },
 };
 mock.module("#imports", () => ({ browser: mockBrowser }));
 mock.module("@wxt-dev/browser", () => ({ browser: mockBrowser }));
 
 const { migrateSettings } = await import("./migration");
+const { generateDefaultSettings } = await import("./default");
+const { PROMPT_ID } = await import("~/utils/constants");
 
 describe("migrateSettings", () => {
 	test("rejects null/undefined payload", () => {
@@ -463,5 +468,42 @@ describe("migrateSettings", () => {
 		expect(result.summary.summaryModel).toBe(
 			"11111111-1111-4111-8111-111111111111",
 		);
+	});
+
+	test("migrates from v10 to v11 adding the page-context prompt", () => {
+		const defaults = generateDefaultSettings();
+		const v10Settings = {
+			...defaults,
+			__v: 10,
+			prompts: {
+				...defaults.prompts,
+				[PROMPT_ID.summary]: {
+					...defaults.prompts[PROMPT_ID.summary],
+					systemPrompt: "custom summary prompt",
+				},
+			},
+		};
+		delete (v10Settings.prompts as Record<string, unknown>)[
+			PROMPT_ID.pageContext
+		];
+
+		const result = migrateSettings(v10Settings);
+		expect(result.__v).toBe(SETTINGS_VERSION);
+		expect(result.prompts[PROMPT_ID.pageContext]).toEqual(
+			defaults.prompts[PROMPT_ID.pageContext],
+		);
+		expect(result.prompts[PROMPT_ID.batchTranslate].systemPrompt).toContain(
+			"<context>",
+		);
+		expect(result.prompts[PROMPT_ID.translate].systemPrompt).toContain(
+			"<context>",
+		);
+		expect(result.prompts[PROMPT_ID.explain].systemPrompt).toContain(
+			"<context>",
+		);
+		expect(result.prompts[PROMPT_ID.summary].systemPrompt).toBe(
+			"custom summary prompt",
+		);
+		expect(result.summary.pageContextModel).toBeUndefined();
 	});
 });

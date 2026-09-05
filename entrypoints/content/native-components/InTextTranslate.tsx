@@ -10,6 +10,7 @@ import {
 	onCleanup,
 	Show,
 } from "solid-js";
+import { usePageContext } from "@/hooks/page-context";
 import { createIdleDebounce } from "@/hooks/throttle";
 import { Md } from "~/components/MD/Md";
 import { TranslateNodePortal } from "~/components/MPortal";
@@ -175,13 +176,23 @@ const BatchRender = (props: BatchRenderProps) => {
 	const members = props.sections;
 	const active = createMemo(() => new Set(props.sections));
 	const texts = createMemo(() => members.map(([, text]) => text));
+	const srcLang = () => websiteRule.sourceLang || settings.translate.sourceLang;
+	const dstLang = () => websiteRule.targetLang || settings.translate.targetLang;
+	const pageContext = usePageContext({
+		modelId: () => settings.summary?.pageContextModel,
+		srcLang,
+		dstLang,
+		active: () => members.length > 0,
+	});
 	const [getter, retry] = createBatchTranslation(texts, {
 		promptId: PROMPT_ID.batchTranslate,
 		modelId: () => settings.translate.inTextTranslateModel,
-		srcLang: () => websiteRule.sourceLang || settings.translate.sourceLang,
-		dstLang: () => websiteRule.targetLang || settings.translate.targetLang,
+		srcLang,
+		dstLang,
+		enabled: () => pageContext.ready(),
 		ctx: () => ({
 			page: getPageContext(),
+			pageContext: pageContext.text(),
 		}),
 	});
 

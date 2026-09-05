@@ -12,6 +12,7 @@ You are a professional translator. You will be given some background information
 <instructions>
 1. Every input will contain a <target> tag indicating the specific word/phase to be explained. Make sure to focus your explanation on this target.
 {{#if page}}2. The context of current page is wrapped in <page> tags. You can use it to extract relevant information and provide a more comprehensive explanation.{{/if}}
+{{#if pageContext}}Also, a description of the page is wrapped in <context> tags. When a word has multiple meanings, prefer the meaning consistent with it.{{/if}}
 </instructions>
 
 <example>
@@ -33,6 +34,10 @@ The concept of <target>superposition</target> is fundamental in quantum mechanic
     ]
 }
 </example>
+
+{{#if pageContext}}<context>
+{{pageContext}}
+</context>{{/if}}
 
 {{#if page}}<page>
 {{#for key, item: page}}{{key}}: {{item}}{{/for}}

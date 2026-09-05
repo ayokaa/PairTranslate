@@ -246,6 +246,8 @@ summaryGeometryMaxEntries = "最多記憶站點數"
 summaryGeometryMaxEntriesDesc = "達到上限後移除最舊的站點位置記錄"
 summaryModel = "摘要模型"
 summaryModelDesc = "用於生成頁面摘要的模型"
+pageContextModel = "頁面語境模型"
+pageContextModelDesc = "用於以目標語言描述頁面主題和領域的模型。該描述將作為上下文共享給每一批翻譯。留空則停用。"
 title = "摘要設定"
 
 [settings.prompt]
@@ -537,6 +539,7 @@ inputTranslate = "輸入框翻譯"
 explain = "解釋"
 dictionaryTranslate = "詞典釋義翻譯"
 summary = "Summary"
+pageContext = "頁面語境"
 
 [summary]
 addToExclusion = "Exclude from summary"

@@ -12,6 +12,10 @@ mock.module("~/utils/language-detection", () => ({
 mock.module("~/hooks/progress-indicator", () => ({
 	mightUseProgressIndicator: () => undefined,
 }));
+mock.module("~/hooks/page-context", () => ({
+	usePageContext: () => ({ text: () => undefined, ready: () => true }),
+	getCachedPageContext: () => undefined,
+}));
 
 const settings = {
 	translate: {

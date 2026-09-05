@@ -132,6 +132,7 @@ export type TranslateSettings = z.infer<typeof TranslateSettings>;
 export const SummarySettings = z
 	.object({
 		summaryModel: z.uuid().optional(),
+		pageContextModel: z.uuid().optional(),
 		summaryDefaultPinned: z.boolean().default(false),
 		summaryGeometryMaxEntries: z.number().min(1).default(1000),
 	})

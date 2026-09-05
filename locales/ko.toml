@@ -246,6 +246,8 @@ summaryGeometryMaxEntries = "기억할 최대 사이트 수"
 summaryGeometryMaxEntriesDesc = "오래된 항목을 제거하기 전에 유지할 최대 웹사이트 위치 수"
 summaryModel = "요약 모델"
 summaryModelDesc = "페이지 요약을 생성하는 데 사용되는 모델"
+pageContextModel = "페이지 컨텍스트 모델"
+pageContextModelDesc = "대상 언어로 페이지 주제와 분야를 설명하는 데 사용되는 모델. 설명은 모든 번역 배치와 컨텍스트로 공유된다. 비워 두면 비활성화된다."
 title = "요약 설정"
 
 [settings.prompt]
@@ -537,6 +539,7 @@ inputTranslate = "입력 번역"
 explain = "설명"
 dictionaryTranslate = "사전 번역"
 summary = "Summary"
+pageContext = "페이지 컨텍스트"
 
 [summary]
 addToExclusion = "Exclude from summary"

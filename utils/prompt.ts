@@ -8,6 +8,8 @@ import explain from "./prompt/explain-system.md?raw";
 import explainUser from "./prompt/explain-user.md?raw";
 import input from "./prompt/input-system.md?raw";
 import inputUser from "./prompt/input-user.md?raw";
+import pageContextSystem from "./prompt/page-context-system.md?raw";
+import pageContextUser from "./prompt/page-context-user.md?raw";
 import prefix from "./prompt/prefix-system.md?raw";
 import summarySystem from "./prompt/summary-system.md?raw";
 import summaryUser from "./prompt/summary-user.md?raw";
@@ -34,6 +36,10 @@ export const DICTIONARY = () => ({
 export const SUMMARY = () => ({
 	system: summarySystem,
 	user: summaryUser,
+});
+export const PAGE_CONTEXT = () => ({
+	system: pageContextSystem,
+	user: pageContextUser,
 });
 
 const ExplainOutput = () =>

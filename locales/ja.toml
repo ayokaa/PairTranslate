@@ -246,6 +246,8 @@ summaryGeometryMaxEntries = "記憶する最大サイト数"
 summaryGeometryMaxEntriesDesc = "古いものから削除する前に保持するWebサイトジオメトリの最大数"
 summaryModel = "要約モデル"
 summaryModelDesc = "ページ要約を生成するために使用するモデル"
+pageContextModel = "ページコンテキストモデル"
+pageContextModelDesc = "対象言語でページのトピックと分野を記述するために使用するモデル。記述はすべての翻訳バッチとコンテキストとして共有される。空欄で無効化。"
 title = "要約設定"
 
 [settings.prompt]
@@ -537,6 +539,7 @@ inputTranslate = "入力翻訳"
 explain = "説明"
 dictionaryTranslate = "辞書翻訳"
 summary = "Summary"
+pageContext = "ページコンテキスト"
 
 [summary]
 addToExclusion = "Exclude from summary"

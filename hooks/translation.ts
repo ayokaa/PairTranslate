@@ -109,6 +109,7 @@ export function createBatchTranslation(
 		srcLang: () => string | undefined;
 		dstLang: () => string;
 		thinCache?: boolean;
+		enabled?: () => boolean;
 		ctx?: () => Record<string, unknown>;
 	},
 ): BatchReturn {
@@ -303,6 +304,8 @@ export function createBatchTranslation(
 
 	createEffect(() => {
 		const text_ = text();
+		const enabled = options.enabled?.() ?? true;
+		if (!enabled) return;
 		translate(text_);
 		onCleanup(clearAll);
 	});

@@ -13,6 +13,7 @@ export interface TextContext {
 
 export interface TranslateContext extends Record<string, unknown> {
 	page?: PageContext;
+	pageContext?: string;
 	surr?: {
 		before?: string;
 		after?: string;
