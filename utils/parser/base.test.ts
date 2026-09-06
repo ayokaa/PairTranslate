@@ -53,6 +53,35 @@ describe("domListener", () => {
 		expect(markdown).toContain("I wrote about mistakes");
 	});
 
+	test("does not promote containers that only wrap excluded descendants", async () => {
+		// Hacker News comment chrome: <div style> wraps <span class="comhead">
+		// (user, age, nav links). Promoting the wrapper would swallow the
+		// excluded comhead into a section and translate the nav line.
+		const root = document.createElement("div");
+		const wrapper = document.createElement("div");
+		const comhead = document.createElement("span");
+		comhead.className = "comhead";
+		const user = document.createElement("a");
+		user.textContent = "lostlogin";
+		comhead.append(
+			user,
+			document.createTextNode(" 1 day ago | parent | next "),
+		);
+		wrapper.append(comhead);
+		const comment = document.createElement("div");
+		comment.className = "commtext";
+		comment.textContent = "Real comment text.";
+		root.append(wrapper, comment);
+		document.body.append(root);
+
+		const sections = await collectSections(root, 1, {
+			excludedSelectors: [".comhead"],
+		});
+
+		expect(sections).toHaveLength(1);
+		expect(getMarkdownFromSection(sections[0])).toBe("Real comment text.");
+	});
+
 	test("keeps word-level inline spans in one paragraph", async () => {
 		const paragraph = document.createElement("p");
 		for (const [index, word] of ["Who", "can", "punch", "reality"].entries()) {

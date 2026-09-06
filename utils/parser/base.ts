@@ -1,6 +1,8 @@
 import { hasMeaningfulChars } from "~/utils/blank";
 import {
 	BLOCK_TAGS,
+	DATA_CONTAINER,
+	DATA_TRANSLATED,
 	EXCLUDED_SELECTORS,
 	INTERACTIVE_SELECTORS,
 	TEXT_TAGS,
@@ -74,6 +76,26 @@ const hasBlockDescendant = (el: Element, blockTags: Set<string>): boolean => {
 			}
 		}
 		node = node.nextSibling;
+	}
+	return false;
+};
+
+// The extension's own injected translation UI. It carries these attributes and
+// is itself covered by the excluded selector, but it must not count when
+// deciding promotion — otherwise re-scanning an already-translated page would
+// suddenly refuse to promote and shatter the paragraph into fragments.
+const OWN_UI_SELECTOR = `[${DATA_CONTAINER}], [${DATA_TRANSLATED}]`;
+
+// Promotion short-circuits the tree walk: a promoted container's children are
+// taken as section content directly, so descendants the walker would have
+// rejected (site chrome like HN's .comhead) would leak into the section.
+// Refuse promotion for containers holding excluded descendants.
+const hasExcludedDescendant = (
+	el: Element,
+	excludedSelector: string,
+): boolean => {
+	for (const descendant of el.querySelectorAll(excludedSelector)) {
+		if (!descendant.closest(OWN_UI_SELECTOR)) return true;
 	}
 	return false;
 };
@@ -177,6 +199,7 @@ export async function* elementWalker(state: State): SectionGenerator {
 		}
 		if (!state.promoteTextTags.has(el.tagName)) return false;
 		if (hasBlockDescendant(el, state.blockTags)) return false;
+		if (hasExcludedDescendant(el, state.excludedSelector)) return false;
 		if (NOT_EMPTY_REGEX.test(el.textContent || "")) return true;
 
 		return false;
