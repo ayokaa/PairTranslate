@@ -177,8 +177,16 @@ const tagHandlers: Record<string, ElementHandler> = {
 
 	// --- Media & Links ---
 	a: function* (el) {
-		const href = el.getAttribute("href") || "#";
 		const text = consumeAndTrim(el);
+		const href = el.getAttribute("href");
+		// Same-page fragment links (footnote refs, heading anchors, TOC entries,
+		// backlinks) are navigation chrome: the fragment is not translatable
+		// content, and a hash link rendered into the translation would navigate
+		// the reader's page. Emit only the text.
+		if (!href || href.startsWith("#")) {
+			yield text;
+			return;
+		}
 		yield `[${text}](${href})`;
 	},
 	img: function* () {

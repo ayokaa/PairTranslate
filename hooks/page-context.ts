@@ -21,12 +21,21 @@ const inflight = new Map<string, Promise<string | undefined>>();
 const failed = new Set<string>();
 const [cacheVersion, setCacheVersion] = createSignal(0);
 
+// Same-page fragment navigation (footnote refs, heading anchors, TOC links)
+// changes only location.hash; the page content — and thus its context — is
+// identical. Keying the cache by the bare URL prevents a hash click from
+// invalidating the context and re-requesting every in-text translation.
+const stripFragment = (url: string): string => {
+	const i = url.indexOf("#");
+	return i === -1 ? url : url.slice(0, i);
+};
+
 const cacheKey = (
 	url: string,
 	modelId: string,
 	srcLang: string,
 	dstLang: string,
-) => `url:${url} model:${modelId} src:${srcLang} dst:${dstLang}`;
+) => `url:${stripFragment(url)} model:${modelId} src:${srcLang} dst:${dstLang}`;
 
 const truncateToLength = (content: string, maxLength: number): string => {
 	if (content.length <= maxLength) return content;
@@ -114,9 +123,9 @@ export function usePageContext(options: {
 
 	createEffect(() => {
 		if (!options.active()) return;
-		setUrl(window.location.href);
+		setUrl(stripFragment(window.location.href));
 		const timer = window.setInterval(() => {
-			const current = window.location.href;
+			const current = stripFragment(window.location.href);
 			if (current !== url()) setUrl(current);
 		}, 2000);
 		onCleanup(() => window.clearInterval(timer));
