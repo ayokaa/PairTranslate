@@ -27,6 +27,32 @@ const collectSections = async (
 };
 
 describe("domListener", () => {
+	test("promotes fully styled paragraphs by default", async () => {
+		// A paragraph whose text is entirely wrapped in inline elements
+		// (italics, links, highlights) has no direct text node of its own.
+		// It must stay one section instead of shattering into per-element
+		// fragments that translators would merge back together.
+		const paragraph = document.createElement("p");
+		const em1 = document.createElement("em");
+		em1.textContent = " [ In ";
+		const link = document.createElement("a");
+		link.href = "https://example.com/iteration/";
+		const em2 = document.createElement("em");
+		em2.textContent = "Iteration";
+		link.append(em2);
+		const em3 = document.createElement("em");
+		em3.textContent = ", I wrote about mistakes. ]";
+		paragraph.append(em1, link, em3);
+		document.body.append(paragraph);
+
+		const sections = await collectSections(paragraph, 1);
+
+		expect(sections).toHaveLength(1);
+		const markdown = getMarkdownFromSection(sections[0]);
+		expect(markdown).toContain("Iteration");
+		expect(markdown).toContain("I wrote about mistakes");
+	});
+
 	test("keeps word-level inline spans in one paragraph", async () => {
 		const paragraph = document.createElement("p");
 		for (const [index, word] of ["Who", "can", "punch", "reality"].entries()) {

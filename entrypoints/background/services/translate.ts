@@ -22,12 +22,17 @@ import type {
 } from "~/utils/llm";
 import { createLLMClient } from "~/utils/llm";
 import { appendReasoningContent } from "~/utils/llm/reasoning";
-import type { PromptStepOutput } from "~/utils/prompt/delimiter";
+import {
+	alignSegments,
+	type DetailedSegment,
+	type PromptStepOutput,
+} from "~/utils/prompt/delimiter";
 import {
 	type CompiledPrompt,
 	compilePrompt,
 	initializeConversation,
 	normalizeLLMStepOutput,
+	normalizeLLMStepOutputDetailed,
 	normalizePromptInput,
 	normalizeStreamAggregate,
 	snapshotConversation,
@@ -418,7 +423,12 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		srcLang: string,
 		dstLang: string,
 		signal?: AbortSignal,
-	): Promise<{ result: unknown; tokens: number; reasoning?: string }> => {
+	): Promise<{
+		result: unknown;
+		tokens: number;
+		reasoning?: string;
+		outputIndices?: (number | undefined)[];
+	}> => {
 		const { serviceId, service, model } = target;
 		const client = ensureLLMClient(serviceId, service);
 		const promptCtx = buildContextWithTranslateParams(
@@ -436,6 +446,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			cachedTokens: 0,
 		};
 		let reasoning: string | undefined;
+		let outputIndices: (number | undefined)[] | undefined;
 		let stepIndex = 0;
 		for (const step of prompt.steps) {
 			stepIndex += 1;
@@ -469,7 +480,11 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					response.usage?.totalTokens ?? response.usage?.promptTokens ?? 0;
 				usage.cachedTokens += response.usage?.cachedTokens ?? 0;
 				reasoning = appendReasoningContent(reasoning, response.reasoning);
-				const output = normalizeLLMStepOutput(step, response.output);
+				const detailed = normalizeLLMStepOutputDetailed(step, response.output);
+				const output = detailed
+					? detailed.texts
+					: normalizeLLMStepOutput(step, response.output);
+				outputIndices = detailed?.indices;
 				outputs.push(output);
 				conversation.push({
 					role: "assistant",
@@ -511,6 +526,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			result: outputs.at(-1),
 			tokens: usage.totalTokens,
 			reasoning,
+			outputIndices,
 		};
 	};
 
@@ -873,6 +889,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		let translationResult: unknown;
 		let completionTokens = 0;
 		let reasoning: string | undefined;
+		let outputIndices: (number | undefined)[] | undefined;
 
 		if (target.kind === "traditional") {
 			const texts = toTextArray(
@@ -913,9 +930,15 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			translationResult = llmResult.result;
 			completionTokens = llmResult.tokens;
 			reasoning = llmResult.reasoning;
+			outputIndices = llmResult.outputIndices;
 		}
 
 		let finalValue = translationResult;
+		const toSegments = (
+			texts: unknown[],
+			indices?: (number | undefined)[],
+		): DetailedSegment[] =>
+			texts.map((text, i) => ({ text: String(text), index: indices?.[i] }));
 		if (thinCacheState && payloadArray) {
 			if (!Array.isArray(translationResult)) {
 				throw createTranslateError(
@@ -923,33 +946,99 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					"Thin cache requires translation results to be arrays.",
 				);
 			}
-			if (translationResult.length !== thinCacheState.missing.length) {
+			const executionItems = Array.isArray(executionPayload)
+				? executionPayload
+				: [executionPayload];
+			const expected = thinCacheState.missing.length;
+			let { values, missing } = alignSegments(
+				toSegments(translationResult, outputIndices),
+				expected,
+			);
+			if (missing.length > 0) {
+				// One recovery round: re-request only the positions that failed to
+				// align, then map the sub-batch back onto the original positions.
+				debugLog("unary/recover", {
+					modelId,
+					promptId,
+					expected,
+					received: expected - missing.length,
+				});
+				const retryItems = missing.map((pos) => executionItems[pos]);
+				let retryResult: unknown;
+				let retryIndices: (number | undefined)[] | undefined;
+				if (target.kind === "traditional") {
+					const retried = await runTraditional(
+						target.service,
+						retryItems,
+						effectiveSrcLang,
+						options.dstLang,
+						signal,
+					);
+					retryResult = retried.result;
+					completionTokens += retried.tokens;
+				} else {
+					const retried = await runLLMSteps(
+						target,
+						compiled ?? getPrompt(promptId),
+						compiled ? normalizePromptInput(compiled, retryItems) : retryItems,
+						ctx,
+						effectiveSrcLang,
+						options.dstLang,
+						signal,
+					);
+					retryResult = retried.result;
+					retryIndices = retried.outputIndices;
+					completionTokens += retried.tokens;
+					reasoning = appendReasoningContent(reasoning, retried.reasoning);
+				}
+				if (Array.isArray(retryResult)) {
+					const sub = alignSegments(
+						toSegments(retryResult, retryIndices),
+						retryItems.length,
+					);
+					sub.values.forEach((value, subPos) => {
+						if (value !== undefined) values[missing[subPos]] = value;
+					});
+					missing = missing.filter(
+						(_, subPos) => sub.values[subPos] === undefined,
+					);
+				}
+			}
+			// Cache every aligned entry, even when some positions are still
+			// missing: the next retry then only re-requests those positions
+			// instead of the whole batch.
+			await Promise.all(
+				thinCacheState.missing.map((origIndex, pos) => {
+					const value = values[pos];
+					return value === undefined
+						? Promise.resolve()
+						: setCacheEntry(thinCacheState.keys[origIndex], { output: value });
+				}),
+			);
+			if (missing.length > 0) {
 				throw createTranslateError(
 					TranslateErrorType.VALIDATION_ERROR,
-					`Expected ${thinCacheState.missing.length} translations, but got ${translationResult.length}`,
+					`Expected ${expected} translations, but got ${expected - missing.length}`,
 				);
 			}
 			const merged = thinCacheState.values.slice();
-			thinCacheState.missing.forEach((index, idx) => {
-				merged[index] = translationResult[idx];
+			thinCacheState.missing.forEach((origIndex, pos) => {
+				merged[origIndex] = values[pos] as string;
 			});
 			finalValue = merged;
-			await Promise.all(
-				thinCacheState.missing.map((index) =>
-					(async () => {
-						const value = merged[index];
-						if (value === undefined) {
-							throw createTranslateError(
-								TranslateErrorType.VALIDATION_ERROR,
-								"Thin cache entry missing expected translation result.",
-							);
-						}
-						await setCacheEntry(thinCacheState.keys[index], {
-							output: value,
-						});
-					})(),
-				),
+		} else if (
+			payloadArray &&
+			Array.isArray(translationResult) &&
+			outputIndices
+		) {
+			// No thin cache: only swap in the aligned result when every position
+			// resolved; otherwise keep the raw result and let the caller's
+			// length check report the tail as errors.
+			const aligned = alignSegments(
+				toSegments(translationResult, outputIndices),
+				payloadArray.length,
 			);
+			if (aligned.missing.length === 0) finalValue = aligned.values;
 		}
 
 		if (!supportsThinCache) {

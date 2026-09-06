@@ -31,6 +31,16 @@ const COMMON_SKIP_PATTERNS = new RegExp(
 
 const NOT_EMPTY_REGEX = /\S/;
 
+// Block-level text containers promote to a whole paragraph by default when
+// all their text is wrapped in inline elements (highlights, links, code):
+// without promotion each styled inline child would become its own fragment
+// section, and translators merge such fragments back, breaking the count
+// alignment of batch responses. Elements with block-level descendants are
+// still traversed (see hasBlockDescendant).
+const DEFAULT_PROMOTE_TEXT_TAGS = TEXT_TAGS.filter((tag) =>
+	(BLOCK_TAGS as string[]).includes(tag),
+);
+
 // Check if a node is a visible text node
 const showTextNode = (node: Node): boolean =>
 	node.nodeType === Node.TEXT_NODE &&
@@ -412,7 +422,9 @@ export function getState(options: Options = {}): State {
 			[...(options.textTags || []), ...TEXT_TAGS].map((s) => s.toUpperCase()),
 		),
 		promoteTextTags: new Set(
-			(options.promoteTextTags || []).map((s) => s.toUpperCase()),
+			[...DEFAULT_PROMOTE_TEXT_TAGS, ...(options.promoteTextTags || [])].map(
+				(s) => s.toUpperCase(),
+			),
 		),
 		blockTags: new Set(
 			[...(options.blockTags || []), ...BLOCK_TAGS].map((s) => s.toUpperCase()),

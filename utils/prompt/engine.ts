@@ -2,6 +2,8 @@ import {
 	isStringArrayOutput,
 	resolveStringArrayDelimiter,
 	splitWithDelimiter,
+	splitWithDelimiterDetailed,
+	stripOuterFence,
 } from "~/utils/prompt/delimiter";
 import {
 	type Message,
@@ -74,7 +76,30 @@ export const normalizeLLMStepOutput = (
 	if (!step.stringArrayDelimiter) {
 		return output;
 	}
-	return splitWithDelimiter(output, step.stringArrayDelimiter);
+	return splitWithDelimiter(stripOuterFence(output), step.stringArrayDelimiter);
+};
+
+/**
+ * Detailed variant of normalizeLLMStepOutput for stringArray outputs: returns
+ * the segments together with the index each delimiter carried, so callers can
+ * align translations to input positions instead of relying on bare counts.
+ * Returns undefined for outputs the plain normalizer would pass through.
+ */
+export const normalizeLLMStepOutputDetailed = (
+	step: CompiledStep,
+	output: unknown,
+): { texts: string[]; indices: (number | undefined)[] } | undefined => {
+	if (typeof output !== "string" || !step.stringArrayDelimiter) {
+		return undefined;
+	}
+	const segments = splitWithDelimiterDetailed(
+		stripOuterFence(output),
+		step.stringArrayDelimiter,
+	);
+	return {
+		texts: segments.map((segment) => segment.text),
+		indices: segments.map((segment) => segment.index),
+	};
 };
 
 export const normalizeStreamAggregate = (
@@ -84,7 +109,7 @@ export const normalizeStreamAggregate = (
 	if (!step?.stringArrayDelimiter) {
 		return value;
 	}
-	return splitWithDelimiter(value, step.stringArrayDelimiter);
+	return splitWithDelimiter(stripOuterFence(value), step.stringArrayDelimiter);
 };
 
 export type PromptPreviewStep = {
