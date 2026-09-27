@@ -95,17 +95,6 @@ resetSection = "Abschnitt zurücksetzen"
 yes = "Ja"
 no = "Nein"
 
-[popup.domainTimer]
-keepUntil = "Übersetzung aktiviert lassen bis"
-selectPlaceholder = "Dauer auswählen"
-remainingSeconds = "Endet in $1 Sek"
-remainingMinutes = "Endet in $1 Min"
-remainingHours = "Endet in $1 Std"
-untilClose = "Bis der Browser geschlossen wird"
-closeBrowser = "Browser schließen"
-afterMinutes = "In $1 Min"
-afterHours = "In $1 Std"
-
 [migrationError]
 title = "Einstellungen müssen zurückgesetzt werden"
 description = "Pair Translate konnte Ihre vorherigen Einstellungen nach einem Update nicht laden. Setzen Sie alles auf Standardwerte zurück, um fortzufahren."
@@ -302,7 +291,6 @@ deleteService = "Dienst löschen"
 noServicesConfigured = "Keine LLM-Dienste konfiguriert"
 noServicesDesc = "Fügen Sie Dienste hinzu, um die LLM-gestützte Übersetzung zu starten"
 
-
 [settings.llmModal]
 addTitle = "LLM-Dienst hinzufügen"
 editTitle = "LLM-Dienst bearbeiten"
@@ -325,7 +313,6 @@ thinkingBudget = "Denkbudget"
 thinkingBudgetDefault = "Standard"
 customService = "Benutzerdefiniert"
 extraBody = "Zusätzlicher Body"
-
 
 [settings.llmModal.thinkingBudgetOptions]
 off = "Aus"

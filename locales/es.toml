@@ -95,17 +95,6 @@ resetSection = "Restablecer sección"
 yes = "Sí"
 no = "No"
 
-[popup.domainTimer]
-keepUntil = "Mantener traducción habilitada hasta"
-selectPlaceholder = "Seleccionar duración"
-remainingSeconds = "Termina en $1 seg"
-remainingMinutes = "Termina en $1 min"
-remainingHours = "Termina en $1 hr"
-untilClose = "Hasta que cierre el navegador"
-closeBrowser = "Cierre el navegador"
-afterMinutes = "En $1 min"
-afterHours = "En $1 hr"
-
 [migrationError]
 title = "La configuración necesita ser restablecida"
 description = "Pair Translate no pudo cargar su configuración anterior después de una actualización. Restablezca todo a los valores predeterminados para continuar."
@@ -302,7 +291,6 @@ deleteService = "Eliminar Servicio"
 noServicesConfigured = "Sin Servicios LLM Configurados"
 noServicesDesc = "Añada servicios para comenzar a usar traducción potenciada por LLM"
 
-
 [settings.llmModal]
 addTitle = "Añadir Servicio LLM"
 editTitle = "Editar Servicio LLM"
@@ -325,7 +313,6 @@ thinkingBudget = "Presupuesto de razonamiento"
 thinkingBudgetDefault = "Predeterminado"
 customService = "Personalizado"
 extraBody = "Cuerpo de solicitud adicional"
-
 
 [settings.llmModal.thinkingBudgetOptions]
 off = "Desactivado"

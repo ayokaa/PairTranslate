@@ -95,17 +95,6 @@ resetSection = "섹션 초기화"
 yes = "예"
 no = "아니요"
 
-[popup.domainTimer]
-keepUntil = "번역 유지 시간"
-selectPlaceholder = "시간 선택"
-remainingSeconds = "$1초 후 종료"
-remainingMinutes = "$1분 후 종료"
-remainingHours = "$1시간 후 종료"
-untilClose = "브라우저를 닫을 때까지"
-closeBrowser = "브라우저 닫기"
-afterMinutes = "$1분 후"
-afterHours = "$1시간 후"
-
 [migrationError]
 title = "설정을 초기화해야 합니다"
 description = "업데이트 이후 이전 설정을 불러오지 못했습니다. 계속 사용하려면 기본값으로 초기화해주세요."
@@ -302,7 +291,6 @@ deleteService = "서비스 삭제"
 noServicesConfigured = "구성된 LLM 서비스가 없습니다"
 noServicesDesc = "LLM 기반 번역을 사용하려면 서비스를 추가하세요"
 
-
 [settings.llmModal]
 addTitle = "LLM 서비스 추가"
 editTitle = "LLM 서비스 편집"
@@ -325,7 +313,6 @@ thinkingBudget = "추론 예산"
 thinkingBudgetDefault = "기본값"
 customService = "사용자 정의"
 extraBody = "추가 요청 본문"
-
 
 [settings.llmModal.thinkingBudgetOptions]
 off = "끔"

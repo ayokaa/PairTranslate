@@ -95,17 +95,6 @@ resetSection = "Redefinir seção"
 yes = "Sim"
 no = "Não"
 
-[popup.domainTimer]
-keepUntil = "Manter tradução ativada até"
-selectPlaceholder = "Selecionar duração"
-remainingSeconds = "Termina em $1 seg"
-remainingMinutes = "Termina em $1 min"
-remainingHours = "Termina em $1 hr"
-untilClose = "Até o navegador fechar"
-closeBrowser = "Feche o navegador"
-afterMinutes = "Em $1 min"
-afterHours = "Em $1 hr"
-
 [migrationError]
 title = "Configurações precisam ser redefinidas"
 description = "Pair Translate não conseguiu carregar suas configurações anteriores após uma atualização. Redefina tudo para valores padrão para continuar."
@@ -302,7 +291,6 @@ deleteService = "Deletar Serviço"
 noServicesConfigured = "Nenhum Serviço LLM Configurado"
 noServicesDesc = "Adicione serviços para começar a usar tradução powered by LLM"
 
-
 [settings.llmModal]
 addTitle = "Adicionar Serviço LLM"
 editTitle = "Editar Serviço LLM"
@@ -325,7 +313,6 @@ thinkingBudget = "Orçamento de raciocínio"
 thinkingBudgetDefault = "Padrão"
 customService = "Personalizado"
 extraBody = "Corpo da solicitação extra"
-
 
 [settings.llmModal.thinkingBudgetOptions]
 off = "Desativado"

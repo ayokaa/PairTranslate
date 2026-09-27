@@ -196,7 +196,6 @@ export const STORAGE_KEYS = {
 	settings: "pair-translate:settings",
 	cache: "pair-translate:cache",
 	translateEnabled: "pair-translate:translate-enabled",
-	domainTimers: "pair-translate:domain-timers",
 	settingsMigrationError: "pair-translate:settings-migration-error",
 	sidebarSettings: "pair-translate:sidebar-settings",
 	sidebarHistory: "pair-translate:sidebar-history",
@@ -204,13 +203,6 @@ export const STORAGE_KEYS = {
 	summaryPopupGeometry: "pair-translate:summary-popup-geometry",
 	translationStats: "pair-translate:translation-stats",
 };
-
-export const DOMAIN_TIMER_UNTIL_CLOSE = "UNTIL_CLOSE" as const;
-
-export type DomainTimersMap = Record<
-	string,
-	number | typeof DOMAIN_TIMER_UNTIL_CLOSE
->;
 
 export const WXT_TRANSPORTATION_NAME = "wxt-transport";
 

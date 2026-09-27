@@ -95,17 +95,6 @@ resetSection = "Сбросить Раздел"
 yes = "Да"
 no = "Нет"
 
-[popup.domainTimer]
-keepUntil = "Сохранить перевод включенным до"
-selectPlaceholder = "Выберите Длительность"
-remainingSeconds = "Осталось $1 сек"
-remainingMinutes = "Осталось $1 мин"
-remainingHours = "Осталось $1 часов"
-untilClose = "До закрытия браузера"
-closeBrowser = "Закройте браузер"
-afterMinutes = "Через $1 мин"
-afterHours = "Через $1 часов"
-
 [migrationError]
 title = "Параметры нужно сбросить"
 description = "Pair Translate не смог загрузить ваши предыдущие параметры после обновления. Сбросьте все значения по умолчанию, чтобы продолжить."
@@ -302,7 +291,6 @@ deleteService = "Удалить Сервис"
 noServicesConfigured = "Нет Сервисов LLM Настроено"
 noServicesDesc = "Добавьте сервисы, чтобы начать использовать перевод на основе LLM"
 
-
 [settings.llmModal]
 addTitle = "Добавить Сервис LLM"
 editTitle = "Редактировать Сервис LLM"
@@ -325,7 +313,6 @@ thinkingBudget = "Бюджет на рассуждение"
 thinkingBudgetDefault = "По умолчанию"
 customService = "Пользовательский"
 extraBody = "Дополнительное тело запроса"
-
 
 [settings.llmModal.thinkingBudgetOptions]
 off = "Выкл."

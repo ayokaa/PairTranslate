@@ -1,7 +1,6 @@
 import { browser, defineBackground } from "#imports";
 import { OPEN_TRANSLATOR_POPUP_COMMAND } from "@/utils/constants";
 import { WXT_TRANSPORTATION_NAME } from "~/utils/constants";
-import { cleanupDomainTimers } from "~/utils/domain-timers";
 import { type AllServices, type Server, setupWxtServer } from "~/utils/rpc";
 import { initializeSettings } from "~/utils/settings/init";
 import { openTranslatorPopup } from "~/utils/translator-window";
@@ -71,9 +70,5 @@ export default defineBackground(() => {
 				});
 			});
 		}
-	});
-
-	browser.runtime.onStartup.addListener(() => {
-		cleanupDomainTimers();
 	});
 });

@@ -95,17 +95,6 @@ resetSection = "Reset section"
 yes = "Yes"
 no = "No"
 
-[popup.domainTimer]
-keepUntil = "Keep translation enabled until"
-selectPlaceholder = "Select duration"
-remainingSeconds = "Ends in $1 sec"
-remainingMinutes = "Ends in $1 min"
-remainingHours = "Ends in $1 hr"
-untilClose = "Until the browser closes"
-closeBrowser = "Close the browser"
-afterMinutes = "In $1 min"
-afterHours = "In $1 hr"
-
 [migrationError]
 title = "Settings need to be reset"
 description = "Pair Translate couldn't load your previous settings after an update. Reset everything to defaults to continue."

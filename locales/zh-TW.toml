@@ -95,17 +95,6 @@ resetSection = "重置此部分"
 yes = "是"
 no = "否"
 
-[popup.domainTimer]
-keepUntil = "保持翻譯，直到"
-selectPlaceholder = "選擇時間"
-remainingSeconds = "$1 秒後結束"
-remainingMinutes = "$1 分鐘後結束"
-remainingHours = "$1 小時後結束"
-untilClose = "關閉瀏覽器時結束"
-closeBrowser = "關閉瀏覽器"
-afterMinutes = "$1 分鐘後"
-afterHours = "$1 小時後"
-
 [migrationError]
 title = "需要重置設置"
 description = "更新後無法加載您的舊設置，請重置為默認值以繼續使用。"
@@ -302,7 +291,6 @@ deleteService = "刪除服務"
 noServicesConfigured = "未配置 LLM 服務"
 noServicesDesc = "添加服務以開始使用 LLM 驅動的翻譯"
 
-
 [settings.llmModal]
 addTitle = "添加 LLM 服務"
 editTitle = "編輯 LLM 服務"
@@ -325,7 +313,6 @@ thinkingBudget = "思考強度"
 thinkingBudgetDefault = "預設"
 customService = "自定義"
 extraBody = "額外參數"
-
 
 [settings.llmModal.thinkingBudgetOptions]
 off = "關閉"

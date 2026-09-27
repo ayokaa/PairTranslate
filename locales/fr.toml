@@ -95,17 +95,6 @@ resetSection = "Réinitialiser la section"
 yes = "Oui"
 no = "Non"
 
-[popup.domainTimer]
-keepUntil = "Maintenir la traduction activée jusqu'à"
-selectPlaceholder = "Sélectionner la durée"
-remainingSeconds = "Se termine dans $1 s"
-remainingMinutes = "Se termine dans $1 min"
-remainingHours = "Se termine dans $1 h"
-untilClose = "Jusqu'à la fermeture du navigateur"
-closeBrowser = "Fermer le navigateur"
-afterMinutes = "Dans $1 min"
-afterHours = "Dans $1 h"
-
 [migrationError]
 title = "Les paramètres doivent être réinitialisés"
 description = "Pair Translate n'a pas pu charger vos paramètres précédents après une mise à jour. Réinitialisez tout aux valeurs par défaut pour continuer."
@@ -302,7 +291,6 @@ deleteService = "Supprimer le Service"
 noServicesConfigured = "Aucun Service LLM Configuré"
 noServicesDesc = "Ajouter des services pour commencer à utiliser la traduction alimentée par LLM"
 
-
 [settings.llmModal]
 addTitle = "Ajouter un Service LLM"
 editTitle = "Modifier le Service LLM"
@@ -325,7 +313,6 @@ thinkingBudget = "Budget de raisonnement"
 thinkingBudgetDefault = "Par défaut"
 customService = "Personnalisé"
 extraBody = "Corps de requête supplémentaire"
-
 
 [settings.llmModal.thinkingBudgetOptions]
 off = "Désactivé"

@@ -1,5 +1,4 @@
 import { createEffect, createSignal, onMount, Show } from "solid-js";
-import { createDomainEnabledTimer } from "~/hooks/domain-timer";
 import { createKeyboardShortcut } from "~/hooks/keyboard-shortcut";
 import { useSettings } from "~/hooks/settings";
 import { useWebsiteRule } from "~/hooks/website-rule";
@@ -28,10 +27,6 @@ export default (props: Props) => {
 	const [hasExplicitChoice, setHasExplicitChoice] = createSignal(false);
 	const [restored, setRestored] = createSignal(false);
 
-	const [remaining] = createDomainEnabledTimer();
-	createEffect(() => {
-		if ((remaining() || 0) > 0) setInTextTranslateEnabled(true);
-	});
 	createEffect(() => {
 		props.onTranslationStateChange?.(inTextTranslateEnabled());
 	});

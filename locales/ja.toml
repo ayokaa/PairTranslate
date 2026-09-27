@@ -95,17 +95,6 @@ yes = "はい"
 no = "いいえ"
 resetSection = "セクションをリセット"
 
-[popup.domainTimer]
-keepUntil = "翻訳を維持する期限"
-selectPlaceholder = "時間を選択"
-remainingSeconds = "$1 秒後に終了"
-remainingMinutes = "$1 分後に終了"
-remainingHours = "$1 時間後に終了"
-untilClose = "ブラウザを閉じるまで"
-closeBrowser = "ブラウザを閉じる"
-afterMinutes = "$1 分後"
-afterHours = "$1 時間後"
-
 [migrationError]
 title = "設定をリセットする必要があります"
 description = "アップデート後に以前の設定を読み込めませんでした。既定値にリセットして利用を続けてください。"
@@ -302,7 +291,6 @@ deleteService = "サービスを削除"
 noServicesConfigured = "LLMサービスが設定されていません"
 noServicesDesc = "LLM駆動の翻訳を使用開始するにはサービスを追加します"
 
-
 [settings.llmModal]
 addTitle = "LLMサービスを追加"
 editTitle = "LLMサービスを編集"
@@ -325,7 +313,6 @@ thinkingBudget = "推論予算"
 thinkingBudgetDefault = "デフォルト"
 customService = "カスタム"
 extraBody = "追加リクエストボディ"
-
 
 [settings.llmModal.thinkingBudgetOptions]
 off = "オフ"
