@@ -18,6 +18,7 @@ about = "О Программе"
 debug = "Параметры Отладки"
 website = "Веб-сайт"
 summary = "Сервисы резюме"
+webAdaptation = "Webpage Adaptation"
 
 [nav.categories]
 core = "Основные функции"
@@ -28,6 +29,16 @@ system = "Система"
 [popup.navigation]
 openOptions = "Больше параметров"
 openTranslatorWindow = "Открыть всплывающее окно переводчика"
+
+[popup.webAdaptation]
+run = "Adapt this page"
+running = "Analyzing page..."
+added = "Page adaptation saved"
+updated = "Page adaptation updated"
+unchanged = "No useful change found"
+noModel = "Choose an adaptation model in settings first"
+unavailable = "This page cannot be analyzed"
+failed = "Page analysis failed"
 
 [popup.enable]
 on = "Перевод включён"
@@ -116,6 +127,25 @@ resetFailed = "Ошибка при сбросе параметров. Пожал
 
 [settings]
 sectionResetConfirm = "Сбросить этот раздел на значения по умолчанию?"
+
+[settings.webAdaptation]
+title = "Webpage Adaptation"
+description = "Let an LLM inspect a limited page structure and translation sample to improve where translation appears. Page samples are sent to the selected model provider."
+autoEnabled = "Analyze pages automatically"
+autoEnabledDesc = "Analyze new page layouts after translation. The same page layout is checked at most once every seven days."
+model = "Adaptation model"
+modelDesc = "Choose an LLM model for page structure analysis, independently of the translation model."
+noModel = "Select a configured LLM model"
+rules = "Saved adaptations"
+noRules = "No adapted pages yet"
+site = "Page scope"
+source = "Created by"
+sourceManual = "Manual analysis"
+sourceAutomatic = "Automatic analysis"
+selectors = "Structure changes"
+removeConfirm = "Delete this page adaptation?"
+roots = "Content roots"
+excludes = "Excluded areas"
 
 [settings.basic]
 title = "Основные Параметры"
@@ -285,6 +315,7 @@ completionTokens = "Выходные Токены"
 totalTokens = "Всего Токенов"
 cachedTokens = "Входных Токенов из Кеша"
 cachedTokensDesc = "Получены из кеша промптов провайдера"
+webAdaptationTokenUsage = "Токены анализа адаптации веб-страниц"
 resetConfirm = "Очистить всю статистику перевода? Это действие не может быть отменено."
 
 [settings.services.flowControl]
@@ -539,6 +570,7 @@ explain = "Объяснить"
 dictionaryTranslate = "Словарный Перевод"
 summary = "Summary"
 pageContext = "Контекст страницы"
+webAdaptation = "Webpage adaptation"
 
 [summary]
 addToExclusion = "Exclude from summary"

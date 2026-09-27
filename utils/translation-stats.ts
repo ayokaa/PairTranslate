@@ -25,6 +25,12 @@ export interface TranslationStats {
 	totalTokens: number;
 	/** Input tokens served from the LLM provider's prompt cache. */
 	cachedTokens: number;
+	/** LLM input tokens used for webpage structure analysis. */
+	webAdaptationPromptTokens: number;
+	/** LLM output tokens used for webpage structure analysis. */
+	webAdaptationCompletionTokens: number;
+	/** LLM total tokens used for webpage structure analysis. */
+	webAdaptationTotalTokens: number;
 	/** Last update timestamp. */
 	updatedAt: number;
 }
@@ -42,6 +48,9 @@ export const emptyTranslationStats = (): TranslationStats => ({
 	completionTokens: 0,
 	totalTokens: 0,
 	cachedTokens: 0,
+	webAdaptationPromptTokens: 0,
+	webAdaptationCompletionTokens: 0,
+	webAdaptationTotalTokens: 0,
 	updatedAt: 0,
 });
 
@@ -54,6 +63,9 @@ const ADDITIVE_FIELDS = [
 	"completionTokens",
 	"totalTokens",
 	"cachedTokens",
+	"webAdaptationPromptTokens",
+	"webAdaptationCompletionTokens",
+	"webAdaptationTotalTokens",
 ] as const satisfies readonly (keyof TranslationStatsDelta)[];
 
 export const getTranslationStats = async (): Promise<TranslationStats> => {

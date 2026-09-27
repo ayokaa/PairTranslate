@@ -9,6 +9,7 @@ import { createDictionaryService } from "./services/dictionary";
 import { createMatchService } from "./services/match";
 import { createStyleService } from "./services/style";
 import { createTranslateService } from "./services/translate";
+import { createWebAdaptationService } from "./services/web-adaptation";
 
 export default defineBackground(() => {
 	console.log("Pair Translate background script loaded", {
@@ -27,6 +28,7 @@ export default defineBackground(() => {
 		const styleService = createStyleService();
 		const matchService = createMatchService();
 		const dictionaryService = createDictionaryService();
+		const webAdaptationService = createWebAdaptationService();
 
 		const clientImpl: Server<AllServices> = {
 			ping: async () => "pong",
@@ -43,6 +45,11 @@ export default defineBackground(() => {
 			matchWebsiteRule: matchService.matchWebsiteRule,
 
 			lookup: dictionaryService.lookup,
+			reserveWebAdaptationCheck: webAdaptationService.reserveWebAdaptationCheck,
+			completeWebAdaptationCheck:
+				webAdaptationService.completeWebAdaptationCheck,
+			releaseWebAdaptationCheck: webAdaptationService.releaseWebAdaptationCheck,
+			commitWebAdaptation: webAdaptationService.commitWebAdaptation,
 		};
 
 		setupWxtServer(clientImpl, WXT_TRANSPORTATION_NAME);

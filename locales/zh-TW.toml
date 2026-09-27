@@ -13,6 +13,7 @@ llmServices = "LLM 服務"
 promptSettings = "提示詞設置"
 traditionalServices = "傳統翻譯"
 websiteRules = "網站規則"
+webAdaptation = "網頁適配"
 advanced = "高級設置"
 about = "關於"
 debug = "調試設置"
@@ -28,6 +29,16 @@ system = "系統與資訊"
 [popup.navigation]
 openOptions = "更多設置"
 openTranslatorWindow = "開啟翻譯彈窗"
+
+[popup.webAdaptation]
+run = "適配目前網頁"
+running = "正在分析網頁..."
+added = "已儲存網頁適配"
+updated = "已更新網頁適配"
+unchanged = "未找到有用的改進"
+noModel = "請先在設定中選擇適配模型"
+unavailable = "無法分析此網頁"
+failed = "網頁分析失敗"
 
 [popup.enable]
 on = "翻譯已開啟"
@@ -116,6 +127,25 @@ resetFailed = "重置失敗，請重試。"
 
 [settings]
 sectionResetConfirm = "確定要將此部分重置為默認值嗎？"
+
+[settings.webAdaptation]
+title = "網頁適配"
+description = "使用所選 LLM 分析有限的網頁結構、原文及目前譯文，改善翻譯區域。分析樣本會傳送給模型提供者。"
+autoEnabled = "自動分析網頁"
+autoEnabledDesc = "翻譯後分析新頁面結構；同一頁面結構每七天最多自動分析一次。"
+model = "適配模型"
+modelDesc = "選擇已設定的 LLM 模型，獨立於翻譯模型。"
+noModel = "選擇已設定的 LLM 模型"
+rules = "已儲存的適配"
+noRules = "尚無適配網頁"
+site = "頁面範圍"
+source = "建立方式"
+sourceManual = "手動分析"
+sourceAutomatic = "自動分析"
+selectors = "結構變更"
+removeConfirm = "刪除這條網頁適配？"
+roots = "正文區域"
+excludes = "排除區域"
 
 [settings.basic]
 title = "基本設置"
@@ -285,6 +315,7 @@ completionTokens = "輸出令牌"
 totalTokens = "令牌總數"
 cachedTokens = "緩存命中令牌"
 cachedTokensDesc = "由服務商的提示詞緩存提供的輸入令牌"
+webAdaptationTokenUsage = "網頁適配分析令牌用量"
 resetConfirm = "確定要清空所有翻譯統計嗎？此操作無法撤銷。"
 
 [settings.services.flowControl]
@@ -539,6 +570,7 @@ explain = "解釋"
 dictionaryTranslate = "詞典釋義翻譯"
 summary = "Summary"
 pageContext = "頁面語境"
+webAdaptation = "網頁適配"
 
 [summary]
 addToExclusion = "Exclude from summary"

@@ -202,6 +202,7 @@ export const STORAGE_KEYS = {
 	pageState: "pair-translate:page-state",
 	summaryPopupGeometry: "pair-translate:summary-popup-geometry",
 	translationStats: "pair-translate:translation-stats",
+	webAdaptationChecks: "pair-translate:web-adaptation-successful-checks",
 };
 
 export const WXT_TRANSPORTATION_NAME = "wxt-transport";
@@ -215,5 +216,8 @@ export const PROMPT_ID = {
 	dictionaryTranslate: "d736a0f9-6f61-4f34-9d54-2c7ec49c70d7",
 	summary: "161b88be-5238-42d9-8adb-0767cb8d298e",
 	pageContext: "7f3a2c1d-9e4b-4f8a-b6c5-d2e1a0b9c8d7",
+	webAdaptation: "a9da8649-7a02-48ed-8d8d-79dc77ba969f",
 };
 export const OPEN_TRANSLATOR_POPUP_COMMAND = "open-translator-popup";
+export const WEB_ADAPTATION_MESSAGE = "run-web-adaptation";
+export const TRANSLATION_ACTIVITY_EVENT = "pair-translate:translation-activity";

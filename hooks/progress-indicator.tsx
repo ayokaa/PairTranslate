@@ -8,6 +8,7 @@ import {
 	useContext,
 } from "solid-js";
 import type { TranslateQueueStatus } from "~/utils/types";
+import { TRANSLATION_ACTIVITY_EVENT } from "~/utils/constants";
 import { useSettings } from "./settings";
 
 type ProgressIndicatorContextValue = {
@@ -27,6 +28,14 @@ export function ProgressIndicatorProvider(props: { children: JSX.Element }) {
 	>([]);
 	const [status, setStatus] = createSignal<TranslateQueueStatus>();
 	const enabled = createMemo(() => settings.basic.progressIndicationEnabled);
+
+	createEffect(() => {
+		window.dispatchEvent(
+			new CustomEvent<number>(TRANSLATION_ACTIVITY_EVENT, {
+				detail: requests().length,
+			}),
+		);
+	});
 
 	const beginRequest = (id: string) => {
 		const key = Symbol();

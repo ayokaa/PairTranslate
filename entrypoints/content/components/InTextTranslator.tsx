@@ -1,3 +1,4 @@
+import { trackDeep } from "@solid-primitives/deep";
 import { createEffect, createSignal, onCleanup } from "solid-js";
 import { createNodeObserver } from "@/hooks/observer";
 import { useSettings } from "~/hooks/settings";
@@ -6,6 +7,7 @@ import { isDisplayOnlySection } from "~/utils/parser/math-section";
 import type { DOMSection } from "~/utils/parser/types";
 import { BatchInTextTranslation } from "../native-components/InTextTranslate";
 import { getDomListener } from "../parser";
+import { clearTranslationObservations } from "../web-adaptation/observations";
 
 export default () => {
 	const { settings } = useSettings();
@@ -23,6 +25,7 @@ export default () => {
 		const fullPage =
 			websiteRule.translateFullPage ?? settings.translate.translateFullPage;
 		const hostname = window.location.hostname;
+		const adaptationRules = trackDeep(settings.webAdaptation.rules);
 
 		const buffer = {
 			add: new Set<DOMSection>(),
@@ -66,12 +69,18 @@ export default () => {
 
 		const controller = new AbortController();
 		(async () => {
-			const listener = await getDomListener(hostname, {
-				filterInteractive,
-				signal: controller.signal,
-			});
+			const listener = await getDomListener(
+				hostname,
+				{
+					filterInteractive,
+					signal: controller.signal,
+				},
+				adaptationRules,
+			);
+			if (controller.signal.aborted) return;
 
 			for await (const section of listener) {
+				if (controller.signal.aborted) break;
 				if (fullPage) {
 					handleAdd(section);
 					listenRemove(section[0], () => handleRemove(section));
@@ -85,6 +94,7 @@ export default () => {
 
 		onCleanup(() => {
 			controller.abort();
+			clearTranslationObservations();
 			if (buffer.handle !== null) cancelAnimationFrame(buffer.handle);
 			setSections((prev) => {
 				prev.clear();

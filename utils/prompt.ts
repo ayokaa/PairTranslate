@@ -15,6 +15,8 @@ import summarySystem from "./prompt/summary-system.md?raw";
 import summaryUser from "./prompt/summary-user.md?raw";
 import unary from "./prompt/unary-system.md?raw";
 import unaryUser from "./prompt/unary-user.md?raw";
+import webAdaptationSystem from "./prompt/web-adaptation-system.md?raw";
+import webAdaptationUser from "./prompt/web-adaptation-user.md?raw";
 
 export const UNARY = () => ({
 	system: `${prefix}\n\n${unary}`,
@@ -40,6 +42,10 @@ export const SUMMARY = () => ({
 export const PAGE_CONTEXT = () => ({
 	system: pageContextSystem,
 	user: pageContextUser,
+});
+export const WEB_ADAPTATION = () => ({
+	system: webAdaptationSystem,
+	user: webAdaptationUser,
 });
 
 const ExplainOutput = () =>

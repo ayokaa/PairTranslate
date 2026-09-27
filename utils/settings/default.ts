@@ -11,7 +11,9 @@ import {
 	PAGE_CONTEXT,
 	SUMMARY,
 	UNARY,
+	WEB_ADAPTATION,
 } from "~/utils/prompt";
+import type { WebAdaptationSettings } from "~/utils/web-adaptation/model";
 import type * as s from "./def";
 import { SETTINGS_VERSION } from "./version";
 
@@ -101,6 +103,10 @@ export function generateServicesSettings(): s.ServicesSettings {
 
 export function generateWebsiteRuleSettings(): s.WebsiteRulesSettings {
 	return [];
+}
+
+export function generateWebAdaptationSettings(): WebAdaptationSettings {
+	return { autoEnabled: false, rules: [] };
 }
 
 export function generateQueueControlSettings(): s.QueueControlSettings {
@@ -219,6 +225,13 @@ export function generatePromptSettings(): s.PromptsSettings {
 				},
 			],
 		},
+		[PROMPT_ID.webAdaptation]: {
+			name: t("prompts.defaultNames.webAdaptation"),
+			systemPrompt: WEB_ADAPTATION().system,
+			input: "string",
+			output: "string",
+			steps: [{ message: WEB_ADAPTATION().user, output: "string" }],
+		},
 	};
 }
 
@@ -233,6 +246,7 @@ export function generateDefaultSettings(): s.SettingsSchema {
 		summary: generateSummarySettings(),
 		services: generateServicesSettings(),
 		websiteRules: generateWebsiteRuleSettings(),
+		webAdaptation: generateWebAdaptationSettings(),
 		queue: generateQueueControlSettings(),
 		prompts: generatePromptSettings(),
 		debug: generateDebugSettings(),

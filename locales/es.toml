@@ -18,6 +18,7 @@ about = "Acerca de"
 debug = "Configuración de Depuración"
 website = "Sitio Web"
 summary = "Servicios de resumen"
+webAdaptation = "Webpage Adaptation"
 
 [nav.categories]
 core = "Funciones"
@@ -28,6 +29,16 @@ system = "Sistema"
 [popup.navigation]
 openOptions = "Más opciones"
 openTranslatorWindow = "Abrir ventana emergente del traductor"
+
+[popup.webAdaptation]
+run = "Adapt this page"
+running = "Analyzing page..."
+added = "Page adaptation saved"
+updated = "Page adaptation updated"
+unchanged = "No useful change found"
+noModel = "Choose an adaptation model in settings first"
+unavailable = "This page cannot be analyzed"
+failed = "Page analysis failed"
 
 [popup.enable]
 on = "Traducción activada"
@@ -116,6 +127,25 @@ resetFailed = "Error al restablecer la configuración. Por favor, inténtelo de 
 
 [settings]
 sectionResetConfirm = "¿Restablecer esta sección a sus valores predeterminados?"
+
+[settings.webAdaptation]
+title = "Webpage Adaptation"
+description = "Let an LLM inspect a limited page structure and translation sample to improve where translation appears. Page samples are sent to the selected model provider."
+autoEnabled = "Analyze pages automatically"
+autoEnabledDesc = "Analyze new page layouts after translation. The same page layout is checked at most once every seven days."
+model = "Adaptation model"
+modelDesc = "Choose an LLM model for page structure analysis, independently of the translation model."
+noModel = "Select a configured LLM model"
+rules = "Saved adaptations"
+noRules = "No adapted pages yet"
+site = "Page scope"
+source = "Created by"
+sourceManual = "Manual analysis"
+sourceAutomatic = "Automatic analysis"
+selectors = "Structure changes"
+removeConfirm = "Delete this page adaptation?"
+roots = "Content roots"
+excludes = "Excluded areas"
 
 [settings.basic]
 title = "Configuración Básica"
@@ -285,6 +315,7 @@ completionTokens = "Tokens de Salida"
 totalTokens = "Tokens Totales"
 cachedTokens = "Tokens de Entrada en Caché"
 cachedTokensDesc = "Servidos desde la caché de prompts del proveedor"
+webAdaptationTokenUsage = "Tokens del análisis de adaptación web"
 resetConfirm = "¿Borrar todas las estadísticas de traducción? Esta acción no se puede deshacer."
 
 [settings.services.flowControl]
@@ -539,6 +570,7 @@ explain = "Explicar"
 dictionaryTranslate = "Traducción del diccionario"
 summary = "Summary"
 pageContext = "Contexto de página"
+webAdaptation = "Webpage adaptation"
 
 [summary]
 addToExclusion = "Exclude from summary"

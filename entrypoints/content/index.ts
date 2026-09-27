@@ -5,6 +5,7 @@ import App from "./App";
 import "~/utils/rpc/wxt-def";
 import { untilAlive } from "~/utils/alive";
 import { mountOverlay } from "./overlay";
+import { initializeWebAdaptation } from "./web-adaptation";
 
 export default defineContentScript({
 	matches: ["<all_urls>"],
@@ -14,6 +15,7 @@ export default defineContentScript({
 		untilAlive().then(() =>
 			requestIdleCallback(
 				async () => {
+					initializeWebAdaptation();
 					let last = false;
 					let dispose = () => {};
 					listenEnabled((enabled) => {

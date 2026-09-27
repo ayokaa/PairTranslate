@@ -13,6 +13,7 @@ llmServices = "LLM 服务"
 promptSettings = "提示词设置"
 traditionalServices = "传统翻译"
 websiteRules = "网站规则"
+webAdaptation = "网页适配"
 advanced = "高级设置"
 about = "关于"
 debug = "调试设置"
@@ -28,6 +29,16 @@ system = "系统与关于"
 [popup.navigation]
 openOptions = "更多设置"
 openTranslatorWindow = "打开翻译弹窗"
+
+[popup.webAdaptation]
+run = "适配当前网页"
+running = "正在分析网页..."
+added = "已保存网页适配"
+updated = "已更新网页适配"
+unchanged = "未发现有用的改进"
+noModel = "请先在设置中选择适配模型"
+unavailable = "无法分析此网页"
+failed = "网页分析失败"
 
 [popup.enable]
 on = "翻译已开启"
@@ -116,6 +127,25 @@ resetFailed = "重置失败，请重试。"
 
 [settings]
 sectionResetConfirm = "确定要将此部分重置为默认值吗？"
+
+[settings.webAdaptation]
+title = "网页适配"
+description = "使用所选 LLM 分析有限的网页结构、原文和当前译文，改进翻译区域。分析样本会发送给模型提供方。"
+autoEnabled = "自动分析网页"
+autoEnabledDesc = "翻译后分析新页面结构；同一页面结构每七天最多自动分析一次。"
+model = "适配模型"
+modelDesc = "选择已配置的 LLM 模型，独立于翻译模型。"
+noModel = "选择已配置的 LLM 模型"
+rules = "已保存的适配"
+noRules = "暂无适配网页"
+site = "页面范围"
+source = "创建方式"
+sourceManual = "手动分析"
+sourceAutomatic = "自动分析"
+selectors = "结构变更"
+removeConfirm = "删除这条网页适配？"
+roots = "正文区域"
+excludes = "排除区域"
 
 [settings.basic]
 title = "基本设置"
@@ -285,6 +315,7 @@ completionTokens = "输出 Token"
 totalTokens = "Token 总数"
 cachedTokens = "缓存命中 Token"
 cachedTokensDesc = "由服务商的提示词缓存提供的输入 Token"
+webAdaptationTokenUsage = "网页适配分析 Token 用量"
 resetConfirm = "确定要清除所有翻译统计吗？此操作无法撤销。"
 
 [settings.services.flowControl]
@@ -539,6 +570,7 @@ explain = "解释"
 dictionaryTranslate = "词典释义翻译"
 summary = "摘要"
 pageContext = "页面语境"
+webAdaptation = "网页适配"
 [summary]
 generate = "生成摘要"
 generating = "正在生成摘要..."

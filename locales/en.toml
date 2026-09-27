@@ -14,6 +14,7 @@ llmServices = "LLM Services"
 promptSettings = "Prompt Settings"
 traditionalServices = "Traditional Translation"
 websiteRules = "Website Rules"
+webAdaptation = "Webpage Adaptation"
 advanced = "Advanced Settings"
 about = "About"
 debug = "Debug Settings"
@@ -28,6 +29,16 @@ system = "System"
 [popup.navigation]
 openOptions = "More settings"
 openTranslatorWindow = "Open translator pop-up"
+
+[popup.webAdaptation]
+run = "Adapt this page"
+running = "Analyzing page..."
+added = "Page adaptation saved"
+updated = "Page adaptation updated"
+unchanged = "No useful change found"
+noModel = "Choose an adaptation model in settings first"
+unavailable = "This page cannot be analyzed"
+failed = "Page analysis failed"
 
 [popup.enable]
 on = "Translation enabled"
@@ -116,6 +127,25 @@ resetFailed = "Failed to reset settings. Please try again."
 
 [settings]
 sectionResetConfirm = "Reset this section to its default values?"
+
+[settings.webAdaptation]
+title = "Webpage Adaptation"
+description = "Let an LLM inspect a limited page structure and translation sample to improve where translation appears. Page samples are sent to the selected model provider."
+autoEnabled = "Analyze pages automatically"
+autoEnabledDesc = "Analyze new page layouts after translation. The same page layout is checked at most once every seven days."
+model = "Adaptation model"
+modelDesc = "Choose an LLM model for page structure analysis, independently of the translation model."
+noModel = "Select a configured LLM model"
+rules = "Saved adaptations"
+noRules = "No adapted pages yet"
+site = "Page scope"
+source = "Created by"
+sourceManual = "Manual analysis"
+sourceAutomatic = "Automatic analysis"
+selectors = "Structure changes"
+removeConfirm = "Delete this page adaptation?"
+roots = "Content roots"
+excludes = "Excluded areas"
 
 [settings.basic]
 title = "Basic Settings"
@@ -285,6 +315,7 @@ completionTokens = "Output Tokens"
 totalTokens = "Total Tokens"
 cachedTokens = "Cached Input Tokens"
 cachedTokensDesc = "Served from the provider's prompt cache"
+webAdaptationTokenUsage = "Webpage Adaptation Analysis"
 resetConfirm = "Clear all translation statistics? This cannot be undone."
 
 [settings.services.flowControl]
@@ -543,6 +574,7 @@ addToExclusion = "Exclude from summary"
 removeFromExclusion = "Allow summary"
 
 [prompts.defaultNames]
+webAdaptation = "Webpage adaptation"
 translate = "Translate"
 batchTranslate = "Batch Translate"
 inputTranslate = "Input Translate"

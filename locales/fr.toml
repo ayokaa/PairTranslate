@@ -18,6 +18,7 @@ about = "À Propos"
 debug = "Paramètres de Débogage"
 website = "Site Web"
 summary = "Services de résumé"
+webAdaptation = "Webpage Adaptation"
 
 [nav.categories]
 core = "Fonctionnalités"
@@ -28,6 +29,16 @@ system = "Système"
 [popup.navigation]
 openOptions = "Plus de paramètres"
 openTranslatorWindow = "Ouvrir la fenêtre du traducteur"
+
+[popup.webAdaptation]
+run = "Adapt this page"
+running = "Analyzing page..."
+added = "Page adaptation saved"
+updated = "Page adaptation updated"
+unchanged = "No useful change found"
+noModel = "Choose an adaptation model in settings first"
+unavailable = "This page cannot be analyzed"
+failed = "Page analysis failed"
 
 [popup.enable]
 on = "Traduction activée"
@@ -116,6 +127,25 @@ resetFailed = "Impossible de réinitialiser les paramètres. Veuillez réessayer
 
 [settings]
 sectionResetConfirm = "Réinitialiser cette section à ses valeurs par défaut ?"
+
+[settings.webAdaptation]
+title = "Webpage Adaptation"
+description = "Let an LLM inspect a limited page structure and translation sample to improve where translation appears. Page samples are sent to the selected model provider."
+autoEnabled = "Analyze pages automatically"
+autoEnabledDesc = "Analyze new page layouts after translation. The same page layout is checked at most once every seven days."
+model = "Adaptation model"
+modelDesc = "Choose an LLM model for page structure analysis, independently of the translation model."
+noModel = "Select a configured LLM model"
+rules = "Saved adaptations"
+noRules = "No adapted pages yet"
+site = "Page scope"
+source = "Created by"
+sourceManual = "Manual analysis"
+sourceAutomatic = "Automatic analysis"
+selectors = "Structure changes"
+removeConfirm = "Delete this page adaptation?"
+roots = "Content roots"
+excludes = "Excluded areas"
 
 [settings.basic]
 title = "Paramètres de Base"
@@ -285,6 +315,7 @@ completionTokens = "Jetons de Sortie"
 totalTokens = "Jetons Totaux"
 cachedTokens = "Jetons d'Entrée en Cache"
 cachedTokensDesc = "Servis depuis le cache de prompts du fournisseur"
+webAdaptationTokenUsage = "Jetons de l’analyse d’adaptation des pages web"
 resetConfirm = "Effacer toutes les statistiques de traduction ? Cette action ne peut pas être annulée."
 
 [settings.services.flowControl]
@@ -539,6 +570,7 @@ explain = "Expliquer"
 dictionaryTranslate = "Traduction du dictionnaire"
 summary = "Summary"
 pageContext = "Contexte de page"
+webAdaptation = "Webpage adaptation"
 
 [summary]
 addToExclusion = "Exclude from summary"

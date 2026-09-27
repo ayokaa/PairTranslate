@@ -12,6 +12,7 @@ import {
 	Menu as MenuIcon,
 	MessageSquare,
 	ScrollText,
+	WandSparkles,
 } from "lucide-solid";
 import {
 	createEffect,
@@ -36,6 +37,7 @@ import Stats from "./pages/Stats";
 import Summary from "./pages/Summary";
 import Traditional from "./pages/Traditional";
 import Translation from "./pages/Translation";
+import WebAdaptation from "./pages/WebAdaptation";
 import WebsiteRules from "./pages/WebsiteRules";
 
 const PromptPage = lazy(() => import("./pages/Prompt"));
@@ -102,6 +104,7 @@ const SettingsPage = () => {
 					<FlowControl navId="flowControl" />
 					<Stats navId="stats" />
 					<WebsiteRules navId="websiteRules" />
+					<WebAdaptation navId="webAdaptation" />
 					<Advanced navId="advanced" />
 					{debugVisible() && <Debug navId="debug" />}
 					<About
@@ -147,6 +150,10 @@ const SettingsPage = () => {
 				<Nav.Item navId="websiteRules">
 					<FileText size={16} />
 					{t("nav.websiteRules")}
+				</Nav.Item>
+				<Nav.Item navId="webAdaptation">
+					<WandSparkles size={16} />
+					{t("nav.webAdaptation")}
 				</Nav.Item>
 				<Nav.Group label={t("nav.categories.system")} />
 				<Nav.Item navId="stats">

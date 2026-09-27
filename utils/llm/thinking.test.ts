@@ -61,6 +61,7 @@ test("settings schema accepts missing and configured thinkingBudget", () => {
 		},
 		prompts: {},
 		websiteRules: [],
+		webAdaptation: { autoEnabled: false, rules: [] },
 		debug: {
 			verboseLogging: false,
 			traceLlms: false,

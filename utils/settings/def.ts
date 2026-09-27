@@ -1,6 +1,7 @@
 import z from "zod";
 import { THINKING_BUDGET_LEVELS } from "../llm/thinking";
 import { getDefaultModifierKey, SELECTION_MODIFIER_KEYS } from "../modifier";
+import { WebAdaptationSettings } from "../web-adaptation/model";
 import { SETTINGS_VERSION } from "./version";
 
 export * from "./version";
@@ -207,6 +208,7 @@ export const SettingsSchema = z.object({
 	queue: QueueControlSettings,
 	prompts: PromptsSettings,
 	websiteRules: WebsiteRulesSettings,
+	webAdaptation: WebAdaptationSettings,
 	debug: DebugSettings,
 });
 export type SettingsSchema = z.infer<typeof SettingsSchema>;

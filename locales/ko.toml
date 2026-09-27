@@ -18,6 +18,7 @@ about = "정보"
 debug = "디버그 설정"
 website = "웹사이트"
 summary = "요약 서비스"
+webAdaptation = "Webpage Adaptation"
 
 [nav.categories]
 core = "주요 기능"
@@ -28,6 +29,16 @@ system = "시스템"
 [popup.navigation]
 openOptions = "추가 설정"
 openTranslatorWindow = "번역 팝업 열기"
+
+[popup.webAdaptation]
+run = "Adapt this page"
+running = "Analyzing page..."
+added = "Page adaptation saved"
+updated = "Page adaptation updated"
+unchanged = "No useful change found"
+noModel = "Choose an adaptation model in settings first"
+unavailable = "This page cannot be analyzed"
+failed = "Page analysis failed"
 
 [popup.enable]
 on = "번역 켜짐"
@@ -116,6 +127,25 @@ resetFailed = "설정 초기화에 실패했습니다. 다시 시도해주세요
 
 [settings]
 sectionResetConfirm = "이 섹션을 기본값으로 초기화할까요?"
+
+[settings.webAdaptation]
+title = "Webpage Adaptation"
+description = "Let an LLM inspect a limited page structure and translation sample to improve where translation appears. Page samples are sent to the selected model provider."
+autoEnabled = "Analyze pages automatically"
+autoEnabledDesc = "Analyze new page layouts after translation. The same page layout is checked at most once every seven days."
+model = "Adaptation model"
+modelDesc = "Choose an LLM model for page structure analysis, independently of the translation model."
+noModel = "Select a configured LLM model"
+rules = "Saved adaptations"
+noRules = "No adapted pages yet"
+site = "Page scope"
+source = "Created by"
+sourceManual = "Manual analysis"
+sourceAutomatic = "Automatic analysis"
+selectors = "Structure changes"
+removeConfirm = "Delete this page adaptation?"
+roots = "Content roots"
+excludes = "Excluded areas"
 
 [settings.basic]
 title = "기본 설정"
@@ -285,6 +315,7 @@ completionTokens = "출력 토큰"
 totalTokens = "전체 토큰"
 cachedTokens = "캐시된 입력 토큰"
 cachedTokensDesc = "제공업체의 프롬프트 캐시에서 제공된 토큰"
+webAdaptationTokenUsage = "웹페이지 적응 분석 토큰 사용량"
 resetConfirm = "모든 번역 통계를 지우시겠습니까? 이 작업은 되돌릴 수 없습니다."
 
 [settings.services.flowControl]
@@ -539,6 +570,7 @@ explain = "설명"
 dictionaryTranslate = "사전 번역"
 summary = "Summary"
 pageContext = "페이지 컨텍스트"
+webAdaptation = "Webpage adaptation"
 
 [summary]
 addToExclusion = "Exclude from summary"

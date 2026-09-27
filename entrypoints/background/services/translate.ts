@@ -1,5 +1,5 @@
 import { createQueueHub } from "~/utils/async/queue-hub";
-import { STORAGE_KEYS } from "~/utils/constants";
+import { PROMPT_ID, STORAGE_KEYS } from "~/utils/constants";
 import {
 	convertFromLLMError,
 	convertFromTranslationError,
@@ -422,6 +422,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		ctx: TranslateContext,
 		srcLang: string,
 		dstLang: string,
+		promptId: string,
 		signal?: AbortSignal,
 	): Promise<{
 		result: unknown;
@@ -520,6 +521,12 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			completionTokens: usage.completionTokens,
 			totalTokens: usage.totalTokens,
 			cachedTokens: usage.cachedTokens,
+			webAdaptationPromptTokens:
+				promptId === PROMPT_ID.webAdaptation ? usage.promptTokens : 0,
+			webAdaptationCompletionTokens:
+				promptId === PROMPT_ID.webAdaptation ? usage.completionTokens : 0,
+			webAdaptationTotalTokens:
+				promptId === PROMPT_ID.webAdaptation ? usage.totalTokens : 0,
 			chars: payloadChars(textPayload),
 		});
 		return {
@@ -925,6 +932,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				ctx,
 				effectiveSrcLang,
 				options.dstLang,
+				promptId,
 				signal,
 			);
 			translationResult = llmResult.result;
@@ -984,6 +992,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						ctx,
 						effectiveSrcLang,
 						options.dstLang,
+						promptId,
 						signal,
 					);
 					retryResult = retried.result;

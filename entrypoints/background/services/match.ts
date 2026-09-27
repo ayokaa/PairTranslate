@@ -14,8 +14,8 @@ export const createMatchService = (): MatchService => {
 		const websiteRulePatterns = settings.websiteRules.flatMap(
 			(websiteRule) => websiteRule.urlPatterns,
 		);
-		const patternsIdxToWebsiteRuleIdx = websiteRulePatterns.flatMap(
-			(pattern, index) => Array(pattern.length).fill(index),
+		const patternsIdxToWebsiteRuleIdx = settings.websiteRules.flatMap(
+			(rule, index) => rule.urlPatterns.map(() => index),
 		);
 
 		const matcher = makeDomainMatcher(websiteRulePatterns);

@@ -10,6 +10,7 @@ import {
 	Settings2,
 	ShieldCheck,
 	ShieldOff,
+	WandSparkles,
 } from "lucide-solid";
 import type { JSX } from "solid-js";
 import {
@@ -29,6 +30,7 @@ import { SettingsRecoveryBanner } from "~/components/SettingsRecoveryBanner";
 import { SettingsProvider, useSettings } from "~/hooks/settings";
 import { createTheme } from "~/hooks/theme";
 import { cn } from "~/utils/cn";
+import { WEB_ADAPTATION_MESSAGE } from "~/utils/constants";
 import { t } from "~/utils/i18n";
 import { createLogger } from "~/utils/rpc/logger";
 import { openTranslatorPopup } from "~/utils/translator-window";
@@ -47,6 +49,51 @@ const Content = (props: { children?: JSX.Element }) => {
 
 	const [domain] = createResource(getCurrentDomain);
 	const [isSummaryExcluded, setIsSummaryExcluded] = createSignal(false);
+	const [adaptationRunning, setAdaptationRunning] = createSignal(false);
+	const [adaptationResult, setAdaptationResult] = createSignal("");
+	const adaptationResultText = () => {
+		switch (adaptationResult()) {
+			case "added":
+				return t("popup.webAdaptation.added");
+			case "updated":
+				return t("popup.webAdaptation.updated");
+			case "unchanged":
+				return t("popup.webAdaptation.unchanged");
+			case "noModel":
+				return t("popup.webAdaptation.noModel");
+			case "unavailable":
+				return t("popup.webAdaptation.unavailable");
+			case "failed":
+				return t("popup.webAdaptation.failed");
+			default:
+				return "";
+		}
+	};
+	const runAdaptation = async () => {
+		setAdaptationRunning(true);
+		setAdaptationResult("");
+		try {
+			const tabs = await browser.tabs.query({
+				active: true,
+				currentWindow: true,
+			});
+			const tabId = tabs[0]?.id;
+			if (tabId === undefined) {
+				setAdaptationResult("unavailable");
+				return;
+			}
+			const result = await browser.tabs.sendMessage(
+				tabId,
+				{ type: WEB_ADAPTATION_MESSAGE },
+				{ frameId: 0 },
+			);
+			setAdaptationResult(typeof result === "string" ? result : "failed");
+		} catch {
+			setAdaptationResult("unavailable");
+		} finally {
+			setAdaptationRunning(false);
+		}
+	};
 
 	createEffect(
 		on(
@@ -113,6 +160,23 @@ const Content = (props: { children?: JSX.Element }) => {
 			</div>
 
 			<footer class="shrink-0 overflow-x-clip border-t border-base-200 pt-3">
+				<Button
+					class="mb-2 w-full"
+					variant="ghost"
+					outline
+					loading={adaptationRunning()}
+					onClick={runAdaptation}
+				>
+					<WandSparkles size={16} />
+					{adaptationRunning()
+						? t("popup.webAdaptation.running")
+						: t("popup.webAdaptation.run")}
+				</Button>
+				{adaptationResult() && (
+					<p class="mb-2 text-xs text-base-content/70" role="status">
+						{adaptationResultText()}
+					</p>
+				)}
 				<button
 					type="button"
 					class={cn(

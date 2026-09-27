@@ -506,4 +506,23 @@ describe("migrateSettings", () => {
 		);
 		expect(result.summary.pageContextModel).toBeUndefined();
 	});
+
+	test("migrates from v11 to v12 with an opt-in adaptation model and prompt", () => {
+		const defaults = generateDefaultSettings();
+		const v11Settings = {
+			...defaults,
+			__v: 11,
+			prompts: { ...defaults.prompts },
+		};
+		delete (v11Settings as Record<string, unknown>).webAdaptation;
+		delete (v11Settings.prompts as Record<string, unknown>)[
+			PROMPT_ID.webAdaptation
+		];
+		const result = migrateSettings(v11Settings);
+		expect(result.__v).toBe(SETTINGS_VERSION);
+		expect(result.webAdaptation).toEqual({ autoEnabled: false, rules: [] });
+		expect(result.prompts[PROMPT_ID.webAdaptation]).toEqual(
+			defaults.prompts[PROMPT_ID.webAdaptation],
+		);
+	});
 });

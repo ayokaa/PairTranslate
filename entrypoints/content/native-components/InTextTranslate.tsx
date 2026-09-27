@@ -26,6 +26,7 @@ import type { DOMSection } from "~/utils/parser/types";
 import { findServiceForModelRef } from "~/utils/settings/services";
 import { estimateTokens } from "~/utils/token-estimate";
 import InTextTooltip from "../components/InTextTooltip";
+import { recordTranslationObservation } from "../web-adaptation/observations";
 import { NativeLoading } from "./Loading";
 
 const NEW_LINE_THRESHOLD = 10;
@@ -218,6 +219,7 @@ const BatchRender = (props: BatchRenderProps) => {
 						skipped={item.skipped}
 						error={item.error?.message}
 						section={members[index()][0]}
+						source={members[index()][1]}
 						hideOriginal={hideOriginal()}
 						showLanguageIcon={showLanguageIcon()}
 						showTranslationActions={showTranslationActions()}
@@ -237,6 +239,7 @@ const BatchRender = (props: BatchRenderProps) => {
 };
 
 interface TranslationRenderProps {
+	source?: string;
 	text?: string;
 	loading?: boolean;
 	skipped: boolean;
@@ -249,6 +252,17 @@ interface TranslationRenderProps {
 	onDelete?: () => void;
 }
 export const TranslationRender = (props: TranslationRenderProps) => {
+	createEffect(() => {
+		if (
+			!props.loading &&
+			!props.error &&
+			!props.skipped &&
+			props.text &&
+			props.source
+		) {
+			recordTranslationObservation(props.section, props.source, props.text);
+		}
+	});
 	const [tooltipPos, setTooltipPos] = createSignal<{ x: number; y: number }>();
 	const shouldRender = () =>
 		!props.skipped &&

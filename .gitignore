@@ -9,6 +9,7 @@ lerna-debug.log*
 
 node_modules
 .output
+.env.e2e.local
 stats.html
 stats-*.json
 .wxt
@@ -28,5 +29,4 @@ web-ext.config.ts
 
 .worktrees/
 
-# Docs (do not commit)
-docs/
+/docs/

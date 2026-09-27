@@ -345,6 +345,7 @@ export async function* elementWalker(state: State): SectionGenerator {
 		yield* findTextElementsAndSplit(root);
 		observeElement(root);
 	}
+	if (!state.listenNew) return;
 
 	if (state.signal) {
 		if (state.signal.aborted) {

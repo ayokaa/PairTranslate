@@ -84,6 +84,21 @@ export default (props: { navId: string }) => {
 		},
 	];
 
+	const webAdaptationTokenMetrics: StatMetric[] = [
+		{
+			label: t("settings.stats.promptTokens"),
+			value: () => stats().webAdaptationPromptTokens,
+		},
+		{
+			label: t("settings.stats.completionTokens"),
+			value: () => stats().webAdaptationCompletionTokens,
+		},
+		{
+			label: t("settings.stats.totalTokens"),
+			value: () => stats().webAdaptationTotalTokens,
+		},
+	];
+
 	const renderMetric = (metric: StatMetric) => (
 		<Stats.Stat centered class="px-4 py-3">
 			<Stats.Title class="stat-title text-xs uppercase tracking-wide text-base-content/60">
@@ -132,6 +147,18 @@ export default (props: { navId: string }) => {
 						class="w-full border border-base-300 bg-base-200/70"
 					>
 						<For each={tokenMetrics}>{renderMetric}</For>
+					</Stats.Root>
+				</div>
+				<div>
+					<p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-base-content/60">
+						{t("settings.stats.webAdaptationTokenUsage")}
+					</p>
+					<Stats.Root
+						responsive
+						shadow={false}
+						class="w-full border border-base-300 bg-base-200/70"
+					>
+						<For each={webAdaptationTokenMetrics}>{renderMetric}</For>
 					</Stats.Root>
 				</div>
 			</div>

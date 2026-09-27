@@ -7,6 +7,7 @@ import type {
 	TranslationStreamChunk,
 } from "./translation-result";
 import type { TranslateContext, TranslateQueueStatus } from "./types";
+import type { AdaptationProposal } from "./web-adaptation/model";
 
 export interface CoreService extends RpcService {
 	ping(): Promise<string>;
@@ -49,12 +50,22 @@ export interface DictionaryService extends RpcService {
 	lookup(word: string): Promise<DictionaryResponse | null>;
 }
 
+export interface WebAdaptationService extends RpcService {
+	reserveWebAdaptationCheck(key: string): Promise<boolean>;
+	completeWebAdaptationCheck(key: string): Promise<void>;
+	releaseWebAdaptationCheck(key: string): Promise<void>;
+	commitWebAdaptation(
+		proposal: AdaptationProposal,
+	): Promise<"added" | "updated" | "unchanged">;
+}
+
 export interface AllServices
 	extends CoreService,
 		TranslateService,
 		StyleService,
 		MatchService,
-		DictionaryService {}
+		DictionaryService,
+		WebAdaptationService {}
 
 export interface AudioService extends RpcService {
 	play(url: string): Promise<void>;

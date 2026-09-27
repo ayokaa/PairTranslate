@@ -11,6 +11,7 @@ import {
 	generateQueueControlSettings,
 	generateSummarySettings,
 	generateTranslateSettings,
+	generateWebAdaptationSettings,
 } from "./default";
 import { SETTINGS_VERSION } from "./version";
 
@@ -155,6 +156,11 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 			version = 11;
 			continue;
 		}
+		if (version === 11) {
+			working = migrateV11ToV12(working as SettingsSchema);
+			version = 12;
+			continue;
+		}
 
 		throw new Error(`Unsupported settings version: ${version}`);
 	}
@@ -176,6 +182,7 @@ function migrateV0ToV1(oldSettings: LegacySettingsV0): SettingsV1 {
 		basic: oldSettings.basic,
 		translate: translate,
 		websiteRules: oldSettings.websiteRules ?? [],
+		webAdaptation: generateWebAdaptationSettings(),
 		queue,
 		services,
 		prompts: oldSettings.prompts ?? generatePromptSettings(),
@@ -415,6 +422,19 @@ function migrateV10ToV11(oldSettings: SettingsSchema): SettingsSchema {
 			[PROMPT_ID.pageContext]: prompts[PROMPT_ID.pageContext],
 		},
 		__v: 11,
+	};
+}
+
+function migrateV11ToV12(oldSettings: SettingsSchema): SettingsSchema {
+	return {
+		...oldSettings,
+		webAdaptation: generateWebAdaptationSettings(),
+		prompts: {
+			...oldSettings.prompts,
+			[PROMPT_ID.webAdaptation]:
+				generatePromptSettings()[PROMPT_ID.webAdaptation],
+		},
+		__v: 12,
 	};
 }
 
