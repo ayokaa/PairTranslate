@@ -19,9 +19,19 @@ debug = "デバッグ設定"
 website = "ウェブサイト"
 summary = "要約サービス"
 
+[nav.categories]
+core = "機能"
+services = "サービスとモデル"
+rules = "ルールと制御"
+system = "システム"
+
 [popup.navigation]
 openOptions = "その他の設定"
 openTranslatorWindow = "翻訳ポップアップを開く"
+
+[popup.enable]
+on = "翻訳が有効"
+off = "翻訳が無効"
 
 [translatorWindow]
 [translatorWindow.title]
@@ -105,7 +115,6 @@ resetFailed = "設定のリセットに失敗しました。もう一度お試�
 # Settings Pages
 
 [settings]
-title = "設定"
 sectionResetConfirm = "このセクションを既定値にリセットしますか？"
 
 [settings.basic]
@@ -216,6 +225,7 @@ modelSettings = "モデル設定"
 translationSettings = "翻訳設定"
 fullPage = "ページ全体"
 visible = "表示のみ"
+displayMode = "表示モード"
 
 filterInteractive = "インタラクティブ要素をフィルター"
 filterInteractiveDesc = "ボタン、ヘッダー、ナビゲーション、フッターなどのインタラクティブ要素をスキップして、不要な翻訳を避けます"

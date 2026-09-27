@@ -70,15 +70,18 @@ export default () => {
 	);
 
 	return (
-		<>
-			<div class="w-full p-4 flex items-center gap-2">
-				<Link size={16} />
-				<span class="font-mono overflow-clip">{domain()}</span>
+		<div class="flex flex-col gap-3">
+			<div class="flex items-center gap-2 rounded-box border border-base-200 px-3 py-2">
+				<Link size={16} class="shrink-0 text-base-content/60" />
+				<span class="min-w-0 flex-1 truncate font-mono text-sm">
+					{domain()}
+				</span>
 				<Button
-					class="tooltip tooltip-left ml-auto"
+					class="btn-square shrink-0 tooltip"
 					variant="success"
 					size="xs"
 					data-tip={t("websiteRule.addRule")}
+					aria-label={t("websiteRule.addRule")}
 					onClick={() => {
 						if (idx() !== null) return;
 						const newIdx = settings.websiteRules.length;
@@ -93,10 +96,11 @@ export default () => {
 					{idx() === null ? <Plus size={16} /> : <CheckCheck size={16} />}
 				</Button>
 				<Button
-					class="tooltip tooltip-left"
-					variant="warning"
+					class="btn-square shrink-0 tooltip"
+					variant="ghost"
 					size="xs"
 					data-tip={t("websiteRule.deleteRule")}
+					aria-label={t("websiteRule.deleteRule")}
 					onClick={() => {
 						const idx_ = idx();
 						if (idx_ === null) return;
@@ -111,8 +115,8 @@ export default () => {
 				</Button>
 			</div>
 			<Show when={rule()}>
-				{(r) => <WebsiteRuleEditor s={untrack(r)} onChange={setRule} />}
+				{(r) => <WebsiteRuleEditor s={untrack(r)} onChange={setRule} compact />}
 			</Show>
-		</>
+		</div>
 	);
 };

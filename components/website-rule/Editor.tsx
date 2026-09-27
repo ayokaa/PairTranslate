@@ -21,6 +21,8 @@ import {
 interface Props {
 	s: WebsiteRuleSettings;
 	onChange?: (newSettings: WebsiteRuleSettings) => void;
+	/** Collapses the advanced sections and shortens headings for narrow surfaces. */
+	compact?: boolean;
 }
 
 export const WebsiteRuleEditor = (props: Props) => {
@@ -116,13 +118,23 @@ export const WebsiteRuleEditor = (props: Props) => {
 		setLocal("urlPatterns", []);
 	};
 
+	const sectionClass = () => (props.compact ? "card-body gap-2 p-3" : "gap-4");
+	const titleClass = () =>
+		props.compact ? "card-title text-sm" : "card-title text-lg";
+	const outerClass = () =>
+		props.compact
+			? "flex flex-col gap-2 w-full wrap-anywhere"
+			: "flex flex-col gap-4 w-full wrap-anywhere";
+
 	return (
-		<div class="flex flex-col gap-4 w-full wrap-anywhere">
+		<div class={outerClass()}>
 			{/* URL Patterns Section */}
 			<div class="card bg-base-200">
-				<div class="card-body gap-4">
-					<h3 class="card-title text-lg">{t("websiteRule.urlPatterns")}</h3>
-					<p class="text-sm opacity-70">{t("websiteRule.urlPatternsDesc")}</p>
+				<div class={sectionClass()}>
+					<h3 class={titleClass()}>{t("websiteRule.urlPatterns")}</h3>
+					<Show when={!props.compact}>
+						<p class="text-sm opacity-70">{t("websiteRule.urlPatternsDesc")}</p>
+					</Show>
 
 					{/* Pattern Input */}
 					<form class="flex gap-2" onSubmit={handleAddPattern}>
@@ -183,32 +195,33 @@ export const WebsiteRuleEditor = (props: Props) => {
 					</Show>
 
 					{/* Pattern Help */}
-					<div class="alert alert-info">
-						<div class="text-xs">
-							<p class="font-bold mb-1">{t("websiteRule.patternExamples")}</p>
-							<ul class="list-disc list-inside space-y-1">
-								<li>
-									<code>example.com</code> - {t("websiteRule.patternExact")}
-								</li>
-								<li>
-									<code>*.example.com</code> -{" "}
-									{t("websiteRule.patternSubdomains")}
-								</li>
-								<li>
-									<code>*.github.com</code> - {t("websiteRule.patternExample")}
-								</li>
-							</ul>
+					<Show when={!props.compact}>
+						<div class="alert alert-info">
+							<div class="text-xs">
+								<p class="font-bold mb-1">{t("websiteRule.patternExamples")}</p>
+								<ul class="list-disc list-inside space-y-1">
+									<li>
+										<code>example.com</code> - {t("websiteRule.patternExact")}
+									</li>
+									<li>
+										<code>*.example.com</code> -{" "}
+										{t("websiteRule.patternSubdomains")}
+									</li>
+									<li>
+										<code>*.github.com</code> -{" "}
+										{t("websiteRule.patternExample")}
+									</li>
+								</ul>
+							</div>
 						</div>
-					</div>
+					</Show>
 				</div>
 			</div>
 
 			{/* Translation Settings Section */}
 			<div class="card bg-base-200">
-				<div class="card-body gap-4">
-					<h3 class="card-title text-lg">
-						{t("websiteRule.translationSettings")}
-					</h3>
+				<div class={sectionClass()}>
+					<h3 class={titleClass()}>{t("websiteRule.translationSettings")}</h3>
 
 					{/* Enable Translation */}
 					<FormField
@@ -322,8 +335,8 @@ export const WebsiteRuleEditor = (props: Props) => {
 
 			{/* Summary Settings Section */}
 			<div class="card bg-base-200">
-				<div class="card-body gap-4">
-					<h3 class="card-title text-lg">{t("websiteRule.summarySettings")}</h3>
+				<div class={sectionClass()}>
+					<h3 class={titleClass()}>{t("websiteRule.summarySettings")}</h3>
 
 					<FormField
 						label={t("websiteRule.enableSummary")}
@@ -358,10 +371,8 @@ export const WebsiteRuleEditor = (props: Props) => {
 
 			{/* Advanced Settings Section */}
 			<div class="card bg-base-200">
-				<div class="card-body gap-4">
-					<h3 class="card-title text-lg">
-						{t("websiteRule.advancedSettings")}
-					</h3>
+				<div class={sectionClass()}>
+					<h3 class={titleClass()}>{t("websiteRule.advancedSettings")}</h3>
 
 					{/* Floating Ball */}
 					<FormField

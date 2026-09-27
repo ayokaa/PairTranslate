@@ -28,6 +28,7 @@ import { Loading } from "~/components/Loading";
 import { SettingsRecoveryBanner } from "~/components/SettingsRecoveryBanner";
 import { SettingsProvider, useSettings } from "~/hooks/settings";
 import { createTheme } from "~/hooks/theme";
+import { cn } from "~/utils/cn";
 import { t } from "~/utils/i18n";
 import { createLogger } from "~/utils/rpc/logger";
 import { openTranslatorPopup } from "~/utils/translator-window";
@@ -105,97 +106,131 @@ const Content = (props: { children?: JSX.Element }) => {
 	});
 
 	return (
-		<div class="p-4 flex flex-col gap-4 w-full h-full">
-			<div class="flex-1 overflow-y-auto flex flex-col gap-4">
+		<div class="flex h-full min-h-0 w-full flex-1 flex-col gap-3 overflow-x-clip p-3">
+			<div class="min-h-0 flex-1 overflow-y-auto overflow-x-clip">
 				<SettingsRecoveryBanner />
 				{props.children}
 			</div>
-			<div class="flex gap-2">
-				<Button
-					class="btn-circle tooltip tooltip-right z-2"
-					size="sm"
-					variant={enabled() ? "primary" : "neutral"}
+
+			<footer class="shrink-0 overflow-x-clip border-t border-base-200 pt-3">
+				<button
+					type="button"
+					class={cn(
+						"btn w-full justify-start gap-3 rounded-box",
+						enabled() ? "btn-primary" : "btn-outline border-base-300",
+					)}
+					aria-pressed={enabled()}
 					on:click={() => setSettings("basic", "enabled", !enabled())}
-					data-tip={enabled() ? t("common.enabled") : t("common.disabled")}
 				>
 					{enabled() ? <Power size={16} /> : <PowerOff size={16} />}
-				</Button>
-				<Button
-					class="btn-circle mr-auto tooltip tooltip-right z-1"
-					size="sm"
-					variant="ghost"
-					on:click={openTranslatorPopup}
-					data-tip={t("popup.navigation.openTranslatorWindow")}
-				>
-					<LayoutPanelLeft size={16} />
-				</Button>
-				<Button
-					class="btn-circle tooltip tooltip-right z-1"
-					size="sm"
-					variant="ghost"
-					disabled={!settings.summary.summaryModel}
-					on:click={async () => {
-						logger.info("Summary button clicked");
-						try {
-							const tabs = await browser.tabs.query({
-								active: true,
-								currentWindow: true,
-							});
-							const tabId = tabs[0]?.id;
-							logger.debug("Sending message to tab:", tabId);
-							if (tabId) {
-								await browser.tabs.sendMessage(tabId, {
-									type: "generate-summary",
+					<span class="font-medium">
+						{enabled() ? t("popup.enable.on") : t("popup.enable.off")}
+					</span>
+				</button>
+
+				<div class="mt-2 flex items-center gap-1">
+					<Button
+						class="btn-ghost tooltip aspect-square flex-1 border border-base-300 bg-base-200 text-base-content"
+						size="sm"
+						on:click={openTranslatorPopup}
+						data-tip={t("popup.navigation.openTranslatorWindow")}
+						aria-label={t("popup.navigation.openTranslatorWindow")}
+					>
+						<LayoutPanelLeft size={16} />
+					</Button>
+					<Button
+						class="btn-ghost tooltip aspect-square flex-1 border border-base-300 bg-base-200 text-base-content"
+						size="sm"
+						disabled={!settings.summary.summaryModel}
+						on:click={async () => {
+							logger.info("Summary button clicked");
+							try {
+								const tabs = await browser.tabs.query({
+									active: true,
+									currentWindow: true,
 								});
-								logger.info("Message sent successfully");
+								const tabId = tabs[0]?.id;
+								logger.debug("Sending message to tab:", tabId);
+								if (tabId) {
+									await browser.tabs.sendMessage(tabId, {
+										type: "generate-summary",
+									});
+									logger.info("Message sent successfully");
+								}
+							} catch (e) {
+								logger.error("Failed to send message:", e);
 							}
-						} catch (e) {
-							logger.error("Failed to send message:", e);
+						}}
+						data-tip={t("summary.generate")}
+						aria-label={t("summary.generate")}
+					>
+						<FileText size={16} />
+					</Button>
+					<Button
+						class={cn(
+							"tooltip aspect-square flex-1 border",
+							isSummaryExcluded()
+								? "btn-error border-error"
+								: "btn-ghost border-base-300 bg-base-200 text-base-content",
+						)}
+						size="sm"
+						on:click={toggleSummaryExclusion}
+						data-tip={
+							isSummaryExcluded()
+								? t("summary.removeFromExclusion")
+								: t("summary.addToExclusion")
 						}
-					}}
-					data-tip={t("summary.generate")}
-				>
-					<FileText size={16} />
-				</Button>
-				<Button
-					class="btn-circle tooltip tooltip-right z-1"
-					size="sm"
-					variant={isSummaryExcluded() ? "error" : "ghost"}
-					on:click={toggleSummaryExclusion}
-					data-tip={
-						isSummaryExcluded()
-							? t("summary.removeFromExclusion")
-							: t("summary.addToExclusion")
-					}
-				>
-					{isSummaryExcluded() ? (
-						<ShieldOff size={16} />
-					) : (
-						<ShieldCheck size={16} />
-					)}
-				</Button>
-				<Switch>
-					<Match when={location.pathname.includes("overall")}>
-						<Button variant="ghost" on:click={() => navigate("website")}>
-							<Earth size={16} />
-							{t("nav.websiteRules")}
-						</Button>
-					</Match>
-					<Match when={location.pathname.includes("website")}>
-						<Button variant="ghost" on:click={() => navigate("overall")}>
-							<Settings2 size={16} />
-							{t("nav.basic")}
-						</Button>
-					</Match>
-				</Switch>
-				<Button
-					variant="ghost"
-					on:click={() => browser.runtime.openOptionsPage()}
-				>
-					<ExternalLink size={16} />
-					{t("popup.navigation.openOptions")}
-				</Button>
-			</div>
+						aria-label={
+							isSummaryExcluded()
+								? t("summary.removeFromExclusion")
+								: t("summary.addToExclusion")
+						}
+					>
+						{isSummaryExcluded() ? (
+							<ShieldOff size={16} />
+						) : (
+							<ShieldCheck size={16} />
+						)}
+					</Button>
+
+					<div class="divider divider-horizontal mx-0 h-6" />
+
+					<Switch>
+						<Match when={location.pathname.includes("overall")}>
+							<Button
+								class="btn-ghost tooltip aspect-square flex-1 border border-base-300 bg-base-200 text-base-content"
+								size="sm"
+								on:click={() => navigate("website")}
+								data-tip={t("nav.websiteRules")}
+								aria-label={t("nav.websiteRules")}
+							>
+								<Earth size={16} />
+							</Button>
+						</Match>
+						<Match when={location.pathname.includes("website")}>
+							<Button
+								class="btn-ghost tooltip aspect-square flex-1 border border-base-300 bg-base-200 text-base-content"
+								size="sm"
+								on:click={() => navigate("overall")}
+								data-tip={t("nav.basic")}
+								aria-label={t("nav.basic")}
+							>
+								<Settings2 size={16} />
+							</Button>
+						</Match>
+					</Switch>
+
+					<Button
+						class="btn-ghost tooltip aspect-square flex-1 border border-base-300 bg-base-200 text-base-content"
+						size="sm"
+						on:click={() => browser.runtime.openOptionsPage()}
+						data-tip={t("popup.navigation.openOptions")}
+						aria-label={t("popup.navigation.openOptions")}
+					>
+						<ExternalLink size={16} />
+					</Button>
+				</div>
+			</footer>
 		</div>
 	);
 };

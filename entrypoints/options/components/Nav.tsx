@@ -18,6 +18,10 @@ interface ItemProps {
 	navId: string;
 }
 
+interface GroupProps {
+	label: string;
+}
+
 interface RootProps extends JSX.HTMLAttributes<HTMLDivElement> {
 	drawerId: string;
 }
@@ -37,12 +41,11 @@ const Root = (props: RootProps) => {
 					local.class,
 				)}
 			>
-				<div class="flex h-full flex-col">
-					<div class="border-b border-base-200 px-6 pb-4 pt-6">
-						<p class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
-							{t("settings.title")}
+				<div class="sticky top-0 z-1 flex h-full flex-col bg-base-100">
+					<div class="border-b border-base-200 px-6 py-5">
+						<p class="text-2xl font-bold leading-tight text-base-content">
+							{t("meta.name")}
 						</p>
-						<p class="text-2xl font-bold text-base-content">{t("meta.name")}</p>
 						<p class="mt-1 text-xs text-base-content/60">
 							{t("meta.description")}
 						</p>
@@ -50,7 +53,7 @@ const Root = (props: RootProps) => {
 					<div class="px-4 pt-4">
 						<Status />
 					</div>
-					<Menu.Root class="w-full menu-lg flex-1 gap-1 px-2 py-4">
+					<Menu.Root class="w-full menu-lg flex-1 gap-0.5 overflow-y-auto px-2 pb-6">
 						{local.children}
 					</Menu.Root>
 				</div>
@@ -157,4 +160,12 @@ const Status = (props: StatusProps) => {
 	);
 };
 
-export default { Root, Item, Status };
+const Group = (props: GroupProps) => {
+	return (
+		<Menu.Title class="px-3 pb-1 pt-5 text-[0.65rem] font-semibold uppercase tracking-wider text-base-content/40 first:pt-1">
+			{props.label}
+		</Menu.Title>
+	);
+};
+
+export default { Root, Group, Item, Status };

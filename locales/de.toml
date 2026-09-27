@@ -19,9 +19,19 @@ debug = "Debug-Einstellungen"
 website = "Website"
 summary = "Zusammenfassungsdienste"
 
+[nav.categories]
+core = "Funktionen"
+services = "Dienste & Modelle"
+rules = "Regeln & Kontrolle"
+system = "System"
+
 [popup.navigation]
 openOptions = "Weitere Einstellungen"
 openTranslatorWindow = "Übersetzer-Popup öffnen"
+
+[popup.enable]
+on = "Übersetzung aktiviert"
+off = "Übersetzung deaktiviert"
 
 [translatorWindow]
 [translatorWindow.title]
@@ -105,7 +115,6 @@ resetFailed = "Fehler beim Zurücksetzen der Einstellungen. Bitte versuchen Sie 
 # Settings Pages
 
 [settings]
-title = "Einstellungen"
 sectionResetConfirm = "Diesen Abschnitt auf Standardwerte zurücksetzen?"
 
 [settings.basic]
@@ -216,6 +225,7 @@ modelSettings = "Modelleinstellungen"
 translationSettings = "Übersetzungseinstellungen"
 fullPage = "Vollständige Seite"
 visible = "Nur sichtbar"
+displayMode = "Anzeigemodus"
 
 filterInteractive = "Interaktive Elemente filtern"
 filterInteractiveDesc = "Interaktive Elemente wie Schaltflächen, Kopfzeilen, Navigation und Fußzeile überspringen, um unerwünschte Übersetzungen zu vermeiden"

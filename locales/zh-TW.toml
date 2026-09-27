@@ -19,9 +19,19 @@ debug = "調試設置"
 website = "網站"
 summary = "摘要服務"
 
+[nav.categories]
+core = "核心功能"
+services = "服務與模型"
+rules = "規則與控制"
+system = "系統與資訊"
+
 [popup.navigation]
 openOptions = "更多設置"
 openTranslatorWindow = "開啟翻譯彈窗"
+
+[popup.enable]
+on = "翻譯已開啟"
+off = "翻譯已關閉"
 
 [translatorWindow]
 [translatorWindow.title]
@@ -105,7 +115,6 @@ resetFailed = "重置失敗，請重試。"
 # Settings Pages
 
 [settings]
-title = "設置"
 sectionResetConfirm = "確定要將此部分重置為默認值嗎？"
 
 [settings.basic]
@@ -216,6 +225,7 @@ modelSettings = "模型設置"
 translationSettings = "翻譯設置"
 fullPage = "整頁"
 visible = "僅可見"
+displayMode = "顯示方式"
 
 filterInteractive = "過濾交互元素"
 filterInteractiveDesc = "跳過按鈕、標題、導航、頁腳等交互元素，以避免不必要的翻譯"

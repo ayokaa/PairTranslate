@@ -113,6 +113,7 @@ const SettingsPage = () => {
 				</div>
 			</div>
 			<Nav.Root drawerId={drawerId}>
+				<Nav.Group label={t("nav.categories.core")} />
 				<Nav.Item navId="basic">
 					<Info size={16} />
 					{t("nav.basic")}
@@ -125,6 +126,7 @@ const SettingsPage = () => {
 					<ScrollText size={16} />
 					{t("nav.summary")}
 				</Nav.Item>
+				<Nav.Group label={t("nav.categories.services")} />
 				<Nav.Item navId="llm">
 					<BrainCircuit size={16} />
 					{t("nav.llmServices")}
@@ -137,17 +139,19 @@ const SettingsPage = () => {
 					<Globe size={16} />
 					{t("nav.traditionalServices")}
 				</Nav.Item>
+				<Nav.Group label={t("nav.categories.rules")} />
 				<Nav.Item navId="flowControl">
 					<Activity size={16} />
 					{t("nav.flowControl")}
 				</Nav.Item>
-				<Nav.Item navId="stats">
-					<ChartColumn size={16} />
-					{t("nav.stats")}
-				</Nav.Item>
 				<Nav.Item navId="websiteRules">
 					<FileText size={16} />
 					{t("nav.websiteRules")}
+				</Nav.Item>
+				<Nav.Group label={t("nav.categories.system")} />
+				<Nav.Item navId="stats">
+					<ChartColumn size={16} />
+					{t("nav.stats")}
 				</Nav.Item>
 				<Nav.Item navId="advanced">
 					<Cog size={16} />

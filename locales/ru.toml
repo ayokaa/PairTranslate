@@ -19,9 +19,19 @@ debug = "Параметры Отладки"
 website = "Веб-сайт"
 summary = "Сервисы резюме"
 
+[nav.categories]
+core = "Основные функции"
+services = "Сервисы и модели"
+rules = "Правила и контроль"
+system = "Система"
+
 [popup.navigation]
 openOptions = "Больше параметров"
 openTranslatorWindow = "Открыть всплывающее окно переводчика"
+
+[popup.enable]
+on = "Перевод включён"
+off = "Перевод выключен"
 
 [translatorWindow]
 [translatorWindow.title]
@@ -105,7 +115,6 @@ resetFailed = "Ошибка при сбросе параметров. Пожал
 # Settings Pages
 
 [settings]
-title = "Параметры"
 sectionResetConfirm = "Сбросить этот раздел на значения по умолчанию?"
 
 [settings.basic]
@@ -216,6 +225,7 @@ modelSettings = "Параметры Модели"
 translationSettings = "Параметры Перевода"
 fullPage = "Полная Страница"
 visible = "Только видимое"
+displayMode = "Режим Отображения"
 
 filterInteractive = "Фильтровать Интерактивные Элементы"
 filterInteractiveDesc = "Пропускать интерактивные элементы, такие как кнопки, заголовки, навигация и нижний колонтитул, чтобы избежать нежелательных переводов"

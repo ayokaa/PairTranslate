@@ -1,5 +1,6 @@
 import { type Component, For, splitProps } from "solid-js";
 import { Button } from "~/components/Button";
+import { cn } from "~/utils/cn";
 
 export interface ButtonOption {
 	value: string;
@@ -13,6 +14,8 @@ export interface ButtonGroupProps {
 	onChange?: (value: string) => void;
 	size?: "xs" | "sm" | "md" | "lg";
 	variant?: "primary" | "ghost" | "secondary";
+	/** Distributes the buttons evenly across the full group width. */
+	stretch?: boolean;
 	class?: string;
 	title?: string;
 }
@@ -24,6 +27,7 @@ export const ButtonGroup: Component<ButtonGroupProps> = (props) => {
 		"onChange",
 		"size",
 		"variant",
+		"stretch",
 		"class",
 		"title",
 	]);
@@ -33,7 +37,11 @@ export const ButtonGroup: Component<ButtonGroupProps> = (props) => {
 	};
 
 	return (
-		<div class={`join ${local.class || ""}`} {...divProps} title={local.title}>
+		<div
+			class={cn("join", local.stretch && "flex w-full", local.class)}
+			{...divProps}
+			title={local.title}
+		>
 			<For each={local.options}>
 				{(option) => (
 					<Button
@@ -43,10 +51,11 @@ export const ButtonGroup: Component<ButtonGroupProps> = (props) => {
 								? local.variant || "primary"
 								: "ghost"
 						}
-						class="join-item"
-						classList={{
-							"btn-active": local.value === option.value,
-						}}
+						class={cn(
+							"join-item",
+							local.value === option.value && "btn-active",
+							local.stretch && "grow basis-0",
+						)}
 						onClick={() => handleClick(option.value)}
 						disabled={option.disabled}
 						title={option.label}

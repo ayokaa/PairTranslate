@@ -19,9 +19,19 @@ debug = "Paramètres de Débogage"
 website = "Site Web"
 summary = "Services de résumé"
 
+[nav.categories]
+core = "Fonctionnalités"
+services = "Services et Modèles"
+rules = "Règles et Contrôle"
+system = "Système"
+
 [popup.navigation]
 openOptions = "Plus de paramètres"
 openTranslatorWindow = "Ouvrir la fenêtre du traducteur"
+
+[popup.enable]
+on = "Traduction activée"
+off = "Traduction désactivée"
 
 [translatorWindow]
 [translatorWindow.title]
@@ -105,7 +115,6 @@ resetFailed = "Impossible de réinitialiser les paramètres. Veuillez réessayer
 # Settings Pages
 
 [settings]
-title = "Paramètres"
 sectionResetConfirm = "Réinitialiser cette section à ses valeurs par défaut ?"
 
 [settings.basic]
@@ -216,6 +225,7 @@ modelSettings = "Paramètres du Modèle"
 translationSettings = "Paramètres de Traduction"
 fullPage = "Page Complète"
 visible = "Visible uniquement"
+displayMode = "Mode d'Affichage"
 
 filterInteractive = "Filtrer les Éléments Interactifs"
 filterInteractiveDesc = "Ignorer les éléments interactifs comme les boutons, les en-têtes, la navigation et les pieds de page pour éviter les traductions indésirables"
