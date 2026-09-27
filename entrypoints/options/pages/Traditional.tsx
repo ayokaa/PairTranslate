@@ -2,6 +2,7 @@ import { Globe, KeyRound, Link, Pencil, TestTube2, Trash2 } from "lucide-solid";
 import { createSignal } from "solid-js";
 import type { StoreSetter } from "solid-js/store";
 import { Button } from "~/components/Button";
+import { DangerButton } from "~/components/settings/DangerButton";
 import { QueueSummary } from "~/components/settings/QueueSummary";
 import { SectionResetButton } from "~/components/settings/SectionResetButton";
 import { ServiceManager } from "~/components/settings/ServiceManager";
@@ -69,22 +70,25 @@ export default (props: { navId: string }) => {
 						</div>
 					</div>
 					<div class="join">
-						<button
-							type="button"
-							class="btn btn-sm btn-ghost join-item tooltip"
+						<Button
+							variant="ghost"
+							size="sm"
+							class="join-item tooltip"
 							data-tip={t("common.edit")}
+							aria-label={t("common.edit")}
 							onClick={onEdit}
 						>
 							<Pencil size={16} />
-						</button>
-						<button
-							type="button"
-							class="btn btn-sm btn-ghost text-error join-item tooltip"
+						</Button>
+						<DangerButton
+							size="sm"
+							class="join-item tooltip"
 							data-tip={t("common.delete")}
+							aria-label={t("common.delete")}
 							onClick={onDelete}
 						>
 							<Trash2 size={16} />
-						</button>
+						</DangerButton>
 					</div>
 				</div>
 

@@ -2,6 +2,7 @@ import { Plus } from "lucide-solid";
 import { For, type JSX } from "solid-js";
 import { Button } from "~/components/Button";
 import type { ServiceSettings } from "~/utils/settings";
+import { EmptyState } from "./EmptyState";
 import { SettingsCard } from "./SettingsCard";
 
 export interface ServiceManagerProps<
@@ -39,18 +40,15 @@ export const ServiceManager = <T extends ServiceSettings>(
 			</div>
 
 			{props.services.length === 0 && (
-				<div class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-base-300 bg-base-100 p-8 text-center text-base-content/70">
-					<p class="text-base font-medium">{props.noServicesConfigured}</p>
-					<p class="mt-2 text-sm">{props.noServicesDesc}</p>
-					<Button
-						variant="ghost"
-						class="mt-4"
-						size="sm"
-						onClick={props.onAddService}
-					>
-						{props.addServiceLabel}
-					</Button>
-				</div>
+				<EmptyState
+					title={props.noServicesConfigured}
+					description={props.noServicesDesc}
+					action={
+						<Button variant="ghost" size="sm" onClick={props.onAddService}>
+							{props.addServiceLabel}
+						</Button>
+					}
+				/>
 			)}
 
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">

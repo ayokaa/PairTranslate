@@ -3,6 +3,8 @@ import { createSignal, For, Show } from "solid-js";
 import { Badge } from "~/components/Badge";
 import { Button } from "~/components/Button";
 import { Modal } from "~/components/Modal";
+import { DangerButton } from "~/components/settings/DangerButton";
+import { EmptyState } from "~/components/settings/EmptyState";
 import { SectionResetButton } from "~/components/settings/SectionResetButton";
 import { SettingsCard } from "~/components/settings/SettingsCard";
 import { WebsiteRuleEditor } from "~/components/website-rule/Editor";
@@ -75,20 +77,17 @@ export default (props: { navId: string }) => {
 				</div>
 
 				<Show when={rules().length === 0}>
-					<div class="mt-4 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-base-300 bg-base-50 p-8 text-base-content/70">
-						<GlobeLock size={36} class="mb-3 text-base-content/60" />
-						<p class="text-base font-semibold">
-							{t("options.websiteRules.noRulesConfigured")}
-						</p>
-						<p class="mt-2 text-sm">{t("options.websiteRules.noRulesDesc")}</p>
-						<button
-							type="button"
-							class="btn btn-xs btn-outline mt-4"
-							onClick={handleAddRule}
-						>
-							{t("options.websiteRules.addRule")}
-						</button>
-					</div>
+					<EmptyState
+						class="mt-4"
+						icon={<GlobeLock size={36} />}
+						title={t("options.websiteRules.noRulesConfigured")}
+						description={t("options.websiteRules.noRulesDesc")}
+						action={
+							<Button variant="ghost" size="sm" onClick={handleAddRule}>
+								{t("options.websiteRules.addRule")}
+							</Button>
+						}
+					/>
 				</Show>
 
 				<Show when={rules().length > 0}>
@@ -202,15 +201,15 @@ export default (props: { navId: string }) => {
 													>
 														<Pencil size={16} />
 													</Button>
-													<Button
-														variant="ghost"
+													<DangerButton
 														size="sm"
 														class="join-item tooltip"
 														data-tip={t("common.delete")}
+														aria-label={t("common.delete")}
 														onClick={() => handleDeleteRule(index)}
 													>
 														<Trash2 size={16} />
-													</Button>
+													</DangerButton>
 												</div>
 											</td>
 										</tr>

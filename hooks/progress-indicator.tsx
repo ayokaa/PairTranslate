@@ -7,8 +7,8 @@ import {
 	onCleanup,
 	useContext,
 } from "solid-js";
-import type { TranslateQueueStatus } from "~/utils/types";
 import { TRANSLATION_ACTIVITY_EVENT } from "~/utils/constants";
+import type { TranslateQueueStatus } from "~/utils/types";
 import { useSettings } from "./settings";
 
 type ProgressIndicatorContextValue = {

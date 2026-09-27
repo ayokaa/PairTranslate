@@ -2,6 +2,7 @@ import { Code, ExternalLink } from "lucide-solid";
 import { type Accessor, Show } from "solid-js";
 import { browser } from "#imports";
 import { Button } from "~/components/Button";
+import { SectionHeading } from "~/components/settings/SectionHeading";
 import { SettingsCard } from "~/components/settings/SettingsCard";
 import { t } from "~/utils/i18n";
 
@@ -47,18 +48,14 @@ export default (props: AboutProps) => {
 				</div>
 
 				<div>
-					<h3 class="mb-3 text-lg font-semibold">
-						{t("settings.about.description")}
-					</h3>
+					<SectionHeading>{t("settings.about.description")}</SectionHeading>
 					<p class="leading-relaxed text-base-content/80">
 						{t("meta.description")}
 					</p>
 				</div>
 
 				<div>
-					<h3 class="mb-3 text-lg font-semibold">
-						{t("settings.about.features")}
-					</h3>
+					<SectionHeading>{t("settings.about.features")}</SectionHeading>
 					<ul class="space-y-2 text-base-content/80">
 						<li>→ {t("settings.about.featuresList._1")}</li>
 						<li>→ {t("settings.about.featuresList._2")}</li>
@@ -70,9 +67,7 @@ export default (props: AboutProps) => {
 				</div>
 
 				<div>
-					<h3 class="mb-3 text-lg font-semibold">
-						{t("settings.about.links")}
-					</h3>
+					<SectionHeading>{t("settings.about.links")}</SectionHeading>
 					<div class="space-y-2">
 						<a
 							href="https://github.com/Cookee24/PairTranslate"
@@ -98,9 +93,7 @@ export default (props: AboutProps) => {
 				</div>
 
 				<div>
-					<h3 class="mb-3 text-lg font-semibold">
-						{t("settings.about.thirdParty")}
-					</h3>
+					<SectionHeading>{t("settings.about.thirdParty")}</SectionHeading>
 					<p class="mb-2 text-sm text-base-content/70">
 						{t("settings.about.thirdPartyDesc")}
 					</p>

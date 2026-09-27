@@ -2,6 +2,7 @@ import { createSignal, For, Show } from "solid-js";
 import { Alert } from "~/components/Alert";
 import { Button } from "~/components/Button";
 import { NumberInput } from "~/components/settings/NumberInput";
+import { SectionHeading } from "~/components/settings/SectionHeading";
 import { SettingsCard } from "~/components/settings/SettingsCard";
 import { SettingsToggle } from "~/components/settings/SettingsToggle";
 import { useSettings } from "~/hooks/settings";
@@ -236,9 +237,9 @@ export default (props: DebugProps) => {
 					/>
 				</div>
 				<div class="space-y-3">
-					<h3 class="text-base font-semibold">
+					<SectionHeading class="mb-0">
 						{t("settings.debug.actionsTitle")}
-					</h3>
+					</SectionHeading>
 					<div class="grid gap-4 md:grid-cols-2">
 						<For each={diagnostics}>
 							{(diag) => (
