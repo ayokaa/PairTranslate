@@ -1,5 +1,5 @@
 import { FileText } from "lucide-solid";
-import { createEffect, Show } from "solid-js";
+import { createEffect, on, Show } from "solid-js";
 import { Alert } from "~/components/Alert";
 import { Button } from "~/components/Button";
 import { Loading } from "~/components/Loading";
@@ -17,6 +17,7 @@ interface SummaryPanelProps {
 	content: string;
 	truncated: boolean;
 	pageContext: PageContext;
+	refreshToken: number;
 }
 
 export default (props: SummaryPanelProps) => {
@@ -44,6 +45,18 @@ export default (props: SummaryPanelProps) => {
 			logger.error("Translation error:", result.error);
 		}
 	});
+
+	// A repeated trigger (popup button or shortcut) while the panel is open bumps
+	// the token, so the summary is regenerated in place instead of being ignored.
+	createEffect(
+		on(
+			() => props.refreshToken,
+			() => {
+				retry();
+			},
+			{ defer: true },
+		),
+	);
 
 	return (
 		<div class="flex flex-col h-full">

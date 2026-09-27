@@ -1,6 +1,9 @@
-import { onCleanup, onMount } from "solid-js";
+import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { browser } from "#imports";
-import { usePopup } from "~/entrypoints/content/components/Popup";
+import {
+	type PopupActions,
+	usePopup,
+} from "~/entrypoints/content/components/Popup";
 import { createKeyboardShortcut } from "~/hooks/keyboard-shortcut";
 import { useSettings } from "~/hooks/settings";
 import { makeDomainMatcher } from "~/utils/domain-matcher";
@@ -15,7 +18,15 @@ import {
 	type PopupGeometry,
 	savePopupGeometry,
 } from "~/utils/summary/popup-storage";
+import type { PageContext } from "~/utils/types";
 import SummaryPanel from "./SummaryPanel";
+
+/** Page input a summary popup was created from. */
+type SummaryInput = {
+	content: string;
+	truncated: boolean;
+	pageContext: PageContext;
+};
 
 const logger = createLogger(import.meta.env.DEV ? "debug" : "error", "Summary");
 
@@ -35,10 +46,12 @@ const clampPosition = (height: number) => ({
 export default () => {
 	const popup = usePopup();
 	const { settings } = useSettings();
-	let popupActions: ReturnType<typeof popup.addPopup> | undefined;
+	let popupActions: PopupActions | undefined;
 	let messageListener: ((message: unknown) => void) | undefined;
 	let latestGeometry: PopupGeometry | null = null;
 	let savedGeometry: PopupGeometry | null = null;
+	const [panelInput, setPanelInput] = createSignal<SummaryInput>();
+	const [refreshToken, setRefreshToken] = createSignal(0);
 
 	const getDefaultGeometry = (height: number) => ({
 		...clampPosition(height),
@@ -100,10 +113,39 @@ export default () => {
 		return makeDomainMatcher(patterns)(window.location.hostname) !== null;
 	};
 
+	/**
+	 * Re-run summary generation for the popup that is already open. When the
+	 * page content changed the panel re-requests on its own once the input
+	 * updates; otherwise the refresh token forces a cache-less regeneration so a
+	 * repeated button press or shortcut is never silently ignored.
+	 */
+	const refreshOpenSummary = () => {
+		const current = panelInput();
+		if (!current) return;
+
+		const { content, truncated } = extractPageContent();
+		if (!content.trim()) {
+			logger.warn("No content extracted, keeping the current summary");
+			return;
+		}
+
+		if (current.content === content && current.truncated === truncated) {
+			setRefreshToken((token) => token + 1);
+			return;
+		}
+
+		setPanelInput({ content, truncated, pageContext: getPageContext() });
+	};
+
 	const handleGenerateSummary = () => {
 		if (popupActions?.isVisible()) {
-			logger.info("Summary popup already visible, skipping");
-			return;
+			if (panelInput()) {
+				logger.info("Summary popup already visible, regenerating");
+				refreshOpenSummary();
+				return;
+			}
+			// The visible popup is the "no content" placeholder: replace it.
+			closeExistingPopup();
 		}
 
 		if (isSummaryDisabled()) {
@@ -132,6 +174,7 @@ export default () => {
 
 		const pageContext = getPageContext();
 		logger.info("Creating summary popup");
+		setPanelInput({ content, truncated, pageContext });
 
 		const geometry = getSummaryGeometry();
 		latestGeometry = geometry;
@@ -143,11 +186,16 @@ export default () => {
 				height: geometry.height,
 				pinned: settings.summary.summaryDefaultPinned,
 				content: () => (
-					<SummaryPanel
-						content={content}
-						truncated={truncated}
-						pageContext={pageContext}
-					/>
+					<Show when={panelInput()}>
+						{(input) => (
+							<SummaryPanel
+								content={input().content}
+								truncated={input().truncated}
+								pageContext={input().pageContext}
+								refreshToken={refreshToken()}
+							/>
+						)}
+					</Show>
 				),
 			},
 			{ onMoveEnd, onResizeEnd },
