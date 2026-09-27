@@ -91,7 +91,12 @@ export function createAnthropicClient(config: ClientConfig): LLMClient {
 		>(request: ChatRequest, schema?: S, signal?: AbortSignal) {
 			try {
 				const [systemMessage, messages] = convertMessages(request.messages);
-				const maxTokens = request.maxTokens || 2 ** 16;
+				const rawMaxTokens = request.maxTokens || 2 ** 16;
+				const maxTokens = Math.min(rawMaxTokens, 128000);
+				const betas: string[] = [
+					...(maxTokens > 64000 ? ["output-128k-2025-02-19"] : []),
+					...(schema ? ["structured-outputs-2025-11-13"] : []),
+				];
 				const thinking = getAnthropicThinkingConfig(
 					request.thinkingBudget,
 					maxTokens,
@@ -106,8 +111,10 @@ export function createAnthropicClient(config: ClientConfig): LLMClient {
 						...(thinking && {
 							thinking,
 						}),
+						...(betas.length > 0 && {
+							betas,
+						}),
 						...(schema && {
-							betas: ["structured-outputs-2025-11-13"],
 							output_format: {
 								type: "json_schema",
 								schema: schema,
@@ -153,7 +160,12 @@ export function createAnthropicClient(config: ClientConfig): LLMClient {
 		): AsyncGenerator<StreamChunk, EndResponse> {
 			try {
 				const [systemMessage, messages] = convertMessages(request.messages);
-				const maxTokens = request.maxTokens || 2 ** 16;
+				const rawMaxTokens = request.maxTokens || 2 ** 16;
+				const maxTokens = Math.min(rawMaxTokens, 128000);
+				const betas: string[] = [
+					...(maxTokens > 64000 ? ["output-128k-2025-02-19"] : []),
+					...(schema ? ["structured-outputs-2025-11-13"] : []),
+				];
 				const thinking = getAnthropicThinkingConfig(
 					request.thinkingBudget,
 					maxTokens,
@@ -169,8 +181,10 @@ export function createAnthropicClient(config: ClientConfig): LLMClient {
 						...(thinking && {
 							thinking,
 						}),
+						...(betas.length > 0 && {
+							betas,
+						}),
 						...(schema && {
-							betas: ["structured-outputs-2025-11-13"],
 							output_format: {
 								type: "json_schema",
 								schema: schema,

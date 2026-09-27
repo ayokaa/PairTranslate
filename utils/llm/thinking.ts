@@ -6,11 +6,25 @@ export const THINKING_BUDGET_LEVELS = [
 	"medium",
 	"high",
 	"xhigh",
+	"max",
 ] as const;
 
 export type ThinkingBudget = (typeof THINKING_BUDGET_LEVELS)[number];
 
-type OpenAIReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
+export const MAX_OUTPUT_TOKENS_PRESETS = [
+	{ label: "16k", value: 16384 },
+	{ label: "32k", value: 32768 },
+	{ label: "64k", value: 65536 },
+	{ label: "128k", value: 131072 },
+] as const;
+
+type OpenAIReasoningEffort =
+	| "none"
+	| "low"
+	| "medium"
+	| "high"
+	| "xhigh"
+	| "max";
 type OpenAIThinkingType = "enabled" | "disabled";
 
 const THINKING_BUDGET_RATIOS: Record<Exclude<ThinkingBudget, "off">, number> = {
@@ -18,6 +32,7 @@ const THINKING_BUDGET_RATIOS: Record<Exclude<ThinkingBudget, "off">, number> = {
 	medium: 0.5,
 	high: 0.8,
 	xhigh: 0.95,
+	max: 1,
 };
 
 const ANTHROPIC_MIN_BUDGET_TOKENS = 1024;
@@ -154,6 +169,7 @@ export const getGeminiThinkingLevel = (
 				return ThinkingLevel.MEDIUM;
 			case "high":
 			case "xhigh":
+			case "max":
 				return ThinkingLevel.HIGH;
 		}
 	}
@@ -165,6 +181,7 @@ export const getGeminiThinkingLevel = (
 		case "medium":
 		case "high":
 		case "xhigh":
+		case "max":
 			return ThinkingLevel.HIGH;
 	}
 };

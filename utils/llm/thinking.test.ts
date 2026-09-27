@@ -115,6 +115,18 @@ test("openai reasoning config includes all combined fields", () => {
 			},
 		},
 	});
+
+	expect(getOpenAIReasoningConfig("max")).toEqual({
+		reasoningEffort: "max",
+		extraBody: {
+			reasoning: {
+				effort: "max",
+			},
+			thinking: {
+				type: "enabled",
+			},
+		},
+	});
 });
 
 test("minimax reasoning config uses adaptive thinking type", () => {
@@ -141,6 +153,18 @@ test("minimax reasoning config uses adaptive thinking type", () => {
 			},
 		},
 	});
+
+	expect(getMinimaxReasoningConfig("max")).toEqual({
+		reasoningEffort: "max",
+		extraBody: {
+			reasoning: {
+				effort: "max",
+			},
+			thinking: {
+				type: "adaptive",
+			},
+		},
+	});
 });
 
 test("anthropic thinking config clamps budget and omits off", () => {
@@ -154,6 +178,10 @@ test("anthropic thinking config clamps budget and omits off", () => {
 		type: "enabled",
 		budget_tokens: 1945,
 	});
+	expect(getAnthropicThinkingConfig("max", 2048)).toEqual({
+		type: "enabled",
+		budget_tokens: 2047,
+	});
 });
 
 test("gemini 3 models use thinkingLevel", () => {
@@ -166,6 +194,10 @@ test("gemini 3 models use thinkingLevel", () => {
 		includeThoughts: true,
 		thinkingLevel: ThinkingLevel.MEDIUM,
 	});
+	expect(getGoogleThinkingConfig("gemini-3-pro", "max", 4096)).toEqual({
+		includeThoughts: true,
+		thinkingLevel: ThinkingLevel.HIGH,
+	});
 });
 
 test("gemini 2.5 models use thinkingBudget", () => {
@@ -176,5 +208,9 @@ test("gemini 2.5 models use thinkingBudget", () => {
 	expect(getGoogleThinkingConfig("gemini-2.5-flash", "high", 12000)).toEqual({
 		includeThoughts: true,
 		thinkingBudget: 9600,
+	});
+	expect(getGoogleThinkingConfig("gemini-2.5-flash", "max", 12000)).toEqual({
+		includeThoughts: true,
+		thinkingBudget: 11999,
 	});
 });

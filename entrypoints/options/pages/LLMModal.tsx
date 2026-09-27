@@ -22,7 +22,10 @@ import { Modal } from "~/components/Modal";
 import { cn } from "~/utils/cn";
 import { t } from "~/utils/i18n";
 import { createLLMClient } from "~/utils/llm";
-import { THINKING_BUDGET_LEVELS } from "~/utils/llm/thinking";
+import {
+	MAX_OUTPUT_TOKENS_PRESETS,
+	THINKING_BUDGET_LEVELS,
+} from "~/utils/llm/thinking";
 import {
 	type LLMModelSettings,
 	LLMServiceSettings,
@@ -540,21 +543,40 @@ export default (props: LLMModalProps) => {
 													placeholder={t("settings.llmModal.temperature")}
 												/>
 											</label>
-											<label class="input input-bordered input-sm flex items-center gap-2">
+											<label class="select select-bordered select-sm flex items-center gap-2">
 												<Package size={14} class="text-base-content/60" />
-												<input
-													type="number"
-													class="grow bg-transparent"
+												<select
+													class="grow"
 													value={model.maxOutputTokens ?? ""}
 													onChange={(e) =>
 														handleUpdateModel(modelId, {
-															maxOutputTokens: e.currentTarget.value
-																? Number(e.currentTarget.value)
-																: undefined,
+															maxOutputTokens:
+																e.currentTarget.value === ""
+																	? undefined
+																	: Number.parseInt(e.currentTarget.value, 10),
 														})
 													}
-													placeholder={t("settings.llmModal.maxTokens")}
-												/>
+												>
+													<option value="">
+														{t("settings.llmModal.maxTokensDefault")}
+													</option>
+													<Show
+														when={
+															model.maxOutputTokens !== undefined &&
+															!MAX_OUTPUT_TOKENS_PRESETS.some(
+																(preset) =>
+																	preset.value === model.maxOutputTokens,
+															)
+														}
+													>
+														<option value={model.maxOutputTokens}>
+															{model.maxOutputTokens}
+														</option>
+													</Show>
+													{MAX_OUTPUT_TOKENS_PRESETS.map((preset) => (
+														<option value={preset.value}>{preset.label}</option>
+													))}
+												</select>
 											</label>
 											<label class="select select-bordered select-sm flex items-center gap-2">
 												<Scale size={14} class="text-base-content/60" />
