@@ -1246,6 +1246,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		async clearCache() {
 			await resultCache.clear();
 		},
+		async cacheStats() {
+			return resultCache.stats();
+		},
 		queueStatus(modelId: string) {
 			resolveService(modelId);
 			return queueHub.subscribe(modelId);

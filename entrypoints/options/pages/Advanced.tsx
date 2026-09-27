@@ -1,18 +1,33 @@
-import { Download, FolderSync, RotateCcw, Trash2, Upload } from "lucide-solid";
-import { createSignal } from "solid-js";
+import {
+	Download,
+	FolderSync,
+	RotateCcw,
+	Trash2,
+	Upload,
+	Warehouse,
+} from "lucide-solid";
+import { createSignal, Show } from "solid-js";
 import { reconcile } from "solid-js/store";
 import { browser } from "#imports";
 import { Button } from "~/components/Button";
+import { DangerButton } from "~/components/settings/DangerButton";
 import { SettingsCard } from "~/components/settings/SettingsCard";
 import { useSettings } from "~/hooks/settings";
+import { formatBytes } from "~/utils/format";
 import { t } from "~/utils/i18n";
 import { SettingsSchema } from "~/utils/settings/def";
 import { generateDefaultSettings } from "~/utils/settings/default";
 import { clearSettingsMigrationError } from "~/utils/settings/helper";
 import { migrateSettings } from "~/utils/settings/migration";
+import { useCacheStats } from "../hooks/useCacheStats";
 
 export default (props: { navId: string }) => {
 	const { settings, setSettings } = useSettings();
+	const {
+		stats: cacheStats,
+		loading: cacheLoading,
+		refresh: refreshCacheStats,
+	} = useCacheStats();
 	const [isClearingCache, setIsClearingCache] = createSignal(false);
 	const [isResettingSettings, setIsResettingSettings] = createSignal(false);
 	const [isExporting, setIsExporting] = createSignal(false);
@@ -101,12 +116,20 @@ export default (props: { navId: string }) => {
 		}
 	};
 
+	const cacheUsageText = () => {
+		if (cacheLoading() && !cacheStats()) return t("common.loading");
+		const current = cacheStats();
+		if (!current) return t("settings.advanced.cacheUsageUnavailable");
+		return `${current.entries.toLocaleString()} · ${formatBytes(current.bytes)}`;
+	};
+
 	const handleClearCache = async () => {
 		setIsClearingCache(true);
 		setFeedback(null);
 
 		try {
 			await window.rpc.clearCache();
+			await refreshCacheStats();
 			setFeedback({
 				type: "success",
 				message: t("settings.advanced.clearCacheSuccess"),
@@ -122,10 +145,6 @@ export default (props: { navId: string }) => {
 	};
 
 	const handleResetSettings = async () => {
-		if (!confirm(t("settings.advanced.resetSettingsConfirm"))) {
-			return;
-		}
-
 		setIsResettingSettings(true);
 		setFeedback(null);
 
@@ -162,20 +181,26 @@ export default (props: { navId: string }) => {
 					<p class="mb-4 text-sm text-base-content/70">
 						{t("settings.advanced.cleanCacheDesc")}
 					</p>
+					<div class="mb-4 flex items-center gap-2 rounded-box bg-base-200/70 px-3 py-2 text-xs">
+						<Warehouse size={14} class="shrink-0 text-base-content/50" />
+						<span class="text-base-content/70">
+							{t("settings.advanced.cacheUsage")}
+						</span>
+						<Show when={!isClearingCache()}>
+							<span class="ml-auto font-medium tabular-nums text-base-content">
+								{cacheUsageText()}
+							</span>
+						</Show>
+					</div>
 					<Button
 						variant="warning"
 						size="sm"
 						onClick={handleClearCache}
-						disabled={isClearingCache()}
+						loading={isClearingCache()}
 					>
-						{isClearingCache() ? (
-							<>
-								<span class="loading loading-spinner loading-xs"></span>
-								{t("settings.advanced.clearingCache")}
-							</>
-						) : (
-							t("settings.advanced.cleanCache")
-						)}
+						{isClearingCache()
+							? t("settings.advanced.clearingCache")
+							: t("settings.advanced.cleanCache")}
 					</Button>
 				</div>
 
@@ -194,19 +219,14 @@ export default (props: { navId: string }) => {
 							variant="primary"
 							size="sm"
 							onClick={handleExportSettings}
-							disabled={isExporting()}
+							loading={isExporting()}
 						>
-							{isExporting() ? (
-								<>
-									<span class="loading loading-spinner loading-xs"></span>
-									{t("settings.advanced.exporting")}
-								</>
-							) : (
-								<>
-									<Download size={14} />
-									{t("settings.advanced.exportSettings")}
-								</>
-							)}
+							<Show when={!isExporting()}>
+								<Download size={14} />
+							</Show>
+							{isExporting()
+								? t("settings.advanced.exporting")
+								: t("settings.advanced.exportSettings")}
 						</Button>
 						<input
 							ref={fileInputRef}
@@ -219,38 +239,29 @@ export default (props: { navId: string }) => {
 							variant="secondary"
 							size="sm"
 							onClick={() => fileInputRef?.click()}
-							disabled={isImporting()}
+							loading={isImporting()}
 						>
-							{isImporting() ? (
-								<>
-									<span class="loading loading-spinner loading-xs"></span>
-									{t("settings.advanced.importing")}
-								</>
-							) : (
-								<>
-									<Upload size={14} />
-									{t("settings.advanced.importSettings")}
-								</>
-							)}
+							<Show when={!isImporting()}>
+								<Upload size={14} />
+							</Show>
+							{isImporting()
+								? t("settings.advanced.importing")
+								: t("settings.advanced.importSettings")}
 						</Button>
-						<Button
-							variant="error"
+						<DangerButton
+							solid
 							size="sm"
 							onClick={handleResetSettings}
-							disabled={isResettingSettings()}
+							loading={isResettingSettings()}
+							confirmMessage={t("settings.advanced.resetSettingsConfirm")}
 						>
-							{isResettingSettings() ? (
-								<>
-									<span class="loading loading-spinner loading-xs"></span>
-									{t("settings.advanced.resettingSettings")}
-								</>
-							) : (
-								<>
-									<RotateCcw size={14} />
-									{t("settings.advanced.resetSettings")}
-								</>
-							)}
-						</Button>
+							<Show when={!isResettingSettings()}>
+								<RotateCcw size={14} />
+							</Show>
+							{isResettingSettings()
+								? t("settings.advanced.resettingSettings")
+								: t("settings.advanced.resetSettings")}
+						</DangerButton>
 					</div>
 				</div>
 

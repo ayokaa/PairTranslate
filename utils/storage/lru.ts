@@ -1,5 +1,33 @@
 import type { Key } from "./types";
 
+/**
+ * Point-in-time snapshot of a translation cache, used by the statistics and
+ * maintenance UI. `bytes` is an approximation derived from the serialized
+ * values, not the browser's on-disk allocation.
+ */
+export interface LRUStats {
+	/** Number of entries currently held in the data store. */
+	entries: number;
+	/** Approximate UTF-8 size of the stored keys and values. */
+	bytes: number;
+	/** Configured maximum number of entries before eviction kicks in. */
+	maxSize: number;
+	/** `lastUsed` of the least recently used entry, or 0 when empty. */
+	oldestUsedAt: number;
+}
+
+const byteEncoder = new TextEncoder();
+
+const measureValue = (value: unknown): number => {
+	try {
+		return byteEncoder.encode(JSON.stringify(value) ?? "").length;
+	} catch {
+		// Non-serializable values are not expected, but a cache readout must
+		// never throw.
+		return 0;
+	}
+};
+
 export function createLRUStorage<TSchema>(
 	dbName: string = "pair-translate",
 	storeName: string,
@@ -215,6 +243,62 @@ export function createLRUStorage<TSchema>(
 		});
 	};
 
+	/**
+	 * Snapshot entry count and approximate size.
+	 *
+	 * Only the data store is walked: the usage store keeps one metadata record
+	 * per key, so counting it would double every entry. The usage index is read
+	 * separately and stops at its first hit, because it is ordered by `lastUsed`.
+	 */
+	const stats = async (): Promise<LRUStats> => {
+		await open();
+		return new Promise((resolve, reject) => {
+			if (!db) {
+				return reject(new Error("Database not open."));
+			}
+
+			const transaction = db.transaction(
+				[storeName, usageStoreName],
+				"readonly",
+			);
+			const dataStore = transaction.objectStore(storeName);
+
+			let entries = 0;
+			let bytes = 0;
+
+			const cursorRequest = dataStore.openCursor();
+			cursorRequest.onsuccess = (event) => {
+				const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+				if (!cursor) return;
+				entries++;
+				bytes +=
+					(cursor.key instanceof ArrayBuffer ? cursor.key.byteLength : 0) +
+					measureValue(cursor.value);
+				cursor.continue();
+			};
+
+			let oldestUsedAt = 0;
+			let oldestRead = false;
+			const usageCursorRequest = transaction
+				.objectStore(usageStoreName)
+				.index("lastUsed")
+				.openCursor();
+			usageCursorRequest.onsuccess = (event) => {
+				const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+				if (!cursor || oldestRead) return;
+				oldestRead = true;
+				oldestUsedAt = (cursor.value as { lastUsed?: number }).lastUsed ?? 0;
+			};
+
+			transaction.oncomplete = () => {
+				resolve({ entries, bytes, maxSize, oldestUsedAt });
+			};
+			transaction.onerror = () => reject(transaction.error);
+			cursorRequest.onerror = () => reject(cursorRequest.error);
+			usageCursorRequest.onerror = () => reject(usageCursorRequest.error);
+		});
+	};
+
 	const clear = async (): Promise<void> => {
 		await open();
 		return new Promise((resolve, reject) => {
@@ -252,5 +336,6 @@ export function createLRUStorage<TSchema>(
 		clear,
 		close,
 		resize,
+		stats,
 	};
 }

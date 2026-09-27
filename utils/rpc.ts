@@ -2,12 +2,16 @@
 
 import type { DictionaryResponse } from "./dictionary";
 import type { RpcService } from "./rpc/factory";
+import type { LRUStats } from "./storage/lru";
 import type {
 	TranslationResponse,
 	TranslationStreamChunk,
 } from "./translation-result";
 import type { TranslateContext, TranslateQueueStatus } from "./types";
 import type { AdaptationProposal } from "./web-adaptation/model";
+
+/** Live translation-cache snapshot reported by the background service worker. */
+export type CacheStats = LRUStats;
 
 export interface CoreService extends RpcService {
 	ping(): Promise<string>;
@@ -26,6 +30,7 @@ export interface TranslateService extends RpcService {
 	): AsyncGenerator<TranslationStreamChunk, void, unknown>;
 	queueStatus(modelId: string): AsyncGenerator<TranslateQueueStatus>;
 	clearCache(): Promise<void>;
+	cacheStats(): Promise<CacheStats>;
 }
 
 export interface TranslateOptions {

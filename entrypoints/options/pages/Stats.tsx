@@ -1,9 +1,11 @@
-import { createSignal, For, onCleanup, onMount } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { browser } from "#imports";
 import { Stats } from "~/components/Stats";
+import { SectionHeading } from "~/components/settings/SectionHeading";
 import { SectionResetButton } from "~/components/settings/SectionResetButton";
 import { SettingsCard } from "~/components/settings/SettingsCard";
 import { STORAGE_KEYS } from "~/utils/constants";
+import { formatBytes, formatPercent } from "~/utils/format";
 import { t } from "~/utils/i18n";
 import {
 	emptyTranslationStats,
@@ -11,17 +13,19 @@ import {
 	resetTranslationStats,
 	type TranslationStats,
 } from "~/utils/translation-stats";
+import { useCacheStats } from "../hooks/useCacheStats";
 
 interface StatMetric {
 	label: string;
 	desc?: string;
-	value: () => number;
+	value: () => string;
 }
 
 export default (props: { navId: string }) => {
 	const [stats, setStats] = createSignal<TranslationStats>(
 		emptyTranslationStats(),
 	);
+	const { stats: cacheStats, loading: cacheLoading } = useCacheStats();
 
 	onMount(() => {
 		void getTranslationStats().then(setStats);
@@ -47,72 +51,122 @@ export default (props: { navId: string }) => {
 		{
 			label: t("settings.stats.chars"),
 			desc: t("settings.stats.charsDesc"),
-			value: () => stats().chars,
+			value: () => stats().chars.toLocaleString(),
 		},
 		{
 			label: t("settings.stats.llmRequests"),
-			value: () => stats().llmRequests,
+			value: () => stats().llmRequests.toLocaleString(),
 		},
 		{
 			label: t("settings.stats.traditionalRequests"),
-			value: () => stats().traditionalRequests,
+			value: () => stats().traditionalRequests.toLocaleString(),
 		},
 		{
 			label: t("settings.stats.cacheHits"),
 			desc: t("settings.stats.cacheHitsDesc"),
-			value: () => stats().cacheHits,
+			value: () => stats().cacheHits.toLocaleString(),
 		},
 	];
 
 	const tokenMetrics: StatMetric[] = [
 		{
 			label: t("settings.stats.promptTokens"),
-			value: () => stats().promptTokens,
+			value: () => stats().promptTokens.toLocaleString(),
 		},
 		{
 			label: t("settings.stats.completionTokens"),
-			value: () => stats().completionTokens,
+			value: () => stats().completionTokens.toLocaleString(),
 		},
 		{
 			label: t("settings.stats.totalTokens"),
-			value: () => stats().totalTokens,
+			value: () => stats().totalTokens.toLocaleString(),
 		},
 		{
 			label: t("settings.stats.cachedTokens"),
-			desc: t("settings.stats.cachedTokensDesc"),
-			value: () => stats().cachedTokens,
+			value: () => stats().cachedTokens.toLocaleString(),
 		},
 	];
 
 	const webAdaptationTokenMetrics: StatMetric[] = [
 		{
 			label: t("settings.stats.promptTokens"),
-			value: () => stats().webAdaptationPromptTokens,
+			value: () => stats().webAdaptationPromptTokens.toLocaleString(),
 		},
 		{
 			label: t("settings.stats.completionTokens"),
-			value: () => stats().webAdaptationCompletionTokens,
+			value: () => stats().webAdaptationCompletionTokens.toLocaleString(),
 		},
 		{
 			label: t("settings.stats.totalTokens"),
-			value: () => stats().webAdaptationTotalTokens,
+			value: () => stats().webAdaptationTotalTokens.toLocaleString(),
 		},
 	];
+
+	// The cache group is a live snapshot rather than an accumulated counter, so
+	// it deliberately sits outside the reset button's reach.
+	const cacheMetrics: StatMetric[] = [
+		{
+			label: t("settings.stats.cacheEntries"),
+			desc: t("settings.stats.cacheEntriesDesc"),
+			value: () => (cacheStats()?.entries ?? 0).toLocaleString(),
+		},
+		{
+			label: t("settings.stats.cacheStorage"),
+			desc: t("settings.stats.cacheStorageDesc"),
+			value: () => formatBytes(cacheStats()?.bytes ?? 0),
+		},
+		{
+			label: t("settings.stats.cacheCapacity"),
+			desc: t("settings.stats.cacheCapacityDesc"),
+			value: () => (cacheStats()?.maxSize ?? 0).toLocaleString(),
+		},
+		{
+			label: t("settings.stats.cacheOldest"),
+			desc: t("settings.stats.cacheOldestDesc"),
+			value: () => {
+				const oldest = cacheStats()?.oldestUsedAt ?? 0;
+				return oldest > 0 ? new Date(oldest).toLocaleString() : "—";
+			},
+		},
+	];
+
+	const cacheUsageLabel = () => {
+		const current = cacheStats();
+		if (!current) return "";
+		return formatPercent(current.entries, current.maxSize);
+	};
 
 	const renderMetric = (metric: StatMetric) => (
 		<Stats.Stat centered class="px-4 py-3">
 			<Stats.Title class="stat-title text-xs uppercase tracking-wide text-base-content/60">
 				{metric.label}
 			</Stats.Title>
-			<Stats.Value class="text-lg">
-				{metric.value().toLocaleString()}
-			</Stats.Value>
+			<Stats.Value class="text-lg tabular-nums">{metric.value()}</Stats.Value>
 			{metric.desc && (
 				<Stats.Desc class="text-[11px] text-base-content/60">
 					{metric.desc}
 				</Stats.Desc>
 			)}
 		</Stats.Stat>
+	);
+
+	const renderStatsRow = (metrics: StatMetric[]) => (
+		<Stats.Root
+			responsive
+			shadow={false}
+			class="w-full border border-base-300 bg-base-200/70"
+		>
+			<For each={metrics}>{renderMetric}</For>
+		</Stats.Root>
+	);
+
+	const renderGroup = (label: string, metrics: StatMetric[]) => (
+		<div>
+			<SectionHeading size="sm" class="mb-0">
+				{label}
+			</SectionHeading>
+			{renderStatsRow(metrics)}
+		</div>
 	);
 
 	return (
@@ -130,37 +184,37 @@ export default (props: { navId: string }) => {
 				{t("settings.stats.description")}
 			</p>
 			<div class="space-y-4">
-				<Stats.Root
-					responsive
-					shadow={false}
-					class="w-full border border-base-300 bg-base-200/70"
+				{renderGroup(t("settings.stats.usageGroup"), generalMetrics)}
+				{renderGroup(t("settings.stats.tokenUsage"), tokenMetrics)}
+				{renderGroup(
+					t("settings.stats.webAdaptationTokenUsage"),
+					webAdaptationTokenMetrics,
+				)}
+
+				{/* Keyed on the data itself so a background refresh updates the
+				    numbers in place instead of collapsing the group. */}
+				<Show
+					when={cacheStats()}
+					fallback={
+						<div class="rounded-box border border-base-300 bg-base-200/70 p-4 text-sm text-base-content/60">
+							{cacheLoading()
+								? t("common.loading")
+								: t("settings.stats.cacheUnavailable")}
+						</div>
+					}
 				>
-					<For each={generalMetrics}>{renderMetric}</For>
-				</Stats.Root>
-				<div>
-					<p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-base-content/60">
-						{t("settings.stats.tokenUsage")}
-					</p>
-					<Stats.Root
-						responsive
-						shadow={false}
-						class="w-full border border-base-300 bg-base-200/70"
-					>
-						<For each={tokenMetrics}>{renderMetric}</For>
-					</Stats.Root>
-				</div>
-				<div>
-					<p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-base-content/60">
-						{t("settings.stats.webAdaptationTokenUsage")}
-					</p>
-					<Stats.Root
-						responsive
-						shadow={false}
-						class="w-full border border-base-300 bg-base-200/70"
-					>
-						<For each={webAdaptationTokenMetrics}>{renderMetric}</For>
-					</Stats.Root>
-				</div>
+					<div>
+						<div class="mb-2 flex items-baseline justify-between gap-2">
+							<SectionHeading size="sm" class="mb-0">
+								{t("settings.stats.cacheGroup")}
+							</SectionHeading>
+							<span class="text-[11px] font-medium tabular-nums text-base-content/60">
+								{cacheUsageLabel()}
+							</span>
+						</div>
+						{renderStatsRow(cacheMetrics)}
+					</div>
+				</Show>
 			</div>
 		</SettingsCard>
 	);
