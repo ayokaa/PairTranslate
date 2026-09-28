@@ -25,11 +25,18 @@ describe("applyAdaptationPatch", () => {
 			<main class="adaptation-test-main">
 				<p>First useful paragraph.</p>
 				<div class="adaptation-test-share"><p>Share this page now.</p></div>
+				<div class="adaptation-test-site-exclude">Ignored wrapper text.
+					<p class="adaptation-test-reinclude">Useful recovered paragraph.</p>
+					<p class="notranslate">Explicitly opted out.</p>
+				</div>
 				<p>Second useful paragraph.</p>
 			</main>
 		`;
 		document.body.append(shell);
-		const baseOptions: Options = { roots: [shell] };
+		const baseOptions: Options = {
+			roots: [shell],
+			excludedSelectors: [".adaptation-test-site-exclude"],
+		};
 		const baseline = await textSections(baseOptions);
 		expect(baseline).toContain("Navigation text");
 		expect(baseline).toContain("Share this page now.");
@@ -40,6 +47,7 @@ describe("applyAdaptationPatch", () => {
 				{
 					roots: ["main.adaptation-test-main"],
 					excludes: [".adaptation-test-share"],
+					includes: [".adaptation-test-reinclude"],
 					promoteTags: [],
 				},
 				document,
@@ -47,9 +55,37 @@ describe("applyAdaptationPatch", () => {
 		);
 		expect(adapted).toEqual([
 			"First useful paragraph.",
+			"Useful recovered paragraph.",
 			"Second useful paragraph.",
 		]);
 		shell.remove();
+	});
+
+	test("included selectors do not override hard exclusions or explicit rule exclusions", async () => {
+		const root = document.createElement("div");
+		root.innerHTML = `
+			<div class="site-wrapper">
+				<p class="site-filter">Recover this text.</p>
+				<p hidden>Do not recover hidden text.</p>
+				<p class="notranslate">Do not recover this text.</p>
+			</div>
+			<p class="adaptation-exclude">Keep this excluded.</p>
+		`;
+		document.body.append(root);
+		const adapted = await textSections(
+			applyAdaptationPatch(
+				{ roots: [root], excludedSelectors: [".site-wrapper"] },
+				{
+					roots: [],
+					excludes: [".adaptation-exclude"],
+					includes: [".site-filter"],
+					promoteTags: [],
+				},
+				document,
+			),
+		);
+		expect(adapted).toEqual(["Recover this text."]);
+		root.remove();
 	});
 
 	test("ignores an invalid persisted patch", () => {
@@ -57,9 +93,132 @@ describe("applyAdaptationPatch", () => {
 		expect(
 			applyAdaptationPatch(
 				options,
-				{ roots: [], excludes: ["body"], promoteTags: [] },
+				{ roots: [], excludes: ["body"], includes: [], promoteTags: [] },
 				document,
 			),
 		).toBe(options);
+	});
+
+	test("keeps roots and exclusions when an optional include disappears", () => {
+		const root = document.createElement("main");
+		root.className = "runtime-main";
+		root.innerHTML = `
+			<p class="runtime-content">Visible body text</p>
+			<div class="runtime-noise">Noise</div>
+		`;
+		document.body.append(root);
+		const options: Options = { roots: [document.body] };
+
+		const adapted = applyAdaptationPatch(
+			options,
+			{
+				roots: ["main.runtime-main"],
+				excludes: [".runtime-noise"],
+				includes: [".runtime-removed"],
+				promoteTags: [],
+			},
+			document,
+		);
+
+		expect(adapted.roots).toEqual([root]);
+		expect(adapted.protectedExcludedSelectors).toEqual([".runtime-noise"]);
+		expect(adapted.includedSelectors).toEqual([".runtime-removed"]);
+		root.remove();
+	});
+
+	test("applies saved include and exclude selectors to later DOM nodes", async () => {
+		const root = document.createElement("main");
+		root.innerHTML = "<p>Initial body text</p>";
+		document.body.append(root);
+		const options = applyAdaptationPatch(
+			{
+				roots: [root],
+				excludedSelectors: [".runtime-site-filter"],
+			},
+			{
+				roots: [],
+				excludes: [".runtime-late-noise"],
+				includes: [".runtime-late-include"],
+				promoteTags: [],
+			},
+			document,
+		);
+
+		const lateNoise = document.createElement("p");
+		lateNoise.className = "runtime-late-noise";
+		lateNoise.textContent = "Do not translate late noise";
+		const lateInclude = document.createElement("p");
+		lateInclude.className = "runtime-site-filter runtime-late-include";
+		lateInclude.textContent = "Recover late included text";
+		root.append(lateNoise, lateInclude);
+
+		try {
+			expect(await textSections(options)).toEqual([
+				"Initial body text",
+				"Recover late included text",
+			]);
+		} finally {
+			root.remove();
+		}
+	});
+
+	test("does not reinclude a dynamic target with protected code descendants", async () => {
+		const root = document.createElement("main");
+		document.body.append(root);
+		const options = applyAdaptationPatch(
+			{
+				roots: [root],
+				excludedSelectors: [".runtime-site-filter"],
+			},
+			{
+				roots: [],
+				excludes: [],
+				includes: [".runtime-late-code-include"],
+				promoteTags: [],
+			},
+			document,
+		);
+		const target = document.createElement("p");
+		target.className = "runtime-site-filter runtime-late-code-include";
+		target.append(document.createTextNode("正文文本 "));
+		const code = document.createElement("code");
+		code.textContent = "secret source code";
+		target.append(code, document.createTextNode(" 后文"));
+		root.append(target);
+
+		try {
+			const translated = (await textSections(options)).join("\n");
+			expect(translated).toBe("");
+		} finally {
+			root.remove();
+		}
+	});
+
+	test("does not fall back to the default page root when saved roots are missing", async () => {
+		const root = document.createElement("main");
+		root.innerHTML = "<p>Root scope must stay closed</p>";
+		document.body.append(root);
+		const adapted = applyAdaptationPatch(
+			{},
+			{
+				roots: ["main.runtime-missing-root"],
+				excludes: [],
+				includes: [],
+				promoteTags: [],
+			},
+			document,
+		);
+		const sections: string[] = [];
+		for await (const section of domListener({
+			...adapted,
+			listenNew: false,
+			filterInteractive: false,
+		})) {
+			sections.push(getMarkdownFromSection(section));
+		}
+
+		expect(adapted.roots).toEqual([]);
+		expect(sections).not.toContain("Root scope must stay closed");
+		root.remove();
 	});
 });

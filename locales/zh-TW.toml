@@ -130,7 +130,7 @@ sectionResetConfirm = "確定要將此部分重置為默認值嗎？"
 
 [settings.webAdaptation]
 title = "網頁適配"
-description = "使用所選 LLM 分析有限的網頁結構、原文及目前譯文，改善翻譯區域。分析樣本會傳送給模型提供者。"
+description = "使用所選 LLM 分析有限的網頁結構、原譯文樣本，以及目前解析器遺漏的安全可見文字，改善翻譯涵蓋範圍。分析樣本會傳送給模型提供者。"
 autoEnabled = "自動分析網頁"
 autoEnabledDesc = "翻譯後分析新頁面結構；同一頁面結構每七天最多自動分析一次。"
 model = "適配模型"
@@ -146,6 +146,7 @@ selectors = "結構變更"
 removeConfirm = "刪除這條網頁適配？"
 roots = "正文區域"
 excludes = "排除區域"
+includes = "重新納入的正文"
 
 [settings.basic]
 title = "基本設置"

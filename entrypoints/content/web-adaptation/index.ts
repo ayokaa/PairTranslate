@@ -7,10 +7,16 @@ import {
 import { autoStripMarkdown } from "~/utils/json-autocomplete";
 import { getMarkdownFromSection } from "~/utils/markdown";
 import { getPageContext } from "~/utils/page-context";
+import { DEFAULT_DOM_LISTENER } from "~/utils/parser";
 import { waitRpc } from "~/utils/rpc/wxt-def";
 import type { SettingsSchema } from "~/utils/settings/def";
 import { getSettings, listenSettings } from "~/utils/settings/helper";
-import { resolveLLMModel } from "~/utils/settings/services";
+import {
+	findServiceForModelRef,
+	resolveLLMModel,
+} from "~/utils/settings/services";
+import { estimateTokens } from "~/utils/token-estimate";
+import { createExtractedRegionMatcher } from "~/utils/web-adaptation/extracted-regions";
 import {
 	type AdaptationPatch,
 	AdaptationSuggestion,
@@ -18,6 +24,7 @@ import {
 	matchesPath,
 	validatePatch,
 } from "~/utils/web-adaptation/model";
+import { isSafePageElement } from "~/utils/web-adaptation/structure";
 import {
 	type ExtractionSample,
 	improvesExtraction,
@@ -25,10 +32,11 @@ import {
 import { getDomListener } from "../parser";
 import {
 	getTranslationObservations,
+	MAX_ADAPTATION_SOURCE_CHARACTERS,
 	OBSERVATION_EVENT,
 	type TranslationObservation,
 } from "./observations";
-import { buildPageSnapshot } from "./snapshot";
+import { buildPageSnapshot, matchUntranslatedEvidence } from "./snapshot";
 
 export type WebAdaptationResult =
 	| "added"
@@ -43,6 +51,7 @@ async function collectSamples(
 	patch?: AdaptationPatch,
 ): Promise<ExtractionSample[]> {
 	const result: ExtractionSample[] = [];
+	let totalCharacters = 0;
 	const listener = await getDomListener(
 		window.location.hostname,
 		{
@@ -55,12 +64,52 @@ async function collectSamples(
 	for await (const section of listener) {
 		const text = getMarkdownFromSection(section).trim();
 		const element = section[0].parentElement;
-		if (element && text.length >= 12 && text.length <= 2000) {
-			result.push({ text, element });
-		}
-		if (result.length >= 100) break;
+		if (!element || !text) continue;
+		if (totalCharacters + text.length > MAX_ADAPTATION_SOURCE_CHARACTERS)
+			continue;
+		result.push({ text, element });
+		totalCharacters += text.length;
 	}
 	return result;
+}
+
+async function collectUntranslatedSamples(
+	settings: SettingsSchema,
+): Promise<ExtractionSample[]> {
+	const extracted = await collectSamples(settings);
+	const matchesExtractedRegion = createExtractedRegionMatcher(extracted);
+	const samples: ExtractionSample[] = [];
+	const seenByElement = new WeakMap<Element, Set<string>>();
+	const seenSources = new Set<string>();
+	let sourceCharacters = 0;
+	const listener = DEFAULT_DOM_LISTENER({
+		listenNew: false,
+		filterInteractive: settings.translate.filterInteractive,
+	});
+	for await (const section of listener) {
+		const text = getMarkdownFromSection(section).trim();
+		const element = section[0].parentElement;
+		if (!element || !text || !isSafePageElement(element)) continue;
+		const candidate = { text, element };
+		if (matchesExtractedRegion(candidate)) continue;
+		const key = text.replace(/\s+/g, " ").trim();
+		const elementSources = seenByElement.get(element) ?? new Set<string>();
+		if (elementSources.has(key)) continue;
+		if (
+			!seenSources.has(key) &&
+			sourceCharacters + text.length > MAX_ADAPTATION_SOURCE_CHARACTERS
+		)
+			continue;
+		if (samples.length >= MAX_ADAPTATION_SOURCE_CHARACTERS) break;
+		elementSources.add(key);
+		seenByElement.set(element, elementSources);
+		if (!seenSources.has(key)) {
+			seenSources.add(key);
+			sourceCharacters += text.length;
+		}
+		samples.push(candidate);
+	}
+	return samples;
 }
 
 async function diagnosticPairs(
@@ -68,7 +117,12 @@ async function diagnosticPairs(
 ): Promise<TranslationObservation[]> {
 	const modelId = settings.translate.inTextTranslateModel;
 	if (!modelId) return [];
-	const samples = (await collectSamples(settings)).slice(0, 3);
+	const maxTokensPerSample =
+		findServiceForModelRef(settings.services, modelId)?.queue
+			?.maxTokensPerBatch ?? settings.queue.maxTokensPerBatch;
+	const samples = (await collectSamples(settings))
+		.filter((sample) => estimateTokens(sample.text) <= maxTokensPerSample)
+		.slice(0, 3);
 	const pairs: TranslationObservation[] = [];
 	for (const sample of samples) {
 		try {
@@ -134,29 +188,61 @@ export async function runWebAdaptation(
 		)
 	)
 		return "unchanged";
-	let reservedCheckKey: string | undefined;
-	if (source === "automatic") {
-		if (snapshot.pairs.length < 2) return "unchanged";
-		if (
-			findAdaptationRule(
-				settings.webAdaptation.rules,
-				snapshot.hostname,
-				snapshot.pathname,
-				snapshot.structureKey,
-			)
+	if (
+		source === "automatic" &&
+		findAdaptationRule(
+			settings.webAdaptation.rules,
+			snapshot.hostname,
+			snapshot.pathname,
+			snapshot.structureKey,
 		)
-			return "unchanged";
+	)
+		return "unchanged";
+	if (source === "automatic" && snapshot.pairs.length < 2) return "unchanged";
+	let extraPairs: TranslationObservation[] = [];
+	if (source === "manual" && snapshot.pairs.length < 2)
+		extraPairs = await diagnosticPairs(settings);
+	const untranslatedSamples = await collectUntranslatedSamples(settings);
+	snapshot = buildPageSnapshot(extraPairs, untranslatedSamples);
+	const verificationSamples = matchUntranslatedEvidence(
+		untranslatedSamples,
+		snapshot.untranslated,
+	);
+	let reservedCheckKey: string | undefined;
+	const releaseReservedCheck = async () => {
+		const key = reservedCheckKey;
+		if (!key) return;
+		reservedCheckKey = undefined;
+		try {
+			await window.rpc.releaseWebAdaptationCheck(key);
+		} catch {
+			// A failed analysis must not remain as a cooldown reservation.
+		}
+	};
+	const completeReservedCheck = async () => {
+		const key = reservedCheckKey;
+		if (!key) return;
+		reservedCheckKey = undefined;
+		try {
+			await window.rpc.completeWebAdaptationCheck(key);
+		} catch {
+			try {
+				await window.rpc.releaseWebAdaptationCheck(key);
+			} catch {
+				// Cooldown bookkeeping must not block the analysis result.
+			}
+		}
+	};
+	if (snapshot.pairs.length === 0 && snapshot.untranslated.length === 0) {
+		return "unavailable";
+	}
+	if (source === "automatic") {
 		const key = checkKey(
 			`${snapshot.hostname}|${snapshot.pathname}|${snapshot.structureKey}|${modelId}`,
 		);
 		if (!(await window.rpc.reserveWebAdaptationCheck(key))) return "unchanged";
 		reservedCheckKey = key;
-	} else if (snapshot.pairs.length < 2) {
-		const extra = await diagnosticPairs(settings);
-		snapshot = buildPageSnapshot(extra);
 	}
-	if (snapshot.pairs.length === 0) return "unavailable";
-
 	let response: Awaited<ReturnType<typeof window.rpc.unary>>;
 	try {
 		response = await window.rpc.unary(
@@ -167,54 +253,85 @@ export async function runWebAdaptation(
 				srcLang: "auto",
 				dstLang: settings.translate.targetLang,
 			},
-			JSON.stringify({ outline: snapshot.outline, pairs: snapshot.pairs }),
+			JSON.stringify({
+				outline: snapshot.outline,
+				pairs: snapshot.pairs,
+				untranslated: snapshot.untranslated,
+			}),
 		);
 	} catch (error) {
-		if (reservedCheckKey) {
-			try {
-				await window.rpc.releaseWebAdaptationCheck(reservedCheckKey);
-			} catch {
-				// A failed request must not be kept as a cooldown reservation.
-			}
-		}
+		await releaseReservedCheck();
 		throw error;
 	}
-	if (reservedCheckKey) {
-		try {
-			await window.rpc.completeWebAdaptationCheck(reservedCheckKey);
-		} catch {
-			try {
-				await window.rpc.releaseWebAdaptationCheck(reservedCheckKey);
-			} catch {
-				// Cooldown bookkeeping must not block processing a successful response.
-			}
-		}
+	let raw: unknown;
+	try {
+		raw =
+			typeof response.output === "string"
+				? autoStripMarkdown<unknown>(response.output)
+				: response.output;
+	} catch {
+		await releaseReservedCheck();
+		return "failed";
 	}
-	const raw =
-		typeof response.output === "string"
-			? autoStripMarkdown<unknown>(response.output)
-			: response.output;
 	const suggestion = AdaptationSuggestion.safeParse(raw);
-	if (!suggestion.success) return "unchanged";
+	if (!suggestion.success) {
+		await releaseReservedCheck();
+		return "failed";
+	}
+	const hasProposal =
+		suggestion.data.roots.length +
+			suggestion.data.excludes.length +
+			suggestion.data.includes.length +
+			suggestion.data.promoteTags.length >
+		0;
+	if (!hasProposal) {
+		await completeReservedCheck();
+		return "unchanged";
+	}
 	const patch = validatePatch(
 		{
 			roots: suggestion.data.roots,
 			excludes: suggestion.data.excludes,
+			includes: suggestion.data.includes,
 			promoteTags: suggestion.data.promoteTags,
 		},
 		document,
 	);
-	if (!patch || window.location.href !== initialUrl) return "unchanged";
-	const baseline = await collectSamples(settings);
-	const candidate = await collectSamples(settings, patch);
-	if (!improvesExtraction(baseline, candidate)) return "unchanged";
-	return window.rpc.commitWebAdaptation({
-		hostname: snapshot.hostname,
-		pathname: snapshot.pathname,
-		structureKey: snapshot.structureKey,
-		source,
-		patch,
-	});
+	if (!patch) {
+		await releaseReservedCheck();
+		return "failed";
+	}
+	if (window.location.href !== initialUrl) {
+		await completeReservedCheck();
+		return "unchanged";
+	}
+	try {
+		const baseline = await collectSamples(settings);
+		const candidate = await collectSamples(settings, patch);
+		if (
+			!improvesExtraction(
+				baseline,
+				candidate,
+				verificationSamples,
+				patch.includes.length > 0,
+			)
+		) {
+			await completeReservedCheck();
+			return "unchanged";
+		}
+		const result = await window.rpc.commitWebAdaptation({
+			hostname: snapshot.hostname,
+			pathname: snapshot.pathname,
+			structureKey: snapshot.structureKey,
+			source,
+			patch,
+		});
+		await completeReservedCheck();
+		return result;
+	} catch (error) {
+		await releaseReservedCheck();
+		throw error;
+	}
 }
 
 export function initializeWebAdaptation(): void {

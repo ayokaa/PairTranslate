@@ -37,13 +37,12 @@ function isSafeRemoval(
 export function improvesExtraction(
 	baseline: ExtractionSample[],
 	candidate: ExtractionSample[],
+	untranslatedCandidates: ExtractionSample[] = [],
+	requireUntranslatedAddition = false,
 ): boolean {
-	if (baseline.length === 0 || candidate.length === 0) return false;
+	if (candidate.length === 0) return false;
 	const before = compact(baseline.map((item) => item.text).join(""));
 	const after = compact(candidate.map((item) => item.text).join(""));
-	const removed = baseline.filter(
-		(item) => !after.includes(compact(item.text)),
-	);
 	const retainedMainRoots = [
 		...new Set(
 			candidate
@@ -51,11 +50,62 @@ export function improvesExtraction(
 				.filter((element): element is Element => Boolean(element)),
 		),
 	];
+	const relatedSamplesContain = (
+		samples: ExtractionSample[],
+		expected: ExtractionSample,
+	) => {
+		const relatedText = compact(
+			samples
+				.filter(
+					(item) =>
+						item.element === expected.element ||
+						item.element.contains(expected.element) ||
+						expected.element.contains(item.element),
+				)
+				.map((item) => item.text)
+				.join(""),
+		);
+		return relatedText.includes(compact(expected.text));
+	};
+	const addedUntranslatedCandidate = untranslatedCandidates.some(
+		(sample) =>
+			relatedSamplesContain(candidate, sample) &&
+			!relatedSamplesContain(baseline, sample) &&
+			!isSafeRemoval(sample.element, retainedMainRoots),
+	);
+	if (requireUntranslatedAddition && !addedUntranslatedCandidate) return false;
+	const addedSamples = candidate.filter(
+		(item) => !before.includes(compact(item.text)),
+	);
+	if (
+		addedSamples.some((item) => isSafeRemoval(item.element, retainedMainRoots))
+	)
+		return false;
+	if (
+		requireUntranslatedAddition &&
+		addedSamples.some(
+			(item) =>
+				!untranslatedCandidates.some(
+					(sample) =>
+						compact(item.text) === compact(sample.text) &&
+						(item.element === sample.element ||
+							item.element.contains(sample.element) ||
+							sample.element.contains(item.element)),
+				),
+		)
+	)
+		return false;
+	if (baseline.length === 0) return addedUntranslatedCandidate;
+	const removed = baseline.filter(
+		(item) => !after.includes(compact(item.text)),
+	);
 	const unsafeRemoved = removed.some(
 		(item) => !isSafeRemoval(item.element, retainedMainRoots),
 	);
 	if (unsafeRemoved) return false;
-	const added = candidate.some((item) => !before.includes(compact(item.text)));
+	const added =
+		addedUntranslatedCandidate ||
+		(addedSamples.length > 0 && untranslatedCandidates.length === 0);
 	const lessFragmented =
 		candidate.length < baseline.length &&
 		before.length > 0 &&

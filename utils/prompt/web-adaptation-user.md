@@ -1,3 +1,3 @@
-Analyze this bounded page structure and its source/translation pairs. Suggest the smallest safe change that improves translation coverage or paragraph grouping without removing real article content. Return JSON only.
+Analyze this page structure, its source/translation pairs, and any untranslated candidates. Identical pairs from separate sections or translation batches may be merged, with their paths and occurrence count retained. Untranslated candidates show visible text the active parser did not extract; use their paths to decide whether a narrow include or broader root is justified. The model must decide when no rule is needed. Suggest the smallest safe change that improves translation coverage or paragraph grouping without including page chrome or removing real article content. Return JSON only.
 
 {{text}}

@@ -1,16 +1,20 @@
 import type { Options } from "~/utils/parser/types";
-import { type AdaptationPatch, validatePatch } from "./model";
+import { type AdaptationPatch, resolvePatchForDocument } from "./model";
 
 export function applyAdaptationPatch(
 	options: Options,
 	patch: AdaptationPatch | undefined,
 	doc: Document,
 ): Options {
-	const valid = patch && validatePatch(patch, doc);
-	if (!valid) return options;
-	const roots = valid.roots.flatMap((selector) => [
-		...doc.querySelectorAll(selector),
-	]);
+	const valid = patch && resolvePatchForDocument(patch, doc);
+	if (!valid) return patch?.roots.length ? { ...options, roots: [] } : options;
+	const roots = valid.roots.flatMap((selector) => {
+		try {
+			return [...doc.querySelectorAll(selector)];
+		} catch {
+			return [];
+		}
+	});
 	const distinctRoots = roots.filter(
 		(root, index) =>
 			!roots.some(
@@ -21,9 +25,13 @@ export function applyAdaptationPatch(
 	);
 	return {
 		...options,
-		...(distinctRoots.length > 0 && { roots: distinctRoots }),
-		excludedSelectors: [
-			...(options.excludedSelectors ?? []),
+		...(patch?.roots.length ? { roots: distinctRoots } : {}),
+		includedSelectors: [
+			...(options.includedSelectors ?? []),
+			...valid.includes,
+		],
+		protectedExcludedSelectors: [
+			...(options.protectedExcludedSelectors ?? []),
 			...valid.excludes,
 		],
 		promoteTextTags: [...(options.promoteTextTags ?? []), ...valid.promoteTags],

@@ -36,6 +36,38 @@ test("a candidate that loses article text is rejected", () => {
 	).toBe(false);
 });
 
+test("a matching untranslated candidate can validate a new extraction", () => {
+	const paragraph = document.createElement("p");
+	expect(
+		improvesExtraction(
+			[],
+			[{ text: "Recovered article text", element: paragraph }],
+			[{ text: "Recovered article text", element: paragraph }],
+			true,
+		),
+	).toBe(true);
+	expect(
+		improvesExtraction(
+			[],
+			[{ text: "Unrelated navigation text", element: paragraph }],
+			[{ text: "Recovered article text", element: paragraph }],
+			true,
+		),
+	).toBe(false);
+});
+
+test("an include-only rule is rejected when it extracts no supplied candidate", () => {
+	const paragraph = document.createElement("p");
+	expect(
+		improvesExtraction(
+			[{ text: "Existing article text", element: paragraph }],
+			[{ text: "Existing article text", element: paragraph }],
+			[{ text: "Filtered article text", element: paragraph }],
+			true,
+		),
+	).toBe(false);
+});
+
 test("a candidate may remove a nonsemantic menu outside retained main content", () => {
 	const menu = document.createElement("ul");
 	menu.className = "a11y-menu";

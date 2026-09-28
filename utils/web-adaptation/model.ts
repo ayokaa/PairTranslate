@@ -1,12 +1,44 @@
 import { z } from "zod";
-import { TEXT_TAGS } from "~/utils/constants";
+import {
+	DATA_TRANSLATED,
+	EXCLUDED_SELECTORS,
+	TEXT_TAGS,
+} from "~/utils/constants";
 
 const Selector = z.string().trim().min(1).max(180);
 const Tag = z.string().regex(/^[a-zA-Z][a-zA-Z0-9-]{0,15}$/);
+const REINCLUSION_PROTECTED_DESCENDANTS = [
+	"script",
+	"style",
+	"noscript",
+	"pre",
+	"code",
+	".code",
+	".highlight",
+	".monaco-editor",
+	"[translate=false]",
+	"[translate=no]",
+	".notranslate",
+	"[data-nosnippet]",
+	"[contenteditable]",
+	"[hidden]",
+	"[aria-hidden='true']",
+].join(", ");
+const REINCLUSION_TARGET_PROTECTED_SELECTOR = [
+	...EXCLUDED_SELECTORS.filter(
+		(selector) => selector !== `[${DATA_TRANSLATED}]`,
+	),
+	"[contenteditable]",
+	"[hidden]",
+	"[aria-hidden='true']",
+].join(", ");
+const SAFE_SELECTOR_PATTERN = /^[-a-zA-Z0-9_#. >[\]="'^$]+$/;
 
 export const AdaptationPatch = z.strictObject({
-	roots: z.array(Selector).max(3).default([]),
+	roots: z.array(Selector).default([]),
 	excludes: z.array(Selector).max(12).default([]),
+	// Match the existing per-rule exclusion-selector budget.
+	includes: z.array(Selector).max(12).default([]),
 	promoteTags: z.array(Tag).max(8).default([]),
 });
 export type AdaptationPatch = z.infer<typeof AdaptationPatch>;
@@ -106,6 +138,7 @@ export function normalizePatch(patch: AdaptationPatch): AdaptationPatch {
 	return {
 		roots: unique(patch.roots),
 		excludes: unique(patch.excludes),
+		includes: unique(patch.includes ?? []),
 		promoteTags: unique(patch.promoteTags.map((tag) => tag.toUpperCase())),
 	};
 }
@@ -116,44 +149,193 @@ export function patchesEqual(a: AdaptationPatch, b: AdaptationPatch): boolean {
 	);
 }
 
-export function validatePatch(
-	input: unknown,
-	doc: Document,
-): AdaptationPatch | undefined {
+function parsePatch(input: unknown): AdaptationPatch | undefined {
 	const parsed = AdaptationPatch.safeParse(input);
 	if (!parsed.success) return undefined;
 	const patch = normalizePatch(parsed.data);
 	if (
-		patch.roots.length + patch.excludes.length + patch.promoteTags.length ===
+		patch.roots.length +
+			patch.excludes.length +
+			patch.includes.length +
+			patch.promoteTags.length ===
 		0
 	)
 		return undefined;
-
-	for (const selector of [...patch.roots, ...patch.excludes]) {
+	for (const selector of [
+		...patch.roots,
+		...patch.excludes,
+		...patch.includes,
+	]) {
 		// Keep model-suggested selectors cheap, stable, and declarative.
-		if (!/^[-a-zA-Z0-9_#. >[\]="'^$]+$/.test(selector)) return undefined;
-		try {
-			const matches = doc.querySelectorAll(selector);
-			if (matches.length === 0 || matches.length > 40) return undefined;
-			if (
-				patch.roots.includes(selector) &&
-				[...matches].some((el) =>
-					el.closest("[contenteditable], [hidden], [aria-hidden='true']"),
-				)
-			)
-				return undefined;
-			if (
-				patch.excludes.includes(selector) &&
-				[...matches].some((el) => el === doc.body || el === doc.documentElement)
-			)
-				return undefined;
-		} catch {
-			return undefined;
-		}
+		if (!SAFE_SELECTOR_PATTERN.test(selector)) return undefined;
 	}
 	if (patch.promoteTags.some((tag) => !TEXT_TAGS.includes(tag)))
 		return undefined;
 	return patch;
+}
+
+function querySelectorMatches(
+	selector: string,
+	doc: Document,
+): Element[] | undefined {
+	try {
+		const matches = [...doc.querySelectorAll(selector)];
+		return matches.length > 0 && matches.length <= 40 ? matches : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function queryRuntimeSelector(
+	selector: string,
+	doc: Document,
+): Element[] | undefined {
+	try {
+		const matches = [...doc.querySelectorAll(selector)];
+		return matches.length <= 40 ? matches : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function validRootMatches(matches: Element[]): boolean {
+	return !matches.some((el) =>
+		el.closest("[contenteditable], [hidden], [aria-hidden='true']"),
+	);
+}
+
+function validExcludeMatches(matches: Element[], doc: Document): boolean {
+	return !matches.some((el) => el === doc.body || el === doc.documentElement);
+}
+
+function validIncludeMatches(matches: Element[], excludes: string[]): boolean {
+	return !matches.some((el) => {
+		if (
+			!TEXT_TAGS.includes(el.tagName) ||
+			!el.textContent?.trim() ||
+			el.closest(
+				[...excludes, REINCLUSION_TARGET_PROTECTED_SELECTOR].join(", "),
+			)
+		)
+			return true;
+		return el.querySelector(REINCLUSION_PROTECTED_DESCENDANTS) !== null;
+	});
+}
+
+function validRuntimeIncludeMatches(
+	matches: Element[],
+	excludes: string[],
+): boolean {
+	return !matches.some((el) => {
+		if (
+			!TEXT_TAGS.includes(el.tagName) ||
+			el.closest(
+				[...excludes, REINCLUSION_TARGET_PROTECTED_SELECTOR].join(", "),
+			)
+		)
+			return true;
+		return el.querySelector(REINCLUSION_PROTECTED_DESCENDANTS) !== null;
+	});
+}
+
+function removeRedundantIncludes(
+	patch: AdaptationPatch,
+	doc: Document,
+): AdaptationPatch {
+	// A broader included subtree makes nested include selectors redundant.
+	const includedMatches = patch.includes.map((selector) => ({
+		selector,
+		elements: [...doc.querySelectorAll(selector)],
+	}));
+	const includes = includedMatches
+		.filter(
+			({ selector, elements }, index) =>
+				!includedMatches.some((other, otherIndex) => {
+					if (otherIndex === index) return false;
+					const otherCovers = elements.every((element) =>
+						other.elements.some(
+							(parent) => parent === element || parent.contains(element),
+						),
+					);
+					if (!otherCovers) return false;
+					const sameCoverage = other.elements.every((element) =>
+						elements.some(
+							(parent) => parent === element || parent.contains(element),
+						),
+					);
+					return !sameCoverage || other.selector < selector;
+				}),
+		)
+		.map(({ selector }) => selector);
+	return { ...patch, includes };
+}
+
+export function validatePatch(
+	input: unknown,
+	doc: Document,
+): AdaptationPatch | undefined {
+	const patch = parsePatch(input);
+	if (!patch) return undefined;
+
+	for (const selector of patch.roots) {
+		const matches = querySelectorMatches(selector, doc);
+		if (!matches || !validRootMatches(matches)) return undefined;
+	}
+	for (const selector of patch.excludes) {
+		const matches = querySelectorMatches(selector, doc);
+		if (!matches || !validExcludeMatches(matches, doc)) return undefined;
+	}
+	for (const selector of patch.includes) {
+		const matches = querySelectorMatches(selector, doc);
+		if (!matches || !validIncludeMatches(matches, patch.excludes))
+			return undefined;
+	}
+	return removeRedundantIncludes(patch, doc);
+}
+
+/**
+ * Revalidates persisted selectors against the current DOM independently.
+ * Safe selectors with no current matches remain active so the parser can use
+ * them when matching elements are added later.
+ */
+export function resolvePatchForDocument(
+	input: unknown,
+	doc: Document,
+): AdaptationPatch | undefined {
+	const patch = parsePatch(input);
+	if (!patch) return undefined;
+
+	const roots = patch.roots.filter((selector) => {
+		const matches = queryRuntimeSelector(selector, doc);
+		return (
+			matches !== undefined &&
+			(matches.length === 0 || validRootMatches(matches))
+		);
+	});
+	const excludes = patch.excludes.filter((selector) => {
+		const matches = queryRuntimeSelector(selector, doc);
+		return (
+			matches !== undefined &&
+			(matches.length === 0 || validExcludeMatches(matches, doc))
+		);
+	});
+	const includes = patch.includes.filter((selector) => {
+		const matches = queryRuntimeSelector(selector, doc);
+		return (
+			matches !== undefined &&
+			(matches.length === 0 || validRuntimeIncludeMatches(matches, excludes))
+		);
+	});
+	const resolved = { ...patch, roots, excludes, includes };
+	if (
+		resolved.roots.length +
+			resolved.excludes.length +
+			resolved.includes.length +
+			resolved.promoteTags.length ===
+		0
+	)
+		return undefined;
+	return resolved;
 }
 
 function siblingWildcard(a: string, b: string): string | undefined {

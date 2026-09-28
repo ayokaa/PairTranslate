@@ -6,6 +6,7 @@ import {
 	extendPaths,
 	findAdaptationRule,
 	matchesPath,
+	resolvePatchForDocument,
 	upsertAdaptationRule,
 	validatePatch,
 } from "./model";
@@ -13,6 +14,7 @@ import {
 const patch: AdaptationPatch = {
 	roots: ["main.article"],
 	excludes: [".article .share"],
+	includes: [],
 	promoteTags: [],
 };
 
@@ -148,13 +150,24 @@ describe("web adaptation validation", () => {
 		main.className = "article";
 		const share = document.createElement("div");
 		share.className = "share";
-		main.append(share);
+		const section = document.createElement("div");
+		section.className = "article-section";
+		const include = document.createElement("p");
+		include.className = "article-text";
+		include.textContent = "Recovered article text";
+		section.append(include);
+		main.append(share, section);
 		document.body.append(main);
 		expect(
 			validatePatch(
 				{
 					roots: ["main.article", "main.article"],
 					excludes: [".share"],
+					includes: [
+						".article-section",
+						".article-section .article-text",
+						".article-section",
+					],
 					promoteTags: [],
 				},
 				document,
@@ -162,9 +175,48 @@ describe("web adaptation validation", () => {
 		).toEqual({
 			roots: ["main.article"],
 			excludes: [".share"],
+			includes: [".article-section"],
 			promoteTags: [],
 		});
 		main.remove();
+	});
+
+	test("does not allow an include selector to override explicit no-translate", () => {
+		const protectedText = document.createElement("p");
+		protectedText.className = "notranslate";
+		protectedText.textContent = "Do not translate this";
+		document.body.append(protectedText);
+		expect(
+			validatePatch(
+				{
+					roots: [],
+					excludes: [],
+					includes: [".notranslate"],
+					promoteTags: [],
+				},
+				document,
+			),
+		).toBeUndefined();
+		protectedText.remove();
+	});
+
+	test("rejects conflicting includes and explicit exclusions", () => {
+		const excluded = document.createElement("p");
+		excluded.className = "review-excluded";
+		excluded.textContent = "Excluded text";
+		document.body.append(excluded);
+		expect(
+			validatePatch(
+				{
+					roots: [],
+					excludes: [".review-excluded"],
+					includes: [".review-excluded"],
+					promoteTags: [],
+				},
+				document,
+			),
+		).toBeUndefined();
+		excluded.remove();
 	});
 
 	test("rejects broad exclusions, hidden roots, and executable selectors", () => {
@@ -174,28 +226,64 @@ describe("web adaptation validation", () => {
 		document.body.append(main);
 		expect(
 			validatePatch(
-				{ roots: [], excludes: ["body"], promoteTags: [] },
+				{ roots: [], excludes: ["body"], includes: [], promoteTags: [] },
 				document,
 			),
 		).toBeUndefined();
 		expect(
 			validatePatch(
-				{ roots: ["main.private"], excludes: [], promoteTags: [] },
+				{
+					roots: ["main.private"],
+					excludes: [],
+					includes: [],
+					promoteTags: [],
+				},
 				document,
 			),
 		).toBeUndefined();
 		expect(
 			validatePatch(
-				{ roots: ["main:has(script)"], excludes: [], promoteTags: [] },
+				{
+					roots: ["main:has(script)"],
+					excludes: [],
+					includes: [],
+					promoteTags: [],
+				},
 				document,
 			),
 		).toBeUndefined();
 		expect(
 			validatePatch(
-				{ roots: [], excludes: [], promoteTags: ["SCRIPT"] },
+				{ roots: [], excludes: [], includes: [], promoteTags: ["SCRIPT"] },
 				document,
 			),
 		).toBeUndefined();
+		main.remove();
+	});
+
+	test("retains safe includes and excludes with no current matches", () => {
+		const main = document.createElement("main");
+		main.className = "runtime-main";
+		main.innerHTML = `
+			<p class="runtime-content">Visible body text</p>
+			<p class="runtime-empty"></p>
+			<div class="runtime-noise">Noise</div>
+		`;
+		document.body.append(main);
+		const input = {
+			roots: ["main.runtime-main"],
+			excludes: [".runtime-noise", ".runtime-late-exclude"],
+			includes: [".runtime-empty", ".runtime-removed"],
+			promoteTags: [],
+		};
+
+		expect(validatePatch(input, document)).toBeUndefined();
+		expect(resolvePatchForDocument(input, document)).toEqual({
+			roots: ["main.runtime-main"],
+			excludes: [".runtime-late-exclude", ".runtime-noise"],
+			includes: [".runtime-empty", ".runtime-removed"],
+			promoteTags: [],
+		});
 		main.remove();
 	});
 });

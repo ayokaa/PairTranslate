@@ -120,6 +120,29 @@ describe("domListener", () => {
 		]);
 	});
 
+	test("keeps the judge function applied to blocks split from a text container", async () => {
+		const root = document.createElement("div");
+		root.append(document.createTextNode("Intro text."));
+		const excluded = document.createElement("div");
+		excluded.className = "selection-excluded";
+		const nested = document.createElement("p");
+		nested.textContent = "Outside the selected area.";
+		excluded.append(nested);
+		const included = document.createElement("p");
+		included.textContent = "Inside the selected area.";
+		root.append(excluded, included);
+		document.body.append(root);
+
+		const sections = await collectSections(root, 2, {
+			judgeFn: (element) => !element.classList.contains("selection-excluded"),
+		});
+
+		expect(sections.map(getMarkdownFromSection)).toEqual([
+			"Intro text.",
+			"Inside the selected area.",
+		]);
+	});
+
 	test("does not promote Hacker News title cells over their links", async () => {
 		const root = document.createElement("table");
 		const row = document.createElement("tr");

@@ -3,7 +3,10 @@ import { mock } from "bun:test";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseHTML } from "linkedom";
-import { recordTranslationObservation } from "../entrypoints/content/web-adaptation/observations";
+import {
+	MAX_ADAPTATION_SOURCE_CHARACTERS,
+	recordTranslationObservation,
+} from "../entrypoints/content/web-adaptation/observations";
 import { buildPageSnapshot } from "../entrypoints/content/web-adaptation/snapshot";
 import { PROMPT_ID } from "../utils/constants";
 import { makeDomainMatcher } from "../utils/domain-matcher";
@@ -125,6 +128,7 @@ async function collectSamples(
 		document,
 	);
 	const result: Sample[] = [];
+	let sourceCharacters = 0;
 	const patternIndex = matchParser(window.location.hostname);
 	const parserIndex =
 		patternIndex === null ? null : PATTERNS_IDX_TO_PARSER_IDX[patternIndex];
@@ -133,10 +137,11 @@ async function collectSamples(
 	for await (const section of listener(options)) {
 		const text = getMarkdownFromSection(section).trim();
 		const element = section[0].parentElement;
-		if (element && text.length >= 12 && text.length <= 2000) {
-			result.push({ section, text, element });
-		}
-		if (result.length >= 100) break;
+		if (!element || !text) continue;
+		if (sourceCharacters + text.length > MAX_ADAPTATION_SOURCE_CHARACTERS)
+			break;
+		result.push({ section, text, element });
+		sourceCharacters += text.length;
 	}
 	return result;
 }
@@ -170,6 +175,9 @@ async function main(): Promise<void> {
 		: new URL("https://fixture.invalid/articles/static-layout");
 	Object.assign(globalThis, {
 		window: { location: pageUrl, dispatchEvent: () => {} },
+		CSS: {
+			escape: (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "\\$&"),
+		},
 	});
 	console.log(`curl: ok (${html.length} characters)`);
 
@@ -299,6 +307,7 @@ async function main(): Promise<void> {
 					rawSuggestion = JSON.stringify({
 						roots: ["main#article-content"],
 						excludes: ["aside.related-links"],
+						includes: [],
 						promoteTags: [],
 					});
 				}
@@ -328,6 +337,9 @@ async function main(): Promise<void> {
 	}));
 	mock.module("~/utils/settings/services", () => ({
 		resolveLLMModel: () => ({}),
+		findServiceForModelRef: () => ({
+			queue: { maxTokensPerBatch: Number.POSITIVE_INFINITY },
+		}),
 	}));
 	mock.module("~/utils/page-context", () => ({ getPageContext: () => ({}) }));
 	const { runWebAdaptation } = await import(
@@ -350,6 +362,7 @@ async function main(): Promise<void> {
 	const proposed =
 		suggestion.data.roots.length +
 			suggestion.data.excludes.length +
+			suggestion.data.includes.length +
 			suggestion.data.promoteTags.length >
 		0;
 	console.log(`model: ${proposed ? "proposed a rule" : "no rule needed"}`);
@@ -358,6 +371,7 @@ async function main(): Promise<void> {
 			`patch: ${JSON.stringify({
 				roots: suggestion.data.roots,
 				excludes: suggestion.data.excludes,
+				includes: suggestion.data.includes,
 				promoteTags: suggestion.data.promoteTags,
 			})}`,
 		);

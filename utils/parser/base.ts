@@ -150,38 +150,57 @@ const getTextFromSection = (section: DOMSection): string => {
 };
 
 export async function* elementWalker(state: State): SectionGenerator {
-	const isExcluded = (el: Element) => {
-		if (el.matches(state.excludedSelector)) return true;
-		if (state.judgeFn && !state.judgeFn(el as Element)) return true;
-		return false;
+	const isSafeIncludedTarget = (element: Element) =>
+		!state.protectedExcludedSelector ||
+		!hasExcludedDescendant(element, state.protectedExcludedSelector);
+
+	const hasIncludedWithin = (el: Element) => {
+		if (!state.includedSelector) return false;
+		if (el.matches(state.includedSelector) && isSafeIncludedTarget(el))
+			return true;
+		return [...el.querySelectorAll(state.includedSelector)].some(
+			isSafeIncludedTarget,
+		);
 	};
 
-	const excludedRoot = new WeakSet<Element>();
+	const getUnresolvedAdaptableExclusion = (el: Element): Element | null => {
+		if (!state.adaptableExcludedSelector) return null;
+		let included = state.includedSelector
+			? el.closest(state.includedSelector)
+			: null;
+		if (included && !isSafeIncludedTarget(included)) included = null;
+		for (
+			let current: Element | null = el;
+			current;
+			current = current.parentElement
+		) {
+			if (
+				current.matches(state.adaptableExcludedSelector) &&
+				(!included || !current.contains(included))
+			)
+				return current;
+		}
+		return null;
+	};
+
+	const isProtectedPath = (el: Element) =>
+		Boolean(
+			state.protectedExcludedSelector &&
+				el.closest(state.protectedExcludedSelector),
+		);
+
 	const isExcludedPath = (el: Element) => {
-		const parent = el.parentElement;
-		if (parent && excludedRoot.has(parent)) {
-			excludedRoot.add(el);
-			return true;
-		}
-
-		if (state.judgeFn && !state.judgeFn(el)) {
-			excludedRoot.add(el);
-			return true;
-		}
-
-		const closest = el.closest(state.excludedSelector);
-		if (closest) {
-			excludedRoot.add(closest);
-			parent && excludedRoot.add(parent);
-			excludedRoot.add(el);
-
-			return true;
-		}
-
-		return false;
+		if (isProtectedPath(el)) return true;
+		if (state.judgeFn && !state.judgeFn(el)) return true;
+		return Boolean(
+			getUnresolvedAdaptableExclusion(el) && !hasIncludedWithin(el),
+		);
 	};
 
 	const judgeText = (el: Element): boolean => {
+		// Callers either pass a root through isExcludedPath or receive an
+		// element accepted by the tree walker. Keep ancestor checks out of this
+		// per-element hot path.
 		if (!state.textTags.has(el.tagName)) return false;
 		if (hasDirectText(el)) return true;
 
@@ -210,8 +229,17 @@ export async function* elementWalker(state: State): SectionGenerator {
 			acceptNode: (node) => {
 				const el = node as Element;
 
-				if (isExcluded(el)) {
+				if (
+					(state.protectedExcludedSelector &&
+						el.matches(state.protectedExcludedSelector)) ||
+					(state.judgeFn && !state.judgeFn(el))
+				) {
 					return NodeFilter.FILTER_REJECT;
+				}
+				if (getUnresolvedAdaptableExclusion(el)) {
+					return hasIncludedWithin(el)
+						? NodeFilter.FILTER_SKIP
+						: NodeFilter.FILTER_REJECT;
 				}
 
 				return NodeFilter.FILTER_ACCEPT;
@@ -328,7 +356,9 @@ export async function* elementWalker(state: State): SectionGenerator {
 	// Find text elements within root, and split into paragraphs
 	const findTextElementsAndSplit = function* (
 		root: Element,
+		pathIsChecked = false,
 	): Generator<DOMSection> {
+		if (!pathIsChecked && isExcludedPath(root)) return;
 		if (judgeText(root)) {
 			yield* paragraphSplitter(root);
 			return;
@@ -342,7 +372,7 @@ export async function* elementWalker(state: State): SectionGenerator {
 
 	for await (const root of state.roots) {
 		if (isExcludedPath(root)) continue;
-		yield* findTextElementsAndSplit(root);
+		yield* findTextElementsAndSplit(root, true);
 		observeElement(root);
 	}
 	if (!state.listenNew) return;
@@ -434,14 +464,26 @@ const normalizeRoots = (roots?: RootsInput): RootsIterable => {
 };
 
 export function getState(options: Options = {}): State {
+	const adaptableExcludedSelector = (options.excludedSelectors || []).join(
+		", ",
+	);
+	const protectedExcludedSelector = [
+		...(options.protectedExcludedSelectors || []),
+		...EXCLUDED_SELECTORS,
+		"[contenteditable]",
+		"[hidden]",
+		"[aria-hidden='true']",
+		...((options.filterInteractive ?? true) ? INTERACTIVE_SELECTORS : []),
+	].join(", ");
 	return {
 		roots: normalizeRoots(options.roots),
 		signal: options.signal,
-		excludedSelector: [
-			...(options.excludedSelectors || []),
-			...EXCLUDED_SELECTORS,
-			...((options.filterInteractive ?? true) ? INTERACTIVE_SELECTORS : []),
-		].join(", "),
+		excludedSelector: [adaptableExcludedSelector, protectedExcludedSelector]
+			.filter(Boolean)
+			.join(", "),
+		adaptableExcludedSelector,
+		protectedExcludedSelector,
+		includedSelector: (options.includedSelectors || []).join(", "),
 		textTags: new Set(
 			[...(options.textTags || []), ...TEXT_TAGS].map((s) => s.toUpperCase()),
 		),

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Filtered article title fixture</title>
+	</head>
+	<body>
+		<main class="issue-page">
+			<div class="IssueBodyHeader-module__IssueBodyHeaderContainer-fixture">
+				<h1 class="issue-title">
+					This article explains the missing cache invalidation behavior
+				</h1>
+			</div>
+			<p>
+				The cache stores each document version so readers can reuse content
+				without requesting the same data again.
+			</p>
+			<p>
+				When a document changes, the application must invalidate every
+				outdated entry before the next request can return the new version.
+			</p>
+			<p>
+				A missing invalidation step can keep stale information visible even
+				though the original document has already changed.
+			</p>
+		</main>
+	</body>
+</html>

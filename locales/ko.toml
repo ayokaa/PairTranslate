@@ -130,7 +130,7 @@ sectionResetConfirm = "이 섹션을 기본값으로 초기화할까요?"
 
 [settings.webAdaptation]
 title = "Webpage Adaptation"
-description = "Let an LLM inspect a limited page structure and translation sample to improve where translation appears. Page samples are sent to the selected model provider."
+description = "LLM이 제한된 페이지 구조, 번역 샘플, 현재 파서가 놓친 안전한 표시 텍스트를 분석해 번역 범위를 개선합니다. 페이지 샘플은 선택한 모델 제공업체로 전송됩니다."
 autoEnabled = "Analyze pages automatically"
 autoEnabledDesc = "Analyze new page layouts after translation. The same page layout is checked at most once every seven days."
 model = "Adaptation model"
@@ -146,6 +146,7 @@ selectors = "Structure changes"
 removeConfirm = "Delete this page adaptation?"
 roots = "Content roots"
 excludes = "Excluded areas"
+includes = "다시 포함된 텍스트"
 
 [settings.basic]
 title = "기본 설정"

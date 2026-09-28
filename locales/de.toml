@@ -130,7 +130,7 @@ sectionResetConfirm = "Diesen Abschnitt auf Standardwerte zurücksetzen?"
 
 [settings.webAdaptation]
 title = "Webpage Adaptation"
-description = "Let an LLM inspect a limited page structure and translation sample to improve where translation appears. Page samples are sent to the selected model provider."
+description = "Lassen Sie ein LLM begrenzte Seitenstruktur, übersetzte Beispiele und sicheren sichtbaren Text prüfen, den der aktive Parser übersehen hat, um die Übersetzungsabdeckung zu verbessern. Seitenbeispiele werden an den ausgewählten Modellanbieter gesendet."
 autoEnabled = "Analyze pages automatically"
 autoEnabledDesc = "Analyze new page layouts after translation. The same page layout is checked at most once every seven days."
 model = "Adaptation model"
@@ -146,6 +146,7 @@ selectors = "Structure changes"
 removeConfirm = "Delete this page adaptation?"
 roots = "Content roots"
 excludes = "Excluded areas"
+includes = "Wieder einbezogener Text"
 
 [settings.basic]
 title = "Grundeinstellungen"

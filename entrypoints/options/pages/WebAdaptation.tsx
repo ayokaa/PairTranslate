@@ -130,6 +130,12 @@ export default (props: { navId: string }) => {
 												{rule.patch.excludes.join(", ")}
 											</p>
 										</Show>
+										<Show when={rule.patch.includes.length > 0}>
+											<p>
+												{t("settings.webAdaptation.includes")}:{" "}
+												{rule.patch.includes.join(", ")}
+											</p>
+										</Show>
 										<Show when={rule.patch.promoteTags.length > 0}>
 											<p>{rule.patch.promoteTags.join(", ")}</p>
 										</Show>

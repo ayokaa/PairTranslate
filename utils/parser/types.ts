@@ -2,6 +2,9 @@ export interface State {
 	roots: RootsIterable;
 	signal?: AbortSignal;
 	excludedSelector: string;
+	adaptableExcludedSelector: string;
+	protectedExcludedSelector: string;
+	includedSelector: string;
 	textTags: Set<string>;
 	promoteTextTags: Set<string>;
 	blockTags: Set<string>;
@@ -25,6 +28,10 @@ export interface Options {
 	judgeFn?: JudgeFn;
 	appendGenerators?: ChainedGeneratorFn[];
 	filterInteractive?: boolean;
+	/** Selectors that may override site-parser exclusions for visible page text. */
+	includedSelectors?: string[];
+	/** Explicit adaptation exclusions that included selectors cannot override. */
+	protectedExcludedSelectors?: string[];
 }
 
 export type JudgeFn = (element: Element) => boolean;

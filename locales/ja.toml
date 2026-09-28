@@ -130,7 +130,7 @@ sectionResetConfirm = "このセクションを既定値にリセットします
 
 [settings.webAdaptation]
 title = "Webpage Adaptation"
-description = "Let an LLM inspect a limited page structure and translation sample to improve where translation appears. Page samples are sent to the selected model provider."
+description = "LLM が限られたページ構造、翻訳済みサンプル、現在の解析器が見落とした安全な表示テキストを分析し、翻訳範囲を改善します。ページサンプルは選択したモデルプロバイダーに送信されます。"
 autoEnabled = "Analyze pages automatically"
 autoEnabledDesc = "Analyze new page layouts after translation. The same page layout is checked at most once every seven days."
 model = "Adaptation model"
@@ -146,6 +146,7 @@ selectors = "Structure changes"
 removeConfirm = "Delete this page adaptation?"
 roots = "Content roots"
 excludes = "Excluded areas"
+includes = "再び対象にしたテキスト"
 
 [settings.basic]
 title = "基本設定"
