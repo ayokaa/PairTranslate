@@ -140,3 +140,57 @@ test("a candidate can combine fragments but cannot claim no change as improvemen
 	).toBe(true);
 	expect(improvesExtraction(baseline, baseline)).toBe(false);
 });
+
+test("a duplicated paragraph cannot mask the loss of its copy", () => {
+	const main = document.createElement("main");
+	const first = document.createElement("p");
+	first.textContent = "Repeated body paragraph";
+	const second = document.createElement("p");
+	second.textContent = "Repeated body paragraph";
+	const recovered = document.createElement("p");
+	recovered.textContent = "Previously missed paragraph";
+	main.append(first, second, recovered);
+	const baseline = [
+		{ text: "Repeated body paragraph", element: first },
+		{ text: "Repeated body paragraph", element: second },
+	];
+	const candidate = [
+		{ text: "Repeated body paragraph", element: first },
+		{ text: "Previously missed paragraph", element: recovered },
+	];
+	expect(
+		improvesExtraction(
+			baseline,
+			candidate,
+			[{ text: "Previously missed paragraph", element: recovered }],
+			true,
+		),
+	).toBe(false);
+});
+
+test("content outside the new roots still blocks a narrowing candidate", () => {
+	const shell = document.createElement("div");
+	const sidebar = document.createElement("div");
+	const sidebarText = document.createElement("p");
+	sidebarText.textContent = "Sidebar essay text";
+	sidebar.append(sidebarText);
+	const main = document.createElement("main");
+	const body = document.createElement("p");
+	body.textContent = "Article body";
+	main.append(body);
+	shell.append(sidebar, main);
+	document.body.append(shell);
+	try {
+		const baseline = [
+			{ text: "Sidebar essay text", element: sidebarText },
+			{ text: "Article body", element: body },
+		];
+		const candidate = [{ text: "Article body", element: body }];
+		// The sidebar is plain content outside the new root, not page chrome.
+		expect(improvesExtraction(baseline, candidate, [], false, [main])).toBe(
+			false,
+		);
+	} finally {
+		shell.remove();
+	}
+});

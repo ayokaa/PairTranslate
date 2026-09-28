@@ -59,6 +59,8 @@ const Content = (props: { children?: JSX.Element }) => {
 				return t("popup.webAdaptation.updated");
 			case "unchanged":
 				return t("popup.webAdaptation.unchanged");
+			case "disabled":
+				return t("popup.webAdaptation.disabled");
 			case "noModel":
 				return t("popup.webAdaptation.noModel");
 			case "unavailable":

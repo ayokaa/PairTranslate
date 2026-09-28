@@ -8,6 +8,13 @@ export type TranslationResponse<T> = {
 	skipped: TranslationSkipped;
 };
 
+/**
+ * Webpage adaptation is a structural analysis: its payload mixes the page's
+ * own text with the target-language translations, so a language guess over it
+ * says nothing about the page. Its prompts never use the language settings.
+ * Without this exemption the analysis is short-circuited precisely when
+ * translation has produced enough pairs to analyse.
+ */
 export type TranslationStreamChunk = {
 	content?: string;
 	reasoning?: string;
@@ -15,7 +22,9 @@ export type TranslationStreamChunk = {
 };
 
 export const shouldSkipSameLanguage = (promptId: string): boolean =>
-	promptId !== PROMPT_ID.summary && promptId !== PROMPT_ID.pageContext;
+	promptId !== PROMPT_ID.summary &&
+	promptId !== PROMPT_ID.pageContext &&
+	promptId !== PROMPT_ID.webAdaptation;
 
 export const skippedForPayload = (
 	payload: string | string[],

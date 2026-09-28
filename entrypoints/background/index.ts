@@ -51,6 +51,7 @@ export default defineBackground(() => {
 				webAdaptationService.completeWebAdaptationCheck,
 			releaseWebAdaptationCheck: webAdaptationService.releaseWebAdaptationCheck,
 			commitWebAdaptation: webAdaptationService.commitWebAdaptation,
+			deleteWebAdaptationRule: webAdaptationService.deleteWebAdaptationRule,
 		};
 
 		setupWxtServer(clientImpl, WXT_TRANSPORTATION_NAME);

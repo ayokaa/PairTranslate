@@ -26,7 +26,10 @@ import type { DOMSection } from "~/utils/parser/types";
 import { findServiceForModelRef } from "~/utils/settings/services";
 import { estimateTokens } from "~/utils/token-estimate";
 import InTextTooltip from "../components/InTextTooltip";
-import { recordTranslationObservation } from "../web-adaptation/observations";
+import {
+	recordTranslationObservation,
+	removeTranslationObservation,
+} from "../web-adaptation/observations";
 import { NativeLoading } from "./Loading";
 
 const NEW_LINE_THRESHOLD = 10;
@@ -261,6 +264,12 @@ export const TranslationRender = (props: TranslationRenderProps) => {
 			props.source
 		) {
 			recordTranslationObservation(props.section, props.source, props.text);
+			return;
+		}
+		// A settled failure or skip invalidates the pair previously observed for
+		// this section, which would otherwise keep feeding the adaptation model.
+		if (!props.loading && (props.error || props.skipped || !props.text)) {
+			removeTranslationObservation(props.section[0]);
 		}
 	});
 	const [tooltipPos, setTooltipPos] = createSignal<{ x: number; y: number }>();

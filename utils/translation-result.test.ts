@@ -3,6 +3,7 @@ import { PROMPT_ID } from "./constants";
 import {
 	createTranslationResponse,
 	getIdenticalTranslationSkipped,
+	shouldSkipSameLanguage,
 	skippedForPayload,
 } from "./translation-result";
 
@@ -56,4 +57,21 @@ describe("translation skipped state", () => {
 			skipped: true,
 		});
 	});
+});
+
+test("never short-circuits webpage adaptation when languages match", () => {
+	// The adaptation payload mixes page text with target-language
+	// translations, so a language guess says nothing about the page.
+	expect(shouldSkipSameLanguage(PROMPT_ID.webAdaptation)).toBe(false);
+	expect(
+		getIdenticalTranslationSkipped(
+			"snapshot json",
+			"snapshot json",
+			PROMPT_ID.webAdaptation,
+		),
+	).toBe(false);
+	// Translation prompts keep the same-language short-circuit.
+	expect(shouldSkipSameLanguage(PROMPT_ID.translate)).toBe(true);
+	expect(shouldSkipSameLanguage(PROMPT_ID.summary)).toBe(false);
+	expect(shouldSkipSameLanguage(PROMPT_ID.pageContext)).toBe(false);
 });

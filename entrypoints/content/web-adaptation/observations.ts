@@ -16,7 +16,17 @@ type StoredObservation = {
 
 const observations = new Map<string, StoredObservation>();
 let observationKeyByNode = new WeakMap<Node, string>();
+/**
+ * Shared character budget for original text: the sampled sources of one
+ * analysis, the untranslated evidence and the observed pairs all draw on it.
+ */
 export const MAX_ADAPTATION_SOURCE_CHARACTERS = 50_000;
+/**
+ * Separate cap on retained DOM sections. The character budget already bounds
+ * the text, but a single very short source can still be repeated on tens of
+ * thousands of nodes.
+ */
+export const MAX_ADAPTATION_OBSERVATION_NODES = 50_000;
 export const OBSERVATION_EVENT = "pair-translate:observation";
 
 let observedNodes = 0;
@@ -115,14 +125,22 @@ export function recordTranslationObservation(
 	observationKeyByNode.set(start, key);
 	observedNodes++;
 	while (
-		// A non-empty source is required for every observation, so the character
-		// target also provides a derived upper bound for highly fragmented pages.
-		observedNodes > MAX_ADAPTATION_SOURCE_CHARACTERS ||
+		observedNodes > MAX_ADAPTATION_OBSERVATION_NODES ||
 		observedSourceCharacters > MAX_ADAPTATION_SOURCE_CHARACTERS
 	) {
 		removeOldestObservation();
 	}
 	window.dispatchEvent?.(new Event(OBSERVATION_EVENT));
+}
+
+/**
+ * Cheap size check for schedulers.
+ *
+ * Building the full observation list walks every retained node, which is far
+ * too expensive to repeat on each translated section.
+ */
+export function getTranslationObservationCount(): number {
+	return observations.size;
 }
 
 export function getTranslationObservations(): TranslationObservation[] {
@@ -143,6 +161,18 @@ export function getTranslationObservations(): TranslationObservation[] {
 		});
 	}
 	return result;
+}
+
+/**
+ * Drop the observation recorded for a node.
+ *
+ * A failed or skipped retranslation must not keep feeding the previous
+ * source/translation pair to the adaptation model.
+ */
+export function removeTranslationObservation(node: Node): void {
+	const key = observationKeyByNode.get(node);
+	if (!key) return;
+	removeNode(node);
 }
 
 export function clearTranslationObservations(): void {

@@ -4,7 +4,9 @@ import type { WebAdaptationService } from "~/utils/rpc";
 import { getSettings, saveSettings } from "~/utils/settings/helper";
 import {
 	AdaptationProposalSchema,
+	parseAdaptationRules,
 	upsertAdaptationRule,
+	WebAdaptationSettings,
 } from "~/utils/web-adaptation/model";
 
 const CHECK_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
@@ -69,20 +71,38 @@ export function createWebAdaptationService(): WebAdaptationService {
 				const proposal = AdaptationProposalSchema.parse(input);
 				const settings = await getSettings();
 				const result = upsertAdaptationRule(
-					settings.webAdaptation.rules,
+					parseAdaptationRules(settings.webAdaptation.rules),
 					proposal,
 					Date.now(),
 				);
-				if (result.result !== "unchanged") {
-					await saveSettings({
-						...settings,
-						webAdaptation: {
-							...settings.webAdaptation,
-							rules: result.rules,
-						},
-					});
+				if (result.result === "unchanged") return result.result;
+				const webAdaptation = {
+					...settings.webAdaptation,
+					rules: result.rules,
+				};
+				// Storage is written without validation, so an out-of-spec rule
+				// would only surface during the next settings migration and block
+				// the whole extension. Refuse it here instead: the caller reports a
+				// failure and keeps the analysis out of the cooldown.
+				if (!WebAdaptationSettings.safeParse(webAdaptation).success) {
+					throw new Error("Generated web adaptation rule is invalid");
 				}
+				await saveSettings({ ...settings, webAdaptation });
 				return result.result;
+			});
+		},
+		deleteWebAdaptationRule(id: string) {
+			return serialize(async () => {
+				if (typeof id !== "string" || !id) return false;
+				const settings = await getSettings();
+				const rules = parseAdaptationRules(settings.webAdaptation.rules);
+				const remaining = rules.filter((rule) => rule.id !== id);
+				if (remaining.length === rules.length) return false;
+				await saveSettings({
+					...settings,
+					webAdaptation: { ...settings.webAdaptation, rules: remaining },
+				});
+				return true;
 			});
 		},
 	};

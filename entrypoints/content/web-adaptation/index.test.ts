@@ -12,13 +12,15 @@ import {
 const modelId = "00000000-0000-4000-8000-000000000001";
 const settings = {
 	services: {},
+	websiteRules: [] as Array<Record<string, unknown>>,
+	queue: { maxTokensPerBatch: Infinity, maxBatchSize: 10 },
 	translate: {
 		filterInteractive: false,
 		sourceLang: "auto",
 		targetLang: "zh-CN",
 		inTextTranslateModel: modelId,
 	},
-	webAdaptation: { autoEnabled: false, modelId, rules: [] },
+	webAdaptation: { autoEnabled: false, modelId, rules: [] as AdaptationRule[] },
 };
 
 mock.module("#imports", () => ({
@@ -26,8 +28,15 @@ mock.module("#imports", () => ({
 }));
 mock.module("~/utils/rpc/wxt-def", () => ({ waitRpc: async () => {} }));
 mock.module("~/utils/settings/helper", () => ({
+	// Keep every export: a partial mock leaks into other test files.
 	getSettings: async () => settings,
+	saveSettings: async (next: unknown) => {
+		Object.assign(settings, next as Record<string, unknown>);
+	},
 	listenSettings: () => () => {},
+	listenEnabled: () => () => {},
+	getSettingsMigrationError: async () => undefined,
+	clearSettingsMigrationError: async () => {},
 }));
 mock.module("~/utils/settings/services", () => ({
 	resolveLLMModel: () => ({}),
@@ -86,6 +95,7 @@ mock.module("../parser", () => ({
 }));
 
 let sentPayload: unknown;
+let sentRequests: Array<{ srcLang: string; dstLang: string }> = [];
 let committed: unknown;
 let modelOutput = JSON.stringify({
 	roots: [],
@@ -93,6 +103,9 @@ let modelOutput = JSON.stringify({
 	includes: ["p.article-text"],
 	promoteTags: [],
 });
+let matchedWebsiteRuleIndex: number | null = null;
+let skippedResponse = false;
+let diagnosticOutput = "诊断译文";
 let reservedChecks = 0;
 let completedChecks = 0;
 let releasedChecks = 0;
@@ -106,13 +119,15 @@ Object.assign(globalThis, {
 		},
 		rpc: {
 			unary: async (_ctx: unknown, config: unknown, text: string) => {
+				sentRequests.push(config as { srcLang: string; dstLang: string });
 				if (
 					typeof config === "object" &&
 					config !== null &&
 					"promptId" in config &&
 					config.promptId === PROMPT_ID.translate
 				)
-					return { output: "诊断译文" };
+					return { output: diagnosticOutput };
+				if (skippedResponse) return { output: "", skipped: true };
 				sentPayload = JSON.parse(text);
 				return { output: modelOutput };
 			},
@@ -130,6 +145,8 @@ Object.assign(globalThis, {
 				committed = proposal;
 				return "added";
 			},
+			matchWebsiteRule: async () => matchedWebsiteRuleIndex,
+			deleteWebAdaptationRule: async () => true,
 		},
 	},
 });
@@ -154,6 +171,10 @@ beforeEach(() => {
 	});
 	sentPayload = undefined;
 	committed = undefined;
+	matchedWebsiteRuleIndex = null;
+	skippedResponse = false;
+	diagnosticOutput = "诊断译文";
+	sentRequests = [];
 	reservedChecks = 0;
 	completedChecks = 0;
 	releasedChecks = 0;
@@ -199,17 +220,29 @@ test("manual analysis sends untranslated text, then commits a validated include 
 	});
 });
 
-test("manual analysis can propose an include when no translated samples exist", async () => {
+test("manual analysis needs two pairs like the automatic path", async () => {
 	clearTranslationObservations();
 	includeExistingArticleInParser = false;
+
+	// One pair is not enough for either entry.
+	recordTranslationObservation(
+		[articleOne.firstChild as Node, articleOne.firstChild as Node],
+		"Article paragraph one",
+		"译文一",
+	);
+	expect(await runWebAdaptation("manual")).toBe("unchanged");
+	expect(sentPayload).toBeUndefined();
+	expect(siteParserScans).toBe(0);
+
+	// Two pairs unlock the manual click, and the untranslated scan still finds the
+	// text the site parser filtered out.
+	recordTranslationObservation(
+		[articleTwo.firstChild as Node, articleTwo.firstChild as Node],
+		"Article paragraph two",
+		"译文二",
+	);
 	expect(await runWebAdaptation("manual")).toBe("added");
 	expect(sentPayload).toMatchObject({
-		pairs: [
-			{
-				source: "Navigation controls",
-				translation: "诊断译文",
-			},
-		],
 		untranslated: [
 			{ text: "Article paragraph one" },
 			{ text: "Article paragraph two" },
@@ -219,19 +252,6 @@ test("manual analysis can propose an include when no translated samples exist", 
 	expect(committed).toMatchObject({
 		patch: { includes: ["p.article-text"] },
 	});
-});
-
-test("manual analysis can recover text when the site parser extracts nothing", async () => {
-	clearTranslationObservations();
-	extractNothingBeforePatch = true;
-	expect(await runWebAdaptation("manual")).toBe("added");
-	expect(sentPayload).toMatchObject({
-		pairs: [],
-		untranslated: expect.arrayContaining([
-			expect.objectContaining({ text: "Useful article paragraph" }),
-		]),
-	});
-	expect(committed).toMatchObject({ patch: { includes: ["p.article-text"] } });
 });
 
 test("site parser sampling skips an oversized section and scans later sections", async () => {
@@ -395,4 +415,143 @@ test("a valid empty suggestion is unchanged and completes its reservation", asyn
 	expect(releasedChecks).toBe(0);
 	expect(completedChecks).toBe(1);
 	expect(committed).toBeUndefined();
+});
+
+test("manual analysis reports a disabled rule instead of no change", async () => {
+	settings.webAdaptation.rules = [
+		{
+			id: modelId,
+			hostname: "example.com",
+			pathPatterns: ["/article/one"],
+			structureKey: getStructureKey(document),
+			enabled: false,
+			source: "automatic",
+			patch: { roots: [], excludes: ["nav"], includes: [], promoteTags: [] },
+			createdAt: 1,
+			updatedAt: 1,
+		},
+	];
+
+	expect(await runWebAdaptation("manual")).toBe("disabled");
+	expect(await runWebAdaptation("automatic")).toBe("unchanged");
+});
+
+test("site rule settings drive the adaptation request", async () => {
+	settings.websiteRules = [
+		{
+			urlPatterns: ["example.com"],
+			filterInteractive: true,
+			targetLang: "ja",
+			sourceLang: "de",
+		},
+	];
+	matchedWebsiteRuleIndex = 0;
+
+	expect(await runWebAdaptation("manual")).toBe("added");
+	expect(
+		(sentPayload as { currentPatch?: unknown }).currentPatch,
+	).toBeUndefined();
+	expect(sentRequests.at(-1)?.dstLang).toBe("ja");
+});
+
+test("a saved rule is offered to the model when re-analysing manually", async () => {
+	settings.webAdaptation.rules = [
+		{
+			id: modelId,
+			hostname: "example.com",
+			pathPatterns: ["/article/one"],
+			structureKey: getStructureKey(document),
+			enabled: true,
+			source: "automatic",
+			patch: {
+				roots: ["main.article"],
+				excludes: ["nav"],
+				includes: [],
+				promoteTags: [],
+			},
+			createdAt: 1,
+			updatedAt: 1,
+		},
+	];
+
+	expect(await runWebAdaptation("manual")).toBe("added");
+	// The model sees the rule in force...
+	expect(
+		(sentPayload as { currentPatch?: { roots: string[] } }).currentPatch?.roots,
+	).toEqual(["main.article"]);
+	// ...and its proposal is appended to it, never replacing it.
+	expect(committed).toMatchObject({
+		patch: {
+			roots: ["main.article"],
+			excludes: ["nav"],
+			includes: ["p.article-text"],
+			promoteTags: [],
+		},
+	});
+	// Automatic analysis still skips a layout that already has a rule.
+	expect(await runWebAdaptation("automatic")).toBe("unchanged");
+});
+
+test("a skipped model response is reported as a failure, not a parse error", async () => {
+	settings.webAdaptation.autoEnabled = true;
+	skippedResponse = true;
+
+	expect(await runWebAdaptation("automatic")).toBe("failed");
+	// The check is settled, so the seven-day cooldown applies instead of
+	// retrying the same payload on every translation batch.
+	expect(reservedChecks).toBe(1);
+	expect(releasedChecks).toBe(0);
+	expect(completedChecks).toBe(1);
+	expect(committed).toBeUndefined();
+});
+
+test("the extracted index keeps sections beyond the character budget", async () => {
+	// A long article: the trial-run budget covers only the leading sections,
+	// but the "already extracted?" index must answer for the whole page, or the
+	// tail is reported to the model as untranslated text.
+	const created: Element[] = [];
+	for (let i = 0; i < 50; i++) {
+		const filler = document.createElement("p");
+		filler.className = "filler-section";
+		filler.textContent = "z".repeat(1000);
+		main.append(filler);
+		created.push(filler);
+	}
+	const tail = document.createElement("p");
+	tail.className = "tail-section";
+	tail.textContent = "Tail section already extracted by the site parser".repeat(
+		20,
+	);
+	main.append(tail);
+	created.push(tail);
+	siteParserElements = [
+		navText,
+		articleOne,
+		articleTwo,
+		articleText,
+		...created,
+	];
+	modelOutput = JSON.stringify({
+		roots: [],
+		excludes: [],
+		includes: [],
+		promoteTags: [],
+	});
+
+	expect(await runWebAdaptation("manual")).toBe("unchanged");
+	expect(sentPayload).toMatchObject({ untranslated: [] });
+	for (const element of created) element.remove();
+});
+
+test("neither entry analyses a page without two pairs", async () => {
+	// A site parser that extracts nothing also produces no translation, so there
+	// is no coverage to improve and neither entry spends the budget.
+	clearTranslationObservations();
+	includeExistingArticleInParser = false;
+	extractNothingBeforePatch = true;
+
+	expect(await runWebAdaptation("manual")).toBe("unchanged");
+	expect(await runWebAdaptation("automatic")).toBe("unchanged");
+	expect(sentPayload).toBeUndefined();
+	expect(siteParserScans).toBe(0);
 });

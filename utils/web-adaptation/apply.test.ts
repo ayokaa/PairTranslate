@@ -3,7 +3,7 @@ import "../test/dom-setup";
 import { getMarkdownFromSection } from "~/utils/markdown";
 import { domListener } from "~/utils/parser/base";
 import type { Options } from "~/utils/parser/types";
-import { applyAdaptationPatch } from "./apply";
+import { applyAdaptationPatch, hasStaleAdaptationRoots } from "./apply";
 
 async function textSections(options: Options): Promise<string[]> {
 	const result: string[] = [];
@@ -194,20 +194,17 @@ describe("applyAdaptationPatch", () => {
 		}
 	});
 
-	test("does not fall back to the default page root when saved roots are missing", async () => {
+	test("falls back to the default scan when saved roots are missing", async () => {
 		const root = document.createElement("main");
 		root.innerHTML = "<p>Root scope must stay closed</p>";
 		document.body.append(root);
-		const adapted = applyAdaptationPatch(
-			{},
-			{
-				roots: ["main.runtime-missing-root"],
-				excludes: [],
-				includes: [],
-				promoteTags: [],
-			},
-			document,
-		);
+		const patch = {
+			roots: ["main.runtime-missing-root"],
+			excludes: [],
+			includes: [],
+			promoteTags: [],
+		};
+		const adapted = applyAdaptationPatch({}, patch, document);
 		const sections: string[] = [];
 		for await (const section of domListener({
 			...adapted,
@@ -217,8 +214,76 @@ describe("applyAdaptationPatch", () => {
 			sections.push(getMarkdownFromSection(section));
 		}
 
-		expect(adapted.roots).toEqual([]);
-		expect(sections).not.toContain("Root scope must stay closed");
+		// A stale rule must not stop translation: scanning falls back to the
+		// default page scope and the rule itself is dropped by getDomListener.
+		expect(adapted.roots).toBeUndefined();
+		expect(sections).toContain("Root scope must stay closed");
+		expect(hasStaleAdaptationRoots(patch, document)).toBe(true);
 		root.remove();
 	});
+
+	test("reports a patch without declared roots as never stale", () => {
+		expect(
+			hasStaleAdaptationRoots(
+				{ roots: [], excludes: ["nav"], includes: [], promoteTags: [] },
+				document,
+			),
+		).toBe(false);
+		expect(hasStaleAdaptationRoots(undefined, document)).toBe(false);
+	});
+
+	test("reports a patch with matching roots as fresh", () => {
+		const root = document.createElement("main");
+		root.className = "stale-check";
+		document.body.append(root);
+		try {
+			expect(
+				hasStaleAdaptationRoots(
+					{
+						roots: ["main.stale-check"],
+						excludes: [],
+						includes: [],
+						promoteTags: [],
+					},
+					document,
+				),
+			).toBe(false);
+		} finally {
+			root.remove();
+		}
+	});
+});
+
+test("a root selector matching more than the runtime cap counts as stale", async () => {
+	const shell = document.createElement("div");
+	shell.innerHTML = Array.from(
+		{ length: 60 },
+		(_, i) => `<p class="bulk">段落 ${i}</p>`,
+	).join("");
+	document.body.append(shell);
+	try {
+		const patch = {
+			roots: ["p.bulk"],
+			excludes: [],
+			includes: [],
+			promoteTags: [],
+		};
+
+		// The runtime drops the selector (60 matches > 40), so the rule is stale
+		// and must be treated the same way as one that matches nothing.
+		expect(hasStaleAdaptationRoots(patch, document)).toBe(true);
+		const adapted = applyAdaptationPatch({}, patch, document);
+		expect(adapted.roots).toBeUndefined();
+		const sections: string[] = [];
+		for await (const section of domListener({
+			...adapted,
+			listenNew: false,
+			filterInteractive: false,
+		})) {
+			sections.push(getMarkdownFromSection(section));
+		}
+		expect(sections).toContain("段落 0");
+	} finally {
+		shell.remove();
+	}
 });

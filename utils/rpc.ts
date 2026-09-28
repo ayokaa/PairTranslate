@@ -62,6 +62,7 @@ export interface WebAdaptationService extends RpcService {
 	commitWebAdaptation(
 		proposal: AdaptationProposal,
 	): Promise<"added" | "updated" | "unchanged">;
+	deleteWebAdaptationRule(id: string): Promise<boolean>;
 }
 
 export interface AllServices

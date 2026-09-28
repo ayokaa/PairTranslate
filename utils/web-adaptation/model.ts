@@ -47,6 +47,55 @@ export const AdaptationSuggestion = AdaptationPatch.extend({
 	reason: z.string().max(500).optional(),
 });
 
+const EMPTY_PATCH: AdaptationPatch = {
+	roots: [],
+	excludes: [],
+	includes: [],
+	promoteTags: [],
+};
+
+/** Field caps mirroring AdaptationPatch, so an appended rule still validates. */
+const MAX_EXCLUDES = 12;
+const MAX_INCLUDES = 12;
+const MAX_PROMOTE_TAGS = 8;
+
+/**
+ * Append a proposal to the patch currently in force.
+ *
+ * Rules only ever grow: the model is told to suggest a small declarative
+ * change, so an analysis that mentions one field must not drop the roots or
+ * exclusions saved earlier. Each field is a deduplicated union inside the
+ * patch schema, and when a field is full the saved selectors win over the new
+ * proposal. A proposal that adds nothing yields the existing patch unchanged,
+ * which callers detect as "no change".
+ */
+export function appendAdaptationPatch(
+	existing: AdaptationPatch | undefined,
+	incoming: AdaptationPatch,
+): AdaptationPatch {
+	const base = existing ? normalizePatch(existing) : EMPTY_PATCH;
+	const addition = normalizePatch(incoming);
+	const cappedUnion = (saved: string[], proposed: string[], cap: number) => {
+		// Saved selectors always survive the cap: appending must never drop what
+		// earlier analyses stored, so only the new proposal can be left out.
+		const kept = [...new Set(saved)];
+		const fresh = [...new Set(proposed)].filter(
+			(value) => !kept.includes(value),
+		);
+		return [...kept, ...fresh].slice(0, cap).sort();
+	};
+	return {
+		roots: cappedUnion(base.roots, addition.roots, Number.POSITIVE_INFINITY),
+		excludes: cappedUnion(base.excludes, addition.excludes, MAX_EXCLUDES),
+		includes: cappedUnion(base.includes, addition.includes, MAX_INCLUDES),
+		promoteTags: cappedUnion(
+			base.promoteTags,
+			addition.promoteTags,
+			MAX_PROMOTE_TAGS,
+		),
+	};
+}
+
 export const AdaptationRule = z.strictObject({
 	id: z.uuid(),
 	hostname: z.string().min(1).max(253),
@@ -66,6 +115,31 @@ export const WebAdaptationSettings = z.object({
 	rules: z.array(AdaptationRule).default([]),
 });
 export type WebAdaptationSettings = z.infer<typeof WebAdaptationSettings>;
+
+/** Rules are keyed by structure fingerprint, so structure drift can pile up. */
+export const MAX_RULES_PER_HOST = 20;
+
+/**
+ * Keep the rule list bounded per host, dropping the least recently updated
+ * entries first. A rule touched by the current upsert is always kept.
+ */
+export function enforceRuleBudget(rules: AdaptationRule[]): AdaptationRule[] {
+	if (rules.length <= MAX_RULES_PER_HOST) return rules;
+	const perHost = new Map<string, number>();
+	const keptIds = new Set<string>();
+	// Newest first, so the rule an upsert just touched always survives; iterating
+	// the reversed array keeps the relative order stable for equal timestamps.
+	for (const rule of [...rules]
+		.reverse()
+		.sort((a, b) => b.updatedAt - a.updatedAt)) {
+		const count = perHost.get(rule.hostname) ?? 0;
+		if (count >= MAX_RULES_PER_HOST) continue;
+		perHost.set(rule.hostname, count + 1);
+		keptIds.add(rule.id);
+	}
+	// Preserve the stored order: only the surplus entries disappear.
+	return rules.filter((rule) => keptIds.has(rule.id));
+}
 
 export type AdaptationProposal = {
 	hostname: string;
@@ -134,6 +208,23 @@ export function findAdaptationRule(
 const unique = (values: string[]) =>
 	[...new Set(values.map((s) => s.trim()))].sort();
 
+/**
+ * Sanitize persisted rules before any reader touches them.
+ *
+ * Storage is written without validation, so a hand-edited or truncated entry
+ * must degrade to "no rules" instead of throwing on the translation path.
+ */
+export function parseAdaptationRules(input: unknown): AdaptationRule[] {
+	if (!Array.isArray(input)) return [];
+	const rules: AdaptationRule[] = [];
+	for (const entry of input) {
+		// Per-entry parsing keeps one corrupt rule from disabling every other rule.
+		const parsed = AdaptationRule.safeParse(entry);
+		if (parsed.success) rules.push(parsed.data);
+	}
+	return rules;
+}
+
 export function normalizePatch(patch: AdaptationPatch): AdaptationPatch {
 	return {
 		roots: unique(patch.roots),
@@ -149,7 +240,14 @@ export function patchesEqual(a: AdaptationPatch, b: AdaptationPatch): boolean {
 	);
 }
 
-function parsePatch(input: unknown): AdaptationPatch | undefined {
+/**
+ * Parse and normalize a patch without touching the DOM.
+ *
+ * Returns undefined for structurally invalid or empty patches, which lets
+ * callers tell "this rule is unusable" apart from "this rule matches nothing
+ * right now".
+ */
+export function parsePatch(input: unknown): AdaptationPatch | undefined {
 	const parsed = AdaptationPatch.safeParse(input);
 	if (!parsed.success) return undefined;
 	const patch = normalizePatch(parsed.data);
@@ -338,6 +436,13 @@ export function resolvePatchForDocument(
 	return resolved;
 }
 
+/** Mirror of the schema cap on AdaptationRule.pathPatterns. */
+export const MAX_PATH_PATTERNS = 30;
+
+function specificityScore(pattern: string): number {
+	return pattern.endsWith("/*") ? pattern.length - 2 : pattern.length + 1000;
+}
+
 function siblingWildcard(a: string, b: string): string | undefined {
 	const left = normalizePathname(a).split("/");
 	const right = normalizePathname(b).split("/");
@@ -351,6 +456,18 @@ function siblingWildcard(a: string, b: string): string | undefined {
 export function extendPaths(patterns: string[], pathname: string): string[] {
 	const path = normalizePathname(pathname);
 	if (patterns.some((pattern) => matchesPath(pattern, path))) return patterns;
+	const extended = extendPathsUnbounded(patterns, path);
+	if (extended.length <= MAX_PATH_PATTERNS) return extended;
+	// The schema caps pathPatterns, so growing past it would make the saved rule
+	// invalid and block every future settings migration. Keep the most specific
+	// patterns instead.
+	return [...extended]
+		.sort((a, b) => specificityScore(b) - specificityScore(a))
+		.slice(0, MAX_PATH_PATTERNS)
+		.sort();
+}
+
+function extendPathsUnbounded(patterns: string[], path: string): string[] {
 	for (const pattern of patterns) {
 		if (pattern.endsWith("/*")) continue;
 		const wildcard = siblingWildcard(pattern, path);
@@ -389,16 +506,18 @@ export function upsertAdaptationRule(
 			return { rules, result: "unchanged" };
 		if (rule.pathPatterns.length === 1) {
 			return {
-				rules: rules.map((item, i) =>
-					i === exactIndex
-						? {
-								...rule,
-								structureKey: proposal.structureKey,
-								patch,
-								source: proposal.source,
-								updatedAt: now,
-							}
-						: item,
+				rules: enforceRuleBudget(
+					rules.map((item, i) =>
+						i === exactIndex
+							? {
+									...rule,
+									structureKey: proposal.structureKey,
+									patch,
+									source: proposal.source,
+									updatedAt: now,
+								}
+							: item,
+					),
 				),
 				result: "updated",
 			};
@@ -427,8 +546,12 @@ export function upsertAdaptationRule(
 		if (pathPatterns === rule.pathPatterns && !replacedExact)
 			return { rules, result: "unchanged" };
 		return {
-			rules: rules.map((item, i) =>
-				i === matchingIndex ? { ...rule, pathPatterns, updatedAt: now } : item,
+			rules: enforceRuleBudget(
+				rules.map((item, i) =>
+					i === matchingIndex
+						? { ...rule, pathPatterns, updatedAt: now }
+						: item,
+				),
 			),
 			result: "updated",
 		};
@@ -442,7 +565,7 @@ export function upsertAdaptationRule(
 	);
 	if (disabledWildcard) return { rules, result: "unchanged" };
 	return {
-		rules: [
+		rules: enforceRuleBudget([
 			...rules,
 			{
 				id: crypto.randomUUID(),
@@ -455,7 +578,7 @@ export function upsertAdaptationRule(
 				createdAt: now,
 				updatedAt: now,
 			},
-		],
+		]),
 		result: replacedExact ? "updated" : "added",
 	};
 }

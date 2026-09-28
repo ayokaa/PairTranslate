@@ -12,6 +12,8 @@ import {
 } from "./observations";
 
 const MAX_OUTLINE_NODES = 600;
+/** Total budget for direct text echoed into the outline. */
+const MAX_OUTLINE_CHARACTERS = 20_000;
 
 export type UntranslatedSample = { text: string; element: Element };
 
@@ -192,11 +194,17 @@ export function buildPageSnapshot(
 		text?: string;
 	}> = [];
 	const seen = new Set<Element>();
+	let outlineCharacters = 0;
 	const addOutline = (start: Element, max: number) => {
 		const walker = document.createTreeWalker(start, NodeFilter.SHOW_ELEMENT);
 		let node: Node | null = start;
 		let visited = 0;
-		while (node && outline.length < max && visited++ < MAX_OUTLINE_NODES) {
+		while (
+			node &&
+			outline.length < max &&
+			outlineCharacters < MAX_OUTLINE_CHARACTERS &&
+			visited++ < MAX_OUTLINE_NODES
+		) {
 			const element = node as Element;
 			if (!seen.has(element) && isSafePageElement(element)) {
 				seen.add(element);
@@ -210,6 +218,7 @@ export function buildPageSnapshot(
 				const classes = stableClasses(element);
 				const role = safeRole(element);
 				const text = directText(element);
+				outlineCharacters += text.length;
 				outline.push({
 					depth: Math.min(depth, 12),
 					tag: element.tagName.toLowerCase(),

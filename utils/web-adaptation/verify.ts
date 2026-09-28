@@ -39,6 +39,7 @@ export function improvesExtraction(
 	candidate: ExtractionSample[],
 	untranslatedCandidates: ExtractionSample[] = [],
 	requireUntranslatedAddition = false,
+	scope?: Element[],
 ): boolean {
 	if (candidate.length === 0) return false;
 	const before = compact(baseline.map((item) => item.text).join(""));
@@ -50,6 +51,22 @@ export function improvesExtraction(
 				.filter((element): element is Element => Boolean(element)),
 		),
 	];
+	// A patch that changes the traversal boundary can drop content that was
+	// never sampled, so every baseline sample that is still on the page but now
+	// sits outside the candidate roots has to look like page chrome.
+	if (scope && scope.length > 0) {
+		const outOfScope = baseline.filter(
+			(item) =>
+				item.element.isConnected &&
+				!scope.some(
+					(root) => root === item.element || root.contains(item.element),
+				),
+		);
+		if (
+			outOfScope.some((item) => !isSafeRemoval(item.element, retainedMainRoots))
+		)
+			return false;
+	}
 	const relatedSamplesContain = (
 		samples: ExtractionSample[],
 		expected: ExtractionSample,
@@ -96,9 +113,24 @@ export function improvesExtraction(
 	)
 		return false;
 	if (baseline.length === 0) return addedUntranslatedCandidate;
-	const removed = baseline.filter(
-		(item) => !after.includes(compact(item.text)),
-	);
+	const removed = baseline.filter((item) => {
+		const text = compact(item.text);
+		// Text surviving elsewhere on the page does not prove this region
+		// survived: a duplicated paragraph used to mask the dropped copy.
+		if (!after.includes(text)) return true;
+		const regionText = compact(
+			candidate
+				.filter(
+					(entry) =>
+						entry.element === item.element ||
+						entry.element.contains(item.element) ||
+						item.element.contains(entry.element),
+				)
+				.map((entry) => entry.text)
+				.join(""),
+		);
+		return !regionText.includes(text);
+	});
 	const unsafeRemoved = removed.some(
 		(item) => !isSafeRemoval(item.element, retainedMainRoots),
 	);
