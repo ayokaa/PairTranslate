@@ -1,4 +1,5 @@
 import {
+	getLastStructureKey,
 	getStructureKey,
 	isSafePageElement,
 	safeRole,
@@ -242,7 +243,11 @@ export function buildPageSnapshot(
 	return {
 		hostname: window.location.hostname,
 		pathname,
-		structureKey: getStructureKey(document),
+		// Prefer the key the parser matched this page with: a rule stored under
+		// a key recomputed from a later DOM state can never match again.
+		// Prefer the key the parser matched this page with: a rule stored under
+		// a key recomputed from a later DOM state can never match again.
+		structureKey: getLastStructureKey(document) ?? getStructureKey(document),
 		outline,
 		pairs: safePairData.pairs,
 		untranslated: safeUntranslated(

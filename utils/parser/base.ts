@@ -467,9 +467,14 @@ export function getState(options: Options = {}): State {
 	const adaptableExcludedSelector = (options.excludedSelectors || []).join(
 		", ",
 	);
+	const excludedSelectors = options.includeTranslated
+		? EXCLUDED_SELECTORS.filter(
+				(selector) => selector !== `[${DATA_TRANSLATED}]`,
+			)
+		: EXCLUDED_SELECTORS;
 	const protectedExcludedSelector = [
 		...(options.protectedExcludedSelectors || []),
-		...EXCLUDED_SELECTORS,
+		...excludedSelectors,
 		"[contenteditable]",
 		"[hidden]",
 		"[aria-hidden='true']",

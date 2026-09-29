@@ -30,6 +30,29 @@ export function safeRole(element: Element): string | undefined {
 	return /^[a-z-]{1,30}$/.test(role) ? role : undefined;
 }
 
+/**
+ * The structure key the page was last matched with at load time.
+ *
+ * The adaptation analysis runs later, against a DOM that may have grown since
+ * (lazy-loaded content, ads, hydration). If it recomputes the key from that
+ * later DOM, the rule it stores is keyed by something the parser will never
+ * compute on the next load, so the rule can never match again. Both sides have
+ * to use the same key, and the parser's is the one matching depends on.
+ */
+let lastStructureKey: { doc: Document; key: string } | undefined;
+
+export const setLastStructureKey = (doc: Document, key: string): void => {
+	lastStructureKey = { doc, key };
+};
+
+export const getLastStructureKey = (doc: Document): string | undefined =>
+	lastStructureKey?.doc === doc ? lastStructureKey.key : undefined;
+
+/** Drop the cached key. Mainly for tests, where the document is shared. */
+export const resetLastStructureKey = (): void => {
+	lastStructureKey = undefined;
+};
+
 export function getStructureKey(doc: Document): string {
 	const root = doc.querySelector("main, article, [role='main']") ?? doc.body;
 	if (!root) return "empty";

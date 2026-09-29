@@ -79,6 +79,15 @@ async function collectSamples(
 		{
 			listenNew: false,
 			filterInteractive,
+			// The trial run re-scans a page this extension has already
+			// translated, and every translated node carries
+			// `data-pt-translated`. Without this the scan sees nothing, the
+			// improvement check fails on an empty candidate, and no rule can
+			// ever be stored.
+			includeTranslated: true,
+			// Internal scans must not redefine the page's structure key: the
+			// analysis has to store the key the parser will match against.
+			recordStructureKey: false,
 		},
 		rules,
 		patch,

@@ -2,7 +2,10 @@ import { beforeEach, expect, mock, test } from "bun:test";
 import "~/utils/test/dom-setup";
 import { PROMPT_ID } from "~/utils/constants";
 import type { AdaptationRule } from "~/utils/web-adaptation/model";
-import { getStructureKey } from "~/utils/web-adaptation/structure";
+import {
+	getStructureKey,
+	resetLastStructureKey,
+} from "~/utils/web-adaptation/structure";
 import {
 	clearTranslationObservations,
 	MAX_ADAPTATION_SOURCE_CHARACTERS,
@@ -155,6 +158,9 @@ const { runWebAdaptation } = await import("./index");
 
 beforeEach(() => {
 	clearTranslationObservations();
+	// The parser records the page's structure key in module state; other test
+	// files share both the module and the document, so start from a clean slate.
+	resetLastStructureKey();
 	document.body.replaceChildren(nav, main);
 	includeExistingArticleInParser = true;
 	extractNothingBeforePatch = false;

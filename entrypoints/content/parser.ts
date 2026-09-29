@@ -11,7 +11,10 @@ import {
 	findAdaptationRule,
 	parseAdaptationRules,
 } from "~/utils/web-adaptation/model";
-import { getStructureKey } from "~/utils/web-adaptation/structure";
+import {
+	getStructureKey,
+	setLastStructureKey,
+} from "~/utils/web-adaptation/structure";
 
 // A stale rule is reported once per content script lifetime; the storage change
 // itself re-triggers the parser with the rule already gone.
@@ -29,13 +32,17 @@ export const getDomListener = async (
 	const savedRules = parseAdaptationRules(
 		rules ?? (await getSettings()).webAdaptation.rules,
 	);
+	const structureKey = getStructureKey(document);
+	if (options.recordStructureKey !== false) {
+		setLastStructureKey(document, structureKey);
+	}
 	const matchedRule = overridePatch
 		? undefined
 		: findAdaptationRule(
 				savedRules,
 				domain,
 				window.location.pathname,
-				getStructureKey(document),
+				structureKey,
 			);
 	const patch = overridePatch ?? matchedRule?.patch;
 	if (
@@ -49,10 +56,16 @@ export const getDomListener = async (
 		console.warn(
 			"[pair-translate] web adaptation rule no longer matches this page; removing it and restoring the default scan",
 		);
-		void window.rpc.deleteWebAdaptationRule(matchedRule.id).catch(() => {
-			// Removing a stale rule is best effort: the fallback scan already
-			// keeps the page translated.
-		});
+		// Removing a stale rule is best effort: the fallback scan already keeps
+		// the page translated. The RPC client hands back a thenable rather than
+		// a Promise, so `.catch()` cannot be called on it directly; and a failure
+		// here must never escape, or the caller's listener is never created and
+		// the whole page stops translating.
+		try {
+			void Promise.resolve(
+				window.rpc.deleteWebAdaptationRule(matchedRule.id),
+			).catch(() => {});
+		} catch {}
 	}
 	return listener(applyAdaptationPatch(options, patch, document));
 };
