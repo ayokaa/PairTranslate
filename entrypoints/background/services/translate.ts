@@ -86,6 +86,16 @@ const payloadChars = (payload: TranslatePayload): number =>
 		? payload.reduce((sum, entry) => sum + entry.length, 0)
 		: payload.length;
 
+/**
+ * How many translations one cache entry covers.
+ *
+ * A thin-cache entry holds a single segment, but a whole-batch or streamed
+ * entry can hold an array; counting entries instead of requests keeps the
+ * hit rate meaningful.
+ */
+const savedEntryCount = (output: unknown): number =>
+	Array.isArray(output) ? output.length : 1;
+
 const toStreamChunk = (value: unknown): string => {
 	if (typeof value === "string") {
 		return value;
@@ -757,8 +767,15 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 
 		let effectiveSrcLang = options.srcLang;
 		if (effectiveSrcLang === "auto") {
+			// Sample the whole batch, not just its first segment. A 20-50 character
+			// headline is a coin flip for the n-gram detector (a batch of real HN
+			// titles had one entry detected as Polish and another only correct at
+			// 0.08 confidence), while the same text joined with its batchmates
+			// carries hundreds of characters of signal and was right every time.
+			// The detector is local and costs ~0.3ms for 500 characters, which is
+			// noise next to an LLM round trip, so this is free.
 			const sample = Array.isArray(payload)
-				? (payload.find((entry) => entry.length > 0) ?? "")
+				? payload.filter((entry) => entry.length > 0).join(" ").slice(0, 512)
 				: payload;
 			if (typeof sample === "string" && sample.length > 0) {
 				const resolved = await resolveAutoSrcLang(
@@ -835,13 +852,24 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				const cachedEntries = await Promise.all(
 					entryKeys.map((key) => getCacheEntry(key)),
 				);
+				let hitEntries = 0;
+				let hitChars = 0;
 				cachedEntries.forEach((entry, index) => {
 					if (entry && typeof entry.output === "string") {
 						cacheState.values[index] = entry.output;
+						hitEntries++;
+						hitChars += payloadChars(payloadArray[index]);
 					} else {
 						cacheState.missing.push(index);
 					}
 				});
+				// Count the hit per entry, not per batch: a batch where 12 of 13
+				// segments came from the cache saved 12 translations, and the
+				// statistics have to say so — otherwise a partly cached page
+				// reports zero hits and the hit rate looks far worse than it is.
+				if (hitEntries > 0) {
+					recordTranslationStats({ cacheHits: hitEntries, chars: hitChars });
+				}
 				if (cacheState.missing.length === 0) {
 					const cachedValue = cacheState.values.slice() as string[];
 					await applyDebugLatency();
@@ -850,10 +878,6 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						promptId,
 						type: "thin",
 						entries: cachedValue.length,
-					});
-					recordTranslationStats({
-						cacheHits: 1,
-						chars: payloadChars(payload),
 					});
 					return {
 						value: createTranslationResponse(payload, cachedValue, promptId),
@@ -871,7 +895,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					type: "full",
 				});
 				recordTranslationStats({
-					cacheHits: 1,
+					cacheHits: savedEntryCount(cached.output),
 					chars: payloadChars(payload),
 				});
 				return {
@@ -1139,9 +1163,11 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						}
 					}
 				}
+				// Argument order must match `computeCacheKey(promptId, modelId, ...)`
+				// so stream results share keys with the unary/thin-cache paths.
 				const cacheKey = await computeCacheKey(
-					modelId,
 					promptId,
+					modelId,
 					text,
 					ctx,
 					effectiveSrcLang,
@@ -1159,7 +1185,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 							promptId,
 						});
 						recordTranslationStats({
-							cacheHits: 1,
+							cacheHits: savedEntryCount(cachedValue),
 							chars: payloadChars(payload),
 						});
 						yield {

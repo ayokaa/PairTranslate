@@ -21,9 +21,12 @@ export const computeCacheKey = async (
 		str += ctx.page.domain;
 	}
 
-	if (ctx.pageContext) {
-		str += `${D}pageContext:${ctx.pageContext}`;
-	}
+	// `ctx.pageContext` is intentionally excluded here. It is an LLM-generated
+	// description of the page that is re-created on every page load (and per
+	// tab), so hashing its wording would change the key on every reload and
+	// invalidate every cached translation. It is only a soft hint in the
+	// prompt; reusing a translation produced under a slightly different
+	// wording of that hint is acceptable.
 
 	if (srcLang) str += `${D}src:${srcLang}`;
 	if (dstLang) str += `${D}dst:${dstLang}`;

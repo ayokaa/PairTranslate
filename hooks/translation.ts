@@ -181,7 +181,9 @@ export function createBatchTranslation(
 
 		if (
 			await detectAndSkip(
-				texts.find((t) => t.length > 0) || "",
+				// Same sample the background uses: a single short headline is a coin
+				// flip for the detector, the joined batch is not.
+				texts.filter((t) => t.length > 0).join(" ").slice(0, 512),
 				srcLang(),
 				dstLang(),
 				promptId,
