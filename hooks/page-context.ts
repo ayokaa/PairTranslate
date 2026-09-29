@@ -19,6 +19,11 @@ type CacheEntry = {
 const cache = new Map<string, CacheEntry>();
 const inflight = new Map<string, Promise<string | undefined>>();
 const failed = new Set<string>();
+// Text captured from the document, kept for a request that has not been made
+// yet. The capture has to happen before this extension's own translation
+// containers exist: they mark the section they belong to data-pt-translated,
+// which the content extractor excludes, so capturing afterwards reads nothing.
+const captured = new Map<string, string>();
 const [cacheVersion, setCacheVersion] = createSignal(0);
 
 // Same-page fragment navigation (footnote refs, heading anchors, TOC links)
@@ -56,6 +61,20 @@ export const getCachedPageContext = (
 	return cache.get(cacheKey(url, modelId, srcLang, dstLang))?.text;
 };
 
+/** Read the page content now, or record that there is nothing to read. */
+const capturePageContent = (key: string): boolean => {
+	if (captured.has(key)) return true;
+	if (failed.has(key)) return false;
+	const { content } = extractPageContent();
+	const text = truncateToLength(content, MAX_PAGE_CONTEXT_CHARS).trim();
+	if (!text) {
+		failed.add(key);
+		return false;
+	}
+	captured.set(key, text);
+	return true;
+};
+
 export const ensurePageContext = async (options: {
 	modelId: string;
 	srcLang: string;
@@ -69,11 +88,11 @@ export const ensurePageContext = async (options: {
 	if (failed.has(key)) return undefined;
 	const running = inflight.get(key);
 	if (running) return running;
+	if (!capturePageContent(key)) return undefined;
 
 	const task = (async () => {
 		try {
-			const { content } = extractPageContent();
-			const text = truncateToLength(content, MAX_PAGE_CONTEXT_CHARS).trim();
+			const text = captured.get(key) ?? "";
 			if (!text) {
 				failed.add(key);
 				return undefined;
@@ -118,6 +137,13 @@ export function usePageContext(options: {
 	srcLang: () => string;
 	dstLang: () => string;
 	active: () => boolean;
+	/**
+	 * Whether the model call is wanted yet. The content is captured as soon as
+	 * the hook runs — it has to be, before the translation containers exist — but
+	 * a batch that is going to be skipped never reaches the model the context
+	 * exists for, so it can hold the call until it knows.
+	 */
+	generate?: () => boolean;
 }) {
 	const [url, setUrl] = createSignal("");
 
@@ -139,7 +165,12 @@ export function usePageContext(options: {
 		const srcLang = options.srcLang();
 		const dstLang = options.dstLang();
 		const key = cacheKey(currentUrl, modelId, srcLang, dstLang);
-		if (cache.has(key) || failed.has(key) || inflight.has(key)) return;
+		if (cache.has(key) || failed.has(key)) return;
+		// Capture while the document is still free of this extension's own
+		// translation containers; afterwards there is nothing left to read.
+		if (!capturePageContent(key)) return;
+		if (!(options.generate?.() ?? true)) return;
+		if (inflight.has(key)) return;
 		void ensurePageContext({ modelId, srcLang, dstLang, url: currentUrl });
 	});
 

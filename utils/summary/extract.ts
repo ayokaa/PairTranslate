@@ -1,9 +1,29 @@
-import { EXCLUDED_SELECTORS, INTERACTIVE_SELECTORS } from "~/utils/constants";
+import {
+	DATA_CONTAINER,
+	DATA_HIDE,
+	DATA_TRANSLATED,
+	EXCLUDED_SELECTORS,
+	INTERACTIVE_SELECTORS,
+} from "~/utils/constants";
 import { createLogger } from "~/utils/rpc/logger";
 
 const logger = createLogger(import.meta.env.DEV ? "debug" : "error", "Summary");
 
 const MAX_CONTENT_LENGTH = 500_000;
+
+// `data-pt-translated` marks a section this extension has already served a
+// translation for. The attribute goes on the element that holds the page's own
+// text — the translation itself is a sibling container inside it — so dropping
+// the marked element wholesale would take the original down with the
+// translation, and once the in-text translation has run that leaves nothing to
+// read. Keep those hosts readable and drop only what is not the page's text.
+const EXCLUDED_FOR_CONTENT = [
+	...EXCLUDED_SELECTORS.filter(
+		(selector) => selector !== `[${DATA_TRANSLATED}]`,
+	),
+	// The original of a section translated in replace mode is hidden this way.
+	`[${DATA_HIDE}]`,
+];
 
 const getMainContentElement = (): HTMLElement | null => {
 	const selectors = [
@@ -27,6 +47,31 @@ const getMainContentElement = (): HTMLElement | null => {
 	return document.body;
 };
 
+/**
+ * Whether the text a translation container sits next to is still there.
+ *
+ * A container is inserted into the element that holds the section it translates.
+ * While that text is in the document (the default parallel mode) the container
+ * would only repeat it; once it is gone (replace mode empties the nodes or hides
+ * them) the container is the only copy left, and the page still has to read as
+ * something.
+ */
+const hasOriginalText = (container: Element): boolean => {
+	const host = container.parentElement;
+	if (!host) return false;
+	for (const node of Array.from(host.childNodes)) {
+		if (node === container) continue;
+		if (node.nodeType === Node.TEXT_NODE) {
+			if ((node.textContent ?? "").trim()) return true;
+			continue;
+		}
+		if (!(node instanceof Element)) continue;
+		if (node.hasAttribute(DATA_HIDE)) continue;
+		if ((node.textContent ?? "").trim()) return true;
+	}
+	return false;
+};
+
 const isVisible = (el: Element): boolean => {
 	const style = window.getComputedStyle(el);
 	return (
@@ -41,7 +86,7 @@ const walkTextNodes = (
 	onText: (text: string, tagName: string) => void,
 ): void => {
 	const excluded = new Set(
-		Array.from(root.querySelectorAll(EXCLUDED_SELECTORS.join(", "))),
+		Array.from(root.querySelectorAll(EXCLUDED_FOR_CONTENT.join(", "))),
 	);
 	const interactive = new Set(
 		Array.from(root.querySelectorAll(INTERACTIVE_SELECTORS.join(", "))),
@@ -57,6 +102,11 @@ const walkTextNodes = (
 				}
 				if (node.nodeType === Node.ELEMENT_NODE) {
 					const el = node as Element;
+					if (el.hasAttribute(DATA_CONTAINER)) {
+						return hasOriginalText(el)
+							? NodeFilter.FILTER_REJECT
+							: NodeFilter.FILTER_SKIP;
+					}
 					if (excluded.has(el) || interactive.has(el)) {
 						return NodeFilter.FILTER_REJECT;
 					}

@@ -15,7 +15,10 @@ import { createIdleDebounce } from "@/hooks/throttle";
 import { Md } from "~/components/MD/Md";
 import { TranslateNodePortal } from "~/components/MPortal";
 import { useSettings } from "~/hooks/settings";
-import { createBatchTranslation } from "~/hooks/translation";
+import {
+	createBatchTranslation,
+	useSameLanguageSkip,
+} from "~/hooks/translation";
 import { useWebsiteRule } from "~/hooks/website-rule";
 import { DATA_TRANSLATION_TEXT, PROMPT_ID } from "~/utils/constants";
 import { copyToClipboard } from "~/utils/copy";
@@ -182,17 +185,31 @@ const BatchRender = (props: BatchRenderProps) => {
 	const texts = createMemo(() => members.map(([, text]) => text));
 	const srcLang = () => websiteRule.sourceLang || settings.translate.sourceLang;
 	const dstLang = () => websiteRule.targetLang || settings.translate.targetLang;
+	// Decide the skip before anything a skipped batch does not need gets started.
+	const skipState = useSameLanguageSkip(texts, {
+		promptId: PROMPT_ID.batchTranslate,
+		srcLang,
+		dstLang,
+	});
 	const pageContext = usePageContext({
 		modelId: () => settings.summary?.pageContextModel,
 		srcLang,
 		dstLang,
+		// Do not spend a page-context round trip on a batch that is going to be
+		// skipped: the context only feeds the model, and this batch will not
+		// reach one.
 		active: () => members.length > 0,
+		// The content is captured on mount; the model call waits for this batch
+		// to decide it is not being skipped.
+		generate: () => skipState() === "translate",
 	});
 	const [getter, retry] = createBatchTranslation(texts, {
 		promptId: PROMPT_ID.batchTranslate,
 		modelId: () => settings.translate.inTextTranslateModel,
 		srcLang,
 		dstLang,
+		// A batch that is going to be skipped needs neither the context nor the
+		// wait for it.
 		enabled: () => pageContext.ready(),
 		ctx: () => ({
 			page: getPageContext(),

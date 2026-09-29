@@ -40,6 +40,61 @@ const detectAndSkip = async (
 	return areLanguagesSame(detected, dstLang);
 };
 
+// The sample the client and the background detect on, so both sides of the
+// skip decision always reach the same conclusion: one short headline is a coin
+// flip for the detector, the joined batch is not.
+const detectionSample = (texts: string[]) =>
+	texts
+		.filter((text) => text.length > 0)
+		.join(" ")
+		.slice(0, 512);
+
+export type SameLanguageSkip = "pending" | "skip" | "translate";
+
+/**
+ * Whether this text is about to be skipped as same-language, decided as early
+ * as it can be. "pending" lets callers hold off work a skipped batch does not
+ * need: generating the page context costs one LLM round trip per page, and a
+ * skipped batch never reaches the model that context exists for.
+ */
+export function useSameLanguageSkip(
+	texts: () => string[],
+	options: {
+		promptId: string;
+		srcLang: () => string;
+		dstLang: () => string;
+	},
+) {
+	const [state, setState] = createSignal<SameLanguageSkip>("pending");
+	createEffect(() => {
+		const list = texts();
+		if (list.length === 0) return;
+		// A batch only ever loses members after it is dispatched, so the first
+		// answer stands. Re-deciding would flip this back to "pending" and make
+		// callers tear down work they had already settled.
+		if (state() !== "pending") return;
+		let alive = true;
+		onCleanup(() => {
+			alive = false;
+		});
+		void detectAndSkip(
+			detectionSample(list),
+			options.srcLang(),
+			options.dstLang(),
+			options.promptId,
+		)
+			.then((skip) => {
+				if (alive) setState(skip ? "skip" : "translate");
+			})
+			.catch(() => {
+				// A detector that throws is not evidence of anything; send the
+				// batch down the normal path and let it decide again there.
+				if (alive) setState("translate");
+			});
+	});
+	return state;
+}
+
 type Pending = {
 	(): undefined;
 	loading: true;
@@ -172,6 +227,11 @@ export function createBatchTranslation(
 			setSkipped([]);
 		});
 
+	// The sample both sides of the skip decision agree on: one short headline is
+	// a coin flip for the detector, the joined batch is not.
+	const detectAndSkipTexts = (texts: string[]) =>
+		detectAndSkip(detectionSample(texts), srcLang(), dstLang(), promptId);
+
 	const translate = async (texts: string[], cleanCache = false) => {
 		const modelId_ = modelId();
 		if (modelId_ === undefined) {
@@ -179,16 +239,7 @@ export function createBatchTranslation(
 			return;
 		}
 
-		if (
-			await detectAndSkip(
-				// Same sample the background uses: a single short headline is a coin
-				// flip for the detector, the joined batch is not.
-				texts.filter((t) => t.length > 0).join(" ").slice(0, 512),
-				srcLang(),
-				dstLang(),
-				promptId,
-			)
-		) {
+		if (await detectAndSkipTexts(texts)) {
 			setAllSkipped(texts.length);
 			return;
 		}
@@ -307,7 +358,23 @@ export function createBatchTranslation(
 	createEffect(() => {
 		const text_ = text();
 		const enabled = options.enabled?.() ?? true;
-		if (!enabled) return;
+		if (!enabled) {
+			// Waiting on the page context must not delay a batch that is about to
+			// be skipped: the context only feeds the model, and a skipped batch
+			// never reaches one. Checking here keeps a same-language page from
+			// paying one serial context round trip — 2s measured, 16s on a slow
+			// model — only to be told afterwards that it needed no translation.
+			// A detector failure is ignored: the batch then waits for the context
+			// exactly as it did before.
+			if (modelId() !== undefined) {
+				void detectAndSkipTexts(text_)
+					.then((skip) => {
+						if (skip) setAllSkipped(text_.length);
+					})
+					.catch(() => {});
+			}
+			return;
+		}
 		translate(text_);
 		onCleanup(clearAll);
 	});

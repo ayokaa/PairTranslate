@@ -98,13 +98,17 @@ export function areLanguagesSame(
 		return false;
 	}
 
-	// tinyld reports both Simplified and Traditional Chinese as bare "zh".
-	// Keep that code variant-unknown so local detection cannot suppress an
-	// actual Simplified/Traditional conversion.
-	const normalizedA = resolvedA.toLowerCase();
-	const normalizedB = resolvedB.toLowerCase();
-	if (normalizedA === "zh" || normalizedB === "zh") {
-		return normalizedA === normalizedB;
+	// tinyld reports both Simplified and Traditional Chinese as a bare "zh",
+	// while the settings hold "zh-CN"/"zh-TW". A Chinese page under a Chinese
+	// target is the same language whichever pair it is: translating it only
+	// hands back the same text, so the same-language skip has to cover every
+	// zh* combination. Deciding to convert 简体 to 繁體 is a target-language
+	// choice the user makes, not one the detector should take by guessing a
+	// variant from a short sample.
+	const primaryA = resolvedA.toLowerCase().split("-")[0];
+	const primaryB = resolvedB.toLowerCase().split("-")[0];
+	if (primaryA === "zh" && primaryB === "zh") {
+		return true;
 	}
 
 	return normalizeLanguageCode(resolvedA) === normalizeLanguageCode(resolvedB);
