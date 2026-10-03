@@ -44,7 +44,13 @@ export const createTokenBucket = (
 		},
 		forceConsume(requested) {
 			refill();
-			tokens -= requested;
+			// Charging more than the balance would put the bucket into debt, and
+			// the next request would then wait for that debt *plus* its own tokens:
+			// one batch that over-reports its usage could stall the model's whole
+			// queue for minutes, invisibly, because `available()` reads 0 either
+			// way. The balance therefore floors at zero — an over-reported batch is
+			// charged what the bucket still holds and no more.
+			tokens = Math.max(0, tokens - requested);
 		},
 		msUntil(requested) {
 			refill();
