@@ -60,6 +60,7 @@ import {
 	createTranslationResponse,
 	shouldSkipSameLanguage,
 	skippedForPayload,
+	type TranslationResponse,
 } from "~/utils/translation-result";
 import { recordTranslationStats } from "~/utils/translation-stats";
 import type { TranslateContext } from "~/utils/types";
@@ -739,13 +740,46 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		return { srcLang: detected, skip: false };
 	};
 
-	const executeUnary = async (
+	/**
+	 * A batch that was detected as same-language and must not be translated.
+	 */
+	type SkippedUnary = {
+		skip: true;
+		payload: TranslatePayload;
+	};
+
+	/**
+	 * A unary request whose target, source language and cache contents are
+	 * already resolved.
+	 *
+	 * Split out of `executeUnary` so `unary()` can read the cache *before*
+	 * entering the model queue. A cache hit spends no tokens and no concurrency,
+	 * so making it buy either from the queue is what stalls a page that has
+	 * already been translated. Both shapes share these helpers, so the cache keys
+	 * are computed in exactly one place.
+	 */
+	type ResolvedUnary = {
+		skip?: undefined;
+		payload: TranslatePayload;
+		target: ServiceTarget;
+		compiled: CompiledPrompt | undefined;
+		expectsArray: boolean;
+		payloadArray: string[] | undefined;
+		supportsThinCache: boolean;
+		effectiveSrcLang: string;
+		cacheKey: ArrayBuffer;
+		thinCacheState: ThinCacheState | undefined;
+		/** The whole-batch entry, for requests that do not use the thin cache. */
+		cached: CachedValue | undefined;
+	};
+
+	type PreparedUnary = SkippedUnary | ResolvedUnary;
+
+	const prepareUnary = async (
 		ctx: TranslateContext,
 		options: TranslateOptions,
 		text: string | string[] | undefined,
-		signal?: AbortSignal,
-		// biome-ignore lint/suspicious/noExplicitAny: result can be any type
-	): Promise<UnaryResult<any>> => {
+	): Promise<PreparedUnary> => {
 		const modelId = options.modelId;
 		const promptId = options.promptId;
 		if (!promptId) {
@@ -775,7 +809,10 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			// The detector is local and costs ~0.3ms for 500 characters, which is
 			// noise next to an LLM round trip, so this is free.
 			const sample = Array.isArray(payload)
-				? payload.filter((entry) => entry.length > 0).join(" ").slice(0, 512)
+				? payload
+						.filter((entry) => entry.length > 0)
+						.join(" ")
+						.slice(0, 512)
 				: payload;
 			if (typeof sample === "string" && sample.length > 0) {
 				const resolved = await resolveAutoSrcLang(
@@ -786,13 +823,8 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				);
 				if (resolved.skip) {
 					return {
-						value: createTranslationResponse(
-							payload,
-							Array.isArray(payload) ? payload.map(() => "") : "",
-							promptId,
-							{ skipped: skippedForPayload(payload) },
-						),
-						completionTokens: 0,
+						skip: true,
+						payload,
 					};
 				}
 				if (target.kind === "llm") {
@@ -810,6 +842,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			options.dstLang,
 		);
 		let thinCacheState: ThinCacheState | undefined;
+		let cached: CachedValue | undefined;
 
 		debugLog("unary/start", {
 			modelId,
@@ -821,10 +854,6 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					? text.length
 					: 0,
 		});
-
-		if (options.cleanCache && !supportsThinCache) {
-			await resultCache.del(cacheKey);
-		}
 
 		if (supportsThinCache && payloadArray) {
 			const entryKeys = await Promise.all(
@@ -870,42 +899,120 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				if (hitEntries > 0) {
 					recordTranslationStats({ cacheHits: hitEntries, chars: hitChars });
 				}
-				if (cacheState.missing.length === 0) {
-					const cachedValue = cacheState.values.slice() as string[];
-					await applyDebugLatency();
-					debugLog("unary/cache-hit", {
-						modelId,
-						promptId,
-						type: "thin",
-						entries: cachedValue.length,
-					});
-					return {
-						value: createTranslationResponse(payload, cachedValue, promptId),
-						completionTokens: 0,
-					};
-				}
 			}
 		} else if (!options.cleanCache) {
-			const cached = await getCacheEntry(cacheKey);
-			if (cached) {
-				await applyDebugLatency();
-				debugLog("unary/cache-hit", {
-					modelId,
-					promptId,
-					type: "full",
-				});
-				recordTranslationStats({
-					cacheHits: savedEntryCount(cached.output),
-					chars: payloadChars(payload),
-				});
-				return {
-					value: createTranslationResponse(payload, cached.output, promptId, {
-						reasoning: cached.reasoning,
-					}),
-					completionTokens: 0,
-				};
-			}
+			cached = await getCacheEntry(cacheKey);
+		} else {
+			await resultCache.del(cacheKey);
 		}
+
+		return {
+			skip: undefined,
+			payload,
+			target,
+			compiled,
+			expectsArray,
+			payloadArray,
+			supportsThinCache,
+			effectiveSrcLang,
+			cacheKey,
+			thinCacheState,
+			cached,
+		};
+	};
+
+	/**
+	 * The response for a batch that is entirely cached, or undefined when any
+	 * position still has to be translated. Reads nothing — everything comes from
+	 * the prepared request — so a hit needs no quota from the model queue.
+	 */
+	const cachedUnaryResponse = async (
+		options: TranslateOptions,
+		state: ResolvedUnary,
+	): Promise<TranslationResponse<unknown> | undefined> => {
+		const { payload, thinCacheState, cached } = state;
+		const promptId = options.promptId;
+		if (thinCacheState) {
+			if (thinCacheState.missing.length > 0) return undefined;
+			const cachedValues = thinCacheState.values.slice() as string[];
+			await applyDebugLatency();
+			debugLog("unary/cache-hit", {
+				modelId: options.modelId,
+				promptId,
+				type: "thin",
+				entries: cachedValues.length,
+			});
+			return createTranslationResponse(payload, cachedValues, promptId);
+		}
+		if (!cached) return undefined;
+		await applyDebugLatency();
+		debugLog("unary/cache-hit", {
+			modelId: options.modelId,
+			promptId,
+			type: "full",
+		});
+		recordTranslationStats({
+			cacheHits: savedEntryCount(cached.output),
+			chars: payloadChars(payload),
+		});
+		return createTranslationResponse(payload, cached.output, promptId, {
+			reasoning: cached.reasoning,
+		});
+	};
+
+	const skippedUnaryResponse = (
+		payload: TranslatePayload,
+		promptId: string,
+	): TranslationResponse<unknown> =>
+		createTranslationResponse(
+			payload,
+			Array.isArray(payload) ? payload.map(() => "") : "",
+			promptId,
+			{ skipped: skippedForPayload(payload) },
+		);
+
+	const executeUnary = async (
+		ctx: TranslateContext,
+		options: TranslateOptions,
+		text: string | string[] | undefined,
+		signal?: AbortSignal,
+		/** Reuse a cache state the caller already read, instead of reading it again. */
+		prepared?: PreparedUnary,
+		// biome-ignore lint/suspicious/noExplicitAny: result can be any type
+	): Promise<UnaryResult<any>> => {
+		const promptId = options.promptId;
+		if (!promptId) {
+			throw createTranslateError(
+				TranslateErrorType.INVALID_PROMPT,
+				"Prompt ID is required",
+			);
+		}
+		const state = prepared ?? (await prepareUnary(ctx, options, text));
+		if (state.skip) {
+			return {
+				value: skippedUnaryResponse(state.payload, promptId),
+				completionTokens: 0,
+			};
+		}
+		// Only reachable for a prepared request that was partly cached: the
+		// values already read are reused, the missing ones are translated below.
+		const served = await cachedUnaryResponse(options, state);
+		if (served) {
+			return { value: served, completionTokens: 0 };
+		}
+
+		const modelId = options.modelId;
+		const {
+			target,
+			compiled,
+			payload,
+			expectsArray,
+			payloadArray,
+			supportsThinCache,
+			effectiveSrcLang,
+			cacheKey,
+			thinCacheState,
+		} = state;
 
 		const executionPayload =
 			thinCacheState && payloadArray
@@ -1105,6 +1212,25 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			signal?: AbortSignal,
 		) {
 			const payload = text ?? "";
+
+			// Read the cache before entering the model queue. A hit spends no tokens
+			// and no concurrency, so it must not have to buy either: otherwise a page
+			// that is already translated waits for the rate limiter to refill before
+			// anything renders — seconds, once a page of real requests has spent the
+			// bucket. `stream()` has always short-circuited here; unary now does the
+			// same. `cleanCache` is a forced re-translation, so it skips the lookup
+			// (and its deletes) entirely and always goes through the queue.
+			const prepared = options.cleanCache
+				? undefined
+				: await prepareUnary(ctx, options, payload);
+			if (prepared) {
+				if (prepared.skip) {
+					return skippedUnaryResponse(prepared.payload, options.promptId);
+				}
+				const served = await cachedUnaryResponse(options, prepared);
+				if (served) return served;
+			}
+
 			const target = resolveTarget(options.modelId);
 			const prompt =
 				target.kind === "llm" ? getPrompt(options.promptId) : undefined;
@@ -1114,7 +1240,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			const estimated = estimateTokens(normalized);
 			const queue = queueHub.queue(options.modelId);
 			return queue.enqueueUnary(
-				() => executeUnary(ctx, options, payload, signal),
+				() => executeUnary(ctx, options, payload, signal, prepared),
 				estimated,
 			);
 		},
