@@ -1,4 +1,3 @@
-import { trackDeep } from "@solid-primitives/deep";
 import { HashRouter, Route, useLocation, useNavigate } from "@solidjs/router";
 import {
 	Earth,
@@ -19,7 +18,6 @@ import {
 	createResource,
 	createSignal,
 	Match,
-	on,
 	Switch,
 } from "solid-js";
 import { browser } from "#imports";
@@ -34,6 +32,7 @@ import { WEB_ADAPTATION_MESSAGE } from "~/utils/constants";
 import { t } from "~/utils/i18n";
 import { createLogger } from "~/utils/rpc/logger";
 import { openTranslatorPopup } from "~/utils/translator-window";
+import { findWebsiteRuleIndex } from "~/utils/website-rules";
 import { getCurrentDomain } from "./get-current";
 import Overall from "./pages/Overall";
 import Website from "./pages/Website";
@@ -48,7 +47,6 @@ const Content = (props: { children?: JSX.Element }) => {
 	const location = useLocation();
 
 	const [domain] = createResource(getCurrentDomain);
-	const [isSummaryExcluded, setIsSummaryExcluded] = createSignal(false);
 	const [adaptationRunning, setAdaptationRunning] = createSignal(false);
 	const [adaptationResult, setAdaptationResult] = createSignal("");
 	const adaptationResultText = () => {
@@ -97,30 +95,23 @@ const Content = (props: { children?: JSX.Element }) => {
 		}
 	};
 
-	createEffect(
-		on(
-			[domain, () => trackDeep(settings.websiteRules)],
-			async ([d]) => {
-				if (!d) {
-					setIsSummaryExcluded(false);
-					return;
-				}
-				const matchedIdx = await window.rpc.matchWebsiteRule(d);
-				// Guard against stale async result if domain changed while RPC was in flight
-				if (domain() !== d) return;
-				setIsSummaryExcluded(
-					matchedIdx !== null &&
-						settings.websiteRules[matchedIdx]?.enableSummary === false,
-				);
-			},
-			{ defer: true },
-		),
+	// Derive the exclusion state synchronously from local settings. Using the
+	// background matchWebsiteRule RPC here made the toggle feel laggy: the
+	// background rebuilds its matcher from storage events, so right after the
+	// first click it still reported the pre-change value and the button's icon,
+	// label, and styling appeared to "not take" until a later interaction.
+	const matchedWebsiteRuleIndex = createMemo(() =>
+		findWebsiteRuleIndex(settings.websiteRules, domain() ?? ""),
 	);
+	const isSummaryExcluded = createMemo(() => {
+		const idx = matchedWebsiteRuleIndex();
+		return idx !== null && settings.websiteRules[idx]?.enableSummary === false;
+	});
 
-	const toggleSummaryExclusion = async () => {
+	const toggleSummaryExclusion = () => {
 		const d = domain();
 		if (!d) return;
-		const idx = await window.rpc.matchWebsiteRule(d);
+		const idx = matchedWebsiteRuleIndex();
 		if (idx !== null) {
 			const currentlyExcluded =
 				settings.websiteRules[idx]?.enableSummary === false;
