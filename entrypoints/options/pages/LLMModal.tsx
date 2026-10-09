@@ -45,6 +45,7 @@ interface LLMModalProps {
 }
 
 const hasModelOverrides = (model: LLMModelSettings): boolean =>
+	model.queue !== undefined ||
 	model.temperature !== undefined ||
 	model.maxOutputTokens !== undefined ||
 	model.thinkingBudget !== undefined ||
@@ -628,6 +629,22 @@ export default (props: LLMModalProps) => {
 											</label>
 										</div>
 										{renderError(["models", modelId, "extraBody"])}
+										<QueueOverrideFields
+											compact
+											value={model.queue}
+											defaults={{
+												...props.queueDefaults,
+												...(formData().queue ?? {}),
+											}}
+											title={t("settings.llmModal.modelQueue")}
+											description={t("settings.llmModal.modelQueueDesc")}
+											inheritLabel={t(
+												"settings.services.flowControl.inherited",
+											)}
+											onChange={(queue) =>
+												handleUpdateModel(modelId, { queue })
+											}
+										/>
 									</Show>
 								</div>
 							)}

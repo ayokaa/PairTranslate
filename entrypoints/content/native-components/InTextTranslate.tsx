@@ -26,7 +26,7 @@ import { t } from "~/utils/i18n";
 import { getMarkdownFromSection } from "~/utils/markdown";
 import { getPageContext } from "~/utils/page-context";
 import type { DOMSection } from "~/utils/parser/types";
-import { findServiceForModelRef } from "~/utils/settings/services";
+import { resolveQueueSettings } from "~/utils/settings/services";
 import { estimateTokens } from "~/utils/token-estimate";
 import InTextTooltip from "../components/InTextTooltip";
 import {
@@ -89,19 +89,16 @@ export const BatchInTextTranslation = (props: BatchProps) => {
 				}
 
 				createIdleDebounce(() => {
-					const currentModelQueueSettings = findServiceForModelRef(
+					const queueSettings = resolveQueueSettings(
 						settings.services,
+						settings.queue,
 						websiteRule.inTextTranslateModel ||
 							settings.translate.inTextTranslateModel,
-					)?.queue;
-					const maxBatchSize =
-						currentModelQueueSettings?.maxBatchSize ||
-						settings.queue.maxBatchSize;
+					);
+					const maxBatchSize = queueSettings.maxBatchSize;
 
 					setRenderList((prev) => {
-						const maxTokensPerBatch =
-							currentModelQueueSettings?.maxTokensPerBatch ||
-							settings.queue.maxTokensPerBatch;
+						const maxTokensPerBatch = queueSettings.maxTokensPerBatch;
 
 						let last = prev.length; // Force a new batch
 						for (const section of currentSections) {

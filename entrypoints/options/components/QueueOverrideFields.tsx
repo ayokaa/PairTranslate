@@ -1,4 +1,5 @@
 import { Activity, Layers, Package, Scale, Zap } from "lucide-solid";
+import { Show } from "solid-js";
 import { Button } from "~/components/Button";
 import { t } from "~/utils/i18n";
 import type { QueueControlSettings, QueueOverride } from "~/utils/settings/def";
@@ -7,6 +8,12 @@ export interface QueueOverrideFieldsProps {
 	value?: QueueOverride;
 	defaults: QueueControlSettings;
 	onChange: (value: QueueOverride | undefined) => void;
+	title?: string;
+	description?: string;
+	/** Label for the per-field inherited value; defaults to "Global default". */
+	inheritLabel?: string;
+	/** Lighter chrome for the nested per-model editor. */
+	compact?: boolean;
 }
 
 const fieldKeys: Array<keyof QueueOverride> = [
@@ -72,11 +79,17 @@ export const QueueOverrideFields = (props: QueueOverrideFieldsProps) => {
 	};
 
 	return (
-		<div class="space-y-4 rounded-2xl bg-base-200/70 p-4">
+		<div
+			class={
+				props.compact
+					? "mt-3 space-y-3 border-t border-base-200 pt-3"
+					: "space-y-4 rounded-2xl bg-base-200/70 p-4"
+			}
+		>
 			<div class="flex flex-wrap items-center justify-between gap-2">
 				<div class="flex items-center gap-2 text-sm font-semibold">
 					<Activity size={16} />
-					{t("settings.services.flowControl.title")}
+					{props.title ?? t("settings.services.flowControl.title")}
 				</div>
 				<Button
 					variant="ghost"
@@ -88,6 +101,12 @@ export const QueueOverrideFields = (props: QueueOverrideFieldsProps) => {
 				</Button>
 			</div>
 
+			<Show when={props.description}>
+				{(description) => (
+					<p class="text-[11px] text-base-content/60">{description()}</p>
+				)}
+			</Show>
+
 			<div class="grid gap-4 md:grid-cols-2">
 				{fieldKeys.map((field) => {
 					const Icon = iconMap[field];
@@ -98,7 +117,8 @@ export const QueueOverrideFields = (props: QueueOverrideFieldsProps) => {
 									{t(labelKeyForField(field))}
 								</span>
 								<span class="label-text-alt text-[11px] text-base-content/50">
-									{t("common.globalDefault")}: {props.defaults[field]}
+									{props.inheritLabel ?? t("common.globalDefault")}:{" "}
+									{props.defaults[field]}
 								</span>
 							</div>
 							<label class="input input-sm input-bordered flex items-center gap-2">
@@ -121,9 +141,11 @@ export const QueueOverrideFields = (props: QueueOverrideFieldsProps) => {
 				})}
 			</div>
 
-			<p class="text-center text-[11px] text-base-content/60">
-				{t("settings.services.flowControl.usingGlobal")}
-			</p>
+			<Show when={!props.compact}>
+				<p class="text-center text-[11px] text-base-content/60">
+					{t("settings.services.flowControl.usingGlobal")}
+				</p>
+			</Show>
 		</div>
 	);
 };

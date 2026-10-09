@@ -49,6 +49,7 @@ import {
 	findServiceForModelRef,
 	type ResolvedLLMModel,
 	resolveLLMModel,
+	resolveQueueSettings,
 } from "~/utils/settings/services";
 import { createLRUStorage } from "~/utils/storage";
 import { estimateTokens } from "~/utils/token-estimate";
@@ -282,15 +283,8 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		return compiled;
 	};
 
-	const getQueueConfig = (modelId: string) => {
-		const base = settings.queue;
-		const override = findService(modelId)?.queue;
-		return {
-			requestConcurrency:
-				override?.requestConcurrency ?? base.requestConcurrency,
-			tokensPerMinute: override?.tokensPerMinute ?? base.tokensPerMinute,
-		};
-	};
+	const getQueueConfig = (modelId: string) =>
+		resolveQueueSettings(settings.services, settings.queue, modelId);
 
 	const ensureLLMClient = (
 		serviceId: string,

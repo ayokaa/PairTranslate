@@ -1,5 +1,5 @@
-import { Box, Cpu, Link, Pencil, Trash2 } from "lucide-solid";
-import { For } from "solid-js";
+import { Activity, Box, Cpu, Link, Pencil, Trash2 } from "lucide-solid";
+import { For, Show } from "solid-js";
 import type { StoreSetter } from "solid-js/store";
 import { Button } from "~/components/Button";
 import { DangerButton } from "~/components/settings/DangerButton";
@@ -100,6 +100,14 @@ export default (props: { navId: string }) => {
 								<div class="badge badge-outline gap-1 p-3 text-xs">
 									<Cpu size={12} />
 									{model.name}
+									<Show when={model.queue}>
+										<span
+											class="tooltip"
+											data-tip={t("settings.llmModal.modelQueue")}
+										>
+											<Activity size={12} class="text-primary" />
+										</span>
+									</Show>
 								</div>
 							)}
 						</For>

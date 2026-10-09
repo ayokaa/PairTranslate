@@ -65,6 +65,7 @@ export const BaseServiceSettings = z.object({
 
 export const LLMModelSettings = z.object({
 	name: z.string().min(1),
+	queue: QueueOverrideSettings,
 	temperature: z.number().optional(),
 	maxOutputTokens: z.number().optional(),
 	thinkingBudget: z.enum(THINKING_BUDGET_LEVELS).optional(),

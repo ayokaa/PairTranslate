@@ -1,4 +1,9 @@
-import type { LLMModelSettings, ServiceSettings } from "~/utils/settings";
+import type {
+	LLMModelSettings,
+	QueueControlSettings,
+	QueueOverride,
+	ServiceSettings,
+} from "~/utils/settings";
 
 export type ServiceByType<TType extends ServiceSettings["type"]> = Extract<
 	ServiceSettings,
@@ -48,6 +53,35 @@ export function findServiceForModelRef(
 	const direct = services[modelId];
 	if (direct) return direct;
 	return resolveLLMModel(services, modelId)?.service;
+}
+
+/** The four flow-control limits a queue override can set, fully resolved. */
+export type EffectiveQueueSettings = Required<QueueOverride>;
+
+/**
+ * Resolve flow-control limits for a model reference. Precedence is model
+ * override -> owning service override -> global defaults; unknown or missing
+ * references fall through to the global defaults.
+ */
+export function resolveQueueSettings(
+	services: Record<string, ServiceSettings>,
+	defaults: QueueControlSettings,
+	modelId: string | undefined,
+): EffectiveQueueSettings {
+	const resolved = resolveLLMModel(services, modelId);
+	const service =
+		resolved?.service ?? findServiceForModelRef(services, modelId);
+	const serviceQueue = service?.queue;
+	const modelQueue = resolved?.model.queue;
+	const pick = (key: keyof QueueOverride): number =>
+		modelQueue?.[key] ?? serviceQueue?.[key] ?? defaults[key];
+
+	return {
+		requestConcurrency: pick("requestConcurrency"),
+		tokensPerMinute: pick("tokensPerMinute"),
+		maxBatchSize: pick("maxBatchSize"),
+		maxTokensPerBatch: pick("maxTokensPerBatch"),
+	};
 }
 
 export function formatLLMModelLabel(

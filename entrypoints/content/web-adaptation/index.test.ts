@@ -44,6 +44,12 @@ mock.module("~/utils/settings/helper", () => ({
 mock.module("~/utils/settings/services", () => ({
 	resolveLLMModel: () => ({}),
 	findServiceForModelRef: () => ({ queue: { maxTokensPerBatch: Infinity } }),
+	resolveQueueSettings: () => ({
+		requestConcurrency: 4,
+		tokensPerMinute: 60000,
+		maxBatchSize: 10,
+		maxTokensPerBatch: Infinity,
+	}),
 }));
 mock.module("~/utils/page-context", () => ({ getPageContext: () => ({}) }));
 
