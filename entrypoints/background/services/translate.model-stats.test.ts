@@ -170,9 +170,8 @@ const { createTranslateService } = await import(
 	"~/entrypoints/background/services/translate"
 );
 const { generateDefaultSettings } = await import("~/utils/settings/default");
-const { getTranslationStats, modelTokensPerSecond } = await import(
-	"~/utils/translation-stats"
-);
+const { getTranslationStats, modelFirstTokenLatency, modelThroughput } =
+	await import("~/utils/translation-stats");
 
 /** Statistics writes are fire-and-forget, so poll until the record lands. */
 const readModelEntry = async (modelId: string) => {
@@ -215,10 +214,14 @@ test("records a unary request under the configured model", async () => {
 	expect(entry.completionTokens).toBe(3);
 	expect(entry.totalTokens).toBe(10);
 	expect(entry.cachedTokens).toBe(2);
-	// A unary response never reveals a first token, so no TTFT sample exists.
-	expect(entry.ttftSamples).toBe(0);
+	// The request is in the performance window, but a unary response never
+	// reveals a first token, so it carries no TTFT sample.
+	expect(entry.recent).toHaveLength(1);
+	expect(entry.recent[0].ttftMs).toBeUndefined();
+	expect(modelFirstTokenLatency(entry)).toEqual({ value: null, samples: 0 });
 	// TPS is still measurable, over the whole call.
-	expect(modelTokensPerSecond(entry)).toBeGreaterThan(0);
+	expect(modelThroughput(entry).samples).toBe(1);
+	expect(modelThroughput(entry).value).toBeGreaterThan(0);
 });
 
 test("samples first-token latency and generation window for a stream", async () => {
@@ -250,10 +253,12 @@ test("samples first-token latency and generation window for a stream", async () 
 	expect(entry.completionTokens).toBe(2);
 	expect(entry.totalTokens).toBe(7);
 	// The generator waits before its first chunk, so TTFT covers that wait.
-	expect(entry.ttftSamples).toBe(1);
-	expect(entry.ttftMs).toBeGreaterThanOrEqual(15);
+	expect(entry.recent).toHaveLength(1);
+	expect(entry.recent[0].ttftMs).toBeGreaterThanOrEqual(15);
+	expect(modelFirstTokenLatency(entry)).toMatchObject({ samples: 1 });
 	// The two chunks are spaced apart, so the generation window is non-zero
 	// and the derived speed is a real measurement.
-	expect(entry.generationMs).toBeGreaterThanOrEqual(15);
-	expect(modelTokensPerSecond(entry)).toBeGreaterThan(0);
+	expect(entry.recent[0].generationMs).toBeGreaterThanOrEqual(15);
+	expect(modelThroughput(entry)).toMatchObject({ samples: 1 });
+	expect(modelThroughput(entry).value).toBeGreaterThan(0);
 });

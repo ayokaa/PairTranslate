@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { ModelUsage, StoredTranslationStats } from "./translation-stats";
+import type {
+	ModelRequestSample,
+	ModelUsage,
+	StoredTranslationStats,
+} from "./translation-stats";
 
 // In-memory browser.storage.local, following the pattern in
 // utils/summary/popup-storage.test.ts: the statistics module talks to
@@ -34,17 +38,18 @@ mock.module("@wxt-dev/browser", () => ({ browser: mockBrowser }));
 
 const {
 	MAX_TRACKED_MODELS,
+	PERFORMANCE_WINDOW,
 	emptyTranslationStats,
 	getTranslationStats,
 	modelFirstTokenLatency,
-	modelTokensPerSecond,
+	modelThroughput,
 	modelUsageList,
 	normalizeTranslationStats,
 	recordTranslationStats,
 	resetTranslationStats,
 } = await import("./translation-stats");
 
-/** A fully populated usage record; tests override only the fields they mean. */
+/** A fully populated usage record; tests override only what they mean. */
 const usage = (partial: Partial<ModelUsage>): ModelUsage => ({
 	label: "",
 	requests: 0,
@@ -52,10 +57,15 @@ const usage = (partial: Partial<ModelUsage>): ModelUsage => ({
 	completionTokens: 0,
 	totalTokens: 0,
 	cachedTokens: 0,
-	ttftSamples: 0,
-	ttftMs: 0,
-	generationMs: 0,
+	recent: [],
 	updatedAt: 0,
+	...partial,
+});
+
+/** One request in the performance window. */
+const sample = (partial: Partial<ModelRequestSample>): ModelRequestSample => ({
+	completionTokens: 0,
+	generationMs: 0,
 	...partial,
 });
 
@@ -64,7 +74,7 @@ beforeEach(() => {
 });
 
 describe("recordTranslationStats", () => {
-	test("accumulates flat counters and per-model usage across recordings", async () => {
+	test("accumulates counters and appends each request to the window", async () => {
 		await recordTranslationStats({
 			llmRequests: 1,
 			promptTokens: 10,
@@ -76,9 +86,7 @@ describe("recordTranslationStats", () => {
 					promptTokens: 10,
 					completionTokens: 4,
 					totalTokens: 14,
-					generationMs: 500,
-					ttftMs: 120,
-					ttftSamples: 1,
+					sample: { completionTokens: 4, generationMs: 500, ttftMs: 120 },
 				},
 			},
 		});
@@ -92,7 +100,7 @@ describe("recordTranslationStats", () => {
 					promptTokens: 20,
 					completionTokens: 6,
 					totalTokens: 26,
-					generationMs: 1000,
+					sample: { completionTokens: 6, generationMs: 1000 },
 				},
 			},
 		});
@@ -107,10 +115,11 @@ describe("recordTranslationStats", () => {
 			promptTokens: 30,
 			completionTokens: 10,
 			totalTokens: 40,
-			ttftSamples: 1,
-			ttftMs: 120,
-			generationMs: 1500,
 		});
+		expect(stats.models["model-a"].recent).toEqual([
+			{ completionTokens: 4, generationMs: 500, ttftMs: 120 },
+			{ completionTokens: 6, generationMs: 1000 },
+		]);
 	});
 
 	test("keeps one entry per model", async () => {
@@ -140,6 +149,32 @@ describe("recordTranslationStats", () => {
 		expect(stats.models["model-0"]).toBeUndefined();
 		expect(stats.models["model-3"]).toBeUndefined();
 		expect(stats.models[`model-${total - 1}`]).toBeDefined();
+	});
+
+	test("keeps only the most recent requests in the performance window", async () => {
+		const total = PERFORMANCE_WINDOW + 5;
+		for (let index = 0; index < total; index++) {
+			await recordTranslationStats({
+				models: {
+					"model-a": {
+						requests: 1,
+						completionTokens: index + 1,
+						sample: { completionTokens: index + 1, generationMs: 1000 },
+					},
+				},
+			});
+		}
+
+		const entry = (await getTranslationStats()).models["model-a"];
+		// Requests and tokens stay cumulative, so the evicted requests are
+		// still paid for; only the window moves on.
+		expect(entry.requests).toBe(total);
+		expect(entry.completionTokens).toBe((total * (total + 1)) / 2);
+		expect(entry.recent).toHaveLength(PERFORMANCE_WINDOW);
+		expect(entry.recent[0].completionTokens).toBe(6);
+		expect(entry.recent.at(-1)?.completionTokens).toBe(total);
+		// Tokens 6..105 over 100 seconds: the speed figure rests on the window.
+		expect(modelThroughput(entry)).toEqual({ value: 55.5, samples: 100 });
 	});
 
 	test("clears model entries together with the counters", async () => {
@@ -183,9 +218,7 @@ describe("normalizeTranslationStats", () => {
 			completionTokens: 0,
 			totalTokens: 0,
 			cachedTokens: 0,
-			ttftSamples: 0,
-			ttftMs: 0,
-			generationMs: 0,
+			recent: [],
 			updatedAt: 0,
 		});
 	});
@@ -201,30 +234,74 @@ describe("normalizeTranslationStats", () => {
 
 		expect(Object.keys(stats.models)).toEqual(["model-a"]);
 	});
-});
 
-describe("model performance derivations", () => {
-	test("computes average output tokens per second", () => {
-		expect(
-			modelTokensPerSecond(
-				usage({ completionTokens: 100, generationMs: 2000 }),
-			),
-		).toBe(50);
-		expect(
-			modelTokensPerSecond(usage({ completionTokens: 100, generationMs: 0 })),
-		).toBeNull();
-		// Providers that do not report streamed usage leave nothing to divide.
-		expect(
-			modelTokensPerSecond(usage({ completionTokens: 0, generationMs: 2000 })),
-		).toBeNull();
+	test("drops samples that carry nothing measurable", () => {
+		const stats = normalizeTranslationStats({
+			models: {
+				"model-a": {
+					recent: [
+						null,
+						"not-a-sample",
+						{ completionTokens: 5 },
+						{ generationMs: 400 },
+						{ completionTokens: 3, generationMs: 0, ttftMs: 0 },
+						{ completionTokens: 7, generationMs: 700, ttftMs: -5 },
+					],
+				},
+			},
+		} as unknown as StoredTranslationStats);
+
+		expect(stats.models["model-a"].recent).toEqual([
+			{ completionTokens: 0, generationMs: 400 },
+			{ completionTokens: 7, generationMs: 700 },
+		]);
 	});
 
-	test("computes average first-token latency", () => {
-		expect(modelFirstTokenLatency(usage({ ttftMs: 900, ttftSamples: 3 }))).toBe(
-			300,
+	test("caps a stored window at the newest samples", () => {
+		const stored = Array.from(
+			{ length: PERFORMANCE_WINDOW + 3 },
+			(_, index) => ({
+				completionTokens: index + 1,
+				generationMs: 1000,
+			}),
 		);
-		expect(
-			modelFirstTokenLatency(usage({ ttftMs: 0, ttftSamples: 0 })),
-		).toBeNull();
+		const stats = normalizeTranslationStats({
+			models: { "model-a": { recent: stored } },
+		} as unknown as StoredTranslationStats);
+
+		expect(stats.models["model-a"].recent).toHaveLength(PERFORMANCE_WINDOW);
+		expect(stats.models["model-a"].recent[0].completionTokens).toBe(4);
+	});
+});
+
+describe("window metrics", () => {
+	test("averages throughput over the window, weighted by output tokens", () => {
+		const entry = usage({
+			recent: [
+				sample({ completionTokens: 100, generationMs: 2000 }),
+				sample({ completionTokens: 300, generationMs: 2000 }),
+			],
+		});
+		expect(modelThroughput(entry)).toEqual({ value: 100, samples: 2 });
+	});
+
+	test("leaves requests without reported output tokens out of throughput", () => {
+		const entry = usage({ recent: [sample({ generationMs: 2000 })] });
+		expect(modelThroughput(entry)).toEqual({ value: null, samples: 0 });
+	});
+
+	test("averages first-token latency over the streaming requests only", () => {
+		const entry = usage({
+			recent: [
+				sample({ completionTokens: 1, generationMs: 10, ttftMs: 400 }),
+				sample({ completionTokens: 1, generationMs: 10 }),
+				sample({ completionTokens: 1, generationMs: 10, ttftMs: 800 }),
+			],
+		});
+		expect(modelFirstTokenLatency(entry)).toEqual({ value: 600, samples: 2 });
+		expect(modelFirstTokenLatency(usage({ recent: [] }))).toEqual({
+			value: null,
+			samples: 0,
+		});
 	});
 });

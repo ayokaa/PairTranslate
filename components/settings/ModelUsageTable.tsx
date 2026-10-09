@@ -4,7 +4,7 @@ import { t } from "~/utils/i18n";
 import {
 	type ModelUsageEntry,
 	modelFirstTokenLatency,
-	modelTokensPerSecond,
+	modelThroughput,
 } from "~/utils/translation-stats";
 
 const DASH = "—";
@@ -18,16 +18,21 @@ const formatOptionalLatency = (value: number | null): string =>
 /**
  * Per-model performance table for the statistics page.
  *
- * Rows arrive already ordered (most recently used first) and the component
- * only formats them, so ordering stays testable outside the view layer.
- *
- * A dash stands for a metric that has no sample yet: first-token latency only
- * exists for streaming requests, and TPS needs provider-reported output tokens.
+ * Rows arrive already ordered (most recently used first). Speed and latency are
+ * computed over each model's recent requests, so their cells carry the sample
+ * size as a tooltip; a dash stands for a metric with no usable sample yet,
+ * which is what a non-streamed model shows for first-token latency.
  */
 export const ModelUsageTable: Component<{ models: ModelUsageEntry[] }> = (
 	props,
 ) => {
 	const cellClass = "text-right tabular-nums";
+
+	/** Explain what a figure rests on, without cluttering the cell itself. */
+	const sampleTitle = (samples: number): string | undefined =>
+		samples > 0
+			? t("settings.stats.modelWindowSamples", [String(samples)])
+			: undefined;
 
 	return (
 		<div class="overflow-x-auto rounded-box border border-base-300 bg-base-200/70">
@@ -55,7 +60,7 @@ export const ModelUsageTable: Component<{ models: ModelUsageEntry[] }> = (
 				<tbody>
 					<For each={props.models}>
 						{(entry) => {
-							const tps = () => modelTokensPerSecond(entry.usage);
+							const tps = () => modelThroughput(entry.usage);
 							const ttft = () => modelFirstTokenLatency(entry.usage);
 							return (
 								<tr>
@@ -76,8 +81,12 @@ export const ModelUsageTable: Component<{ models: ModelUsageEntry[] }> = (
 									<td class={cellClass}>
 										{entry.usage.completionTokens.toLocaleString()}
 									</td>
-									<td class={cellClass}>{formatOptionalRate(tps())}</td>
-									<td class={cellClass}>{formatOptionalLatency(ttft())}</td>
+									<td class={cellClass} title={sampleTitle(tps().samples)}>
+										{formatOptionalRate(tps().value)}
+									</td>
+									<td class={cellClass} title={sampleTitle(ttft().samples)}>
+										{formatOptionalLatency(ttft().value)}
+									</td>
 								</tr>
 							);
 						}}

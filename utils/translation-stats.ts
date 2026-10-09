@@ -2,10 +2,37 @@ import { browser } from "#imports";
 import { STORAGE_KEYS } from "~/utils/constants";
 
 /**
- * Cumulative usage and latency counters for one configured LLM model.
+ * How many requests per model feed the speed and latency figures. Usage
+ * counters stay cumulative; only the performance window is bounded.
+ */
+export const PERFORMANCE_WINDOW = 100;
+
+/**
+ * One request in the performance window.
  *
- * Latency figures are stored as sums plus sample counts instead of averages:
- * merging a delta is then pure addition, and readers derive the averages.
+ * Streaming requests report a first-token latency; unary requests cannot, and
+ * measure their whole call as the generation window instead.
+ */
+export interface ModelRequestSample {
+	/** Output tokens the request produced: the TPS numerator. */
+	completionTokens: number;
+	/** Generation window in milliseconds: the TPS denominator. */
+	generationMs: number;
+	/** First-token latency, present only for streaming requests. */
+	ttftMs?: number;
+}
+
+/** A figure computed over a model's recent requests, and its sample size. */
+export interface WindowMetric {
+	/** null when the window holds no usable sample. */
+	value: number | null;
+	/** Samples behind the value, at most `PERFORMANCE_WINDOW`. */
+	samples: number;
+}
+
+/**
+ * Cumulative usage counters for one configured LLM model, plus the recent
+ * requests that speed and latency are measured over.
  */
 export interface ModelUsage {
 	/** `service / model` snapshot, so a deleted model still reads. */
@@ -16,16 +43,8 @@ export interface ModelUsage {
 	completionTokens: number;
 	totalTokens: number;
 	cachedTokens: number;
-	/** Requests that produced a measurable first token (streaming only). */
-	ttftSamples: number;
-	/** Sum of measured first-token latencies, in milliseconds. */
-	ttftMs: number;
-	/**
-	 * Sum of the windows the TPS figure divides, in milliseconds. Streaming
-	 * requests measure from the first token (TTFT is reported separately);
-	 * unary requests measure the whole call, having no first-token signal.
-	 */
-	generationMs: number;
+	/** Most recent requests, oldest first. */
+	recent: ModelRequestSample[];
 	/** Last request time; also orders the table and picks LRU evictions. */
 	updatedAt: number;
 }
@@ -36,7 +55,19 @@ export interface ModelUsageEntry {
 	usage: ModelUsage;
 }
 
-export type ModelUsageDelta = Partial<Omit<ModelUsage, "updatedAt">>;
+/**
+ * One request's contribution: counter increments plus the timing sample that
+ * enters the performance window.
+ */
+export interface ModelUsageDelta {
+	label?: string;
+	requests?: number;
+	promptTokens?: number;
+	completionTokens?: number;
+	totalTokens?: number;
+	cachedTokens?: number;
+	sample?: ModelRequestSample;
+}
 
 /**
  * Cumulative translation usage statistics.
@@ -124,19 +155,56 @@ const ADDITIVE_FIELDS = [
 /** Keep the table bounded so a long tail of one-off models cannot grow it. */
 export const MAX_TRACKED_MODELS = 24;
 
-const MODEL_ADDITIVE_FIELDS = [
+const MODEL_COUNTER_FIELDS = [
 	"requests",
 	"promptTokens",
 	"completionTokens",
 	"totalTokens",
 	"cachedTokens",
-	"ttftSamples",
-	"ttftMs",
-	"generationMs",
-] as const satisfies readonly (keyof Omit<ModelUsage, "label" | "updatedAt">)[];
+] as const satisfies readonly (keyof Omit<
+	ModelUsage,
+	"label" | "recent" | "updatedAt"
+>)[];
 
 const isPositiveCount = (value: unknown): value is number =>
 	typeof value === "number" && Number.isFinite(value) && value > 0;
+
+const isCount = (value: unknown): value is number =>
+	typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+/**
+ * Keep only samples that carry a measurable figure: an empty or corrupt entry
+ * would otherwise take up a slot in the window without contributing to it.
+ */
+const normalizeSample = (raw: unknown): ModelRequestSample | undefined => {
+	if (!raw || typeof raw !== "object") {
+		return undefined;
+	}
+	const candidate = raw as Partial<ModelRequestSample>;
+	const completionTokens = isCount(candidate.completionTokens)
+		? candidate.completionTokens
+		: 0;
+	const generationMs = isCount(candidate.generationMs)
+		? candidate.generationMs
+		: 0;
+	const ttftMs = isPositiveCount(candidate.ttftMs)
+		? candidate.ttftMs
+		: undefined;
+	if (ttftMs === undefined && generationMs <= 0) {
+		return undefined;
+	}
+	return ttftMs === undefined
+		? { completionTokens, generationMs }
+		: { completionTokens, generationMs, ttftMs };
+};
+
+const normalizeSamples = (raw: unknown): ModelRequestSample[] =>
+	Array.isArray(raw)
+		? raw
+				.map(normalizeSample)
+				.filter((sample): sample is ModelRequestSample => sample !== undefined)
+				.slice(-PERFORMANCE_WINDOW)
+		: [];
 
 const normalizeModelUsage = (
 	raw: Partial<ModelUsage> | undefined,
@@ -148,12 +216,10 @@ const normalizeModelUsage = (
 		completionTokens: 0,
 		totalTokens: 0,
 		cachedTokens: 0,
-		ttftSamples: 0,
-		ttftMs: 0,
-		generationMs: 0,
+		recent: [],
 		updatedAt: 0,
 	};
-	for (const field of MODEL_ADDITIVE_FIELDS) {
+	for (const field of MODEL_COUNTER_FIELDS) {
 		if (isPositiveCount(raw?.[field])) {
 			usage[field] = raw[field] as number;
 		}
@@ -161,6 +227,7 @@ const normalizeModelUsage = (
 	if (typeof raw?.label === "string") {
 		usage.label = raw.label;
 	}
+	usage.recent = normalizeSamples(raw?.recent);
 	if (isPositiveCount(raw?.updatedAt)) {
 		usage.updatedAt = raw.updatedAt;
 	}
@@ -216,10 +283,14 @@ const mergeModelUsage = (
 		if (delta.label) {
 			entry.label = delta.label;
 		}
-		for (const field of MODEL_ADDITIVE_FIELDS) {
+		for (const field of MODEL_COUNTER_FIELDS) {
 			if (isPositiveCount(delta[field])) {
 				entry[field] += delta[field] as number;
 			}
+		}
+		const sample = normalizeSample(delta.sample);
+		if (sample) {
+			entry.recent = [...entry.recent, sample].slice(-PERFORMANCE_WINDOW);
 		}
 		entry.updatedAt = now;
 		merged[id] = entry;
@@ -253,15 +324,44 @@ export const resetTranslationStats = async (): Promise<void> => {
 	await browser.storage.local.remove(STORAGE_KEYS.translationStats);
 };
 
-/** Average output tokens per second, or null when nothing was measured. */
-export const modelTokensPerSecond = (usage: ModelUsage): number | null =>
-	usage.generationMs > 0 && usage.completionTokens > 0
-		? (usage.completionTokens * 1000) / usage.generationMs
-		: null;
+/**
+ * Output speed over the model's recent window: tokens produced divided by the
+ * time spent generating them. Summing first keeps the figure a volume-weighted
+ * average, so one short request cannot swing it like its own rate would.
+ *
+ * Requests without reported output tokens are left out of both sums: providers
+ * that never report streamed usage simply yield no speed figure.
+ */
+export const modelThroughput = (usage: ModelUsage): WindowMetric => {
+	let completionTokens = 0;
+	let generationMs = 0;
+	let samples = 0;
+	for (const sample of usage.recent) {
+		if (sample.completionTokens <= 0 || sample.generationMs <= 0) continue;
+		completionTokens += sample.completionTokens;
+		generationMs += sample.generationMs;
+		samples++;
+	}
+	return {
+		value: samples > 0 ? (completionTokens * 1000) / generationMs : null,
+		samples,
+	};
+};
 
-/** Average first-token latency in milliseconds, or null without samples. */
-export const modelFirstTokenLatency = (usage: ModelUsage): number | null =>
-	usage.ttftSamples > 0 ? usage.ttftMs / usage.ttftSamples : null;
+/**
+ * First-token latency averaged over the window's streaming requests, in
+ * milliseconds. Each streamed request counts once, however long it ran.
+ */
+export const modelFirstTokenLatency = (usage: ModelUsage): WindowMetric => {
+	let ttftMs = 0;
+	let samples = 0;
+	for (const sample of usage.recent) {
+		if (!sample.ttftMs) continue;
+		ttftMs += sample.ttftMs;
+		samples++;
+	}
+	return { value: samples > 0 ? ttftMs / samples : null, samples };
+};
 
 /** Model entries ordered by most recently used, for the statistics table. */
 export const modelUsageList = (

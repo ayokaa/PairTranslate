@@ -126,9 +126,11 @@ const buildModelUsageDelta = (
 	completionTokens: usage.completionTokens,
 	totalTokens: usage.totalTokens,
 	cachedTokens: usage.cachedTokens,
-	ttftSamples: timing.ttftMs === undefined ? 0 : 1,
-	ttftMs: timing.ttftMs ?? 0,
-	generationMs: timing.generationMs,
+	sample: {
+		completionTokens: usage.completionTokens,
+		generationMs: timing.generationMs,
+		ttftMs: timing.ttftMs,
+	},
 });
 
 const toStreamChunk = (value: unknown): string => {

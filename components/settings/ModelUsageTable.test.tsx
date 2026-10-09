@@ -1,10 +1,15 @@
 import { expect, mock, test } from "bun:test";
-import type { ModelUsage, ModelUsageEntry } from "~/utils/translation-stats";
+import type {
+	ModelRequestSample,
+	ModelUsage,
+	ModelUsageEntry,
+} from "~/utils/translation-stats";
 
-mock.module("~/utils/i18n", () => ({
-	i18n: { t: (key: string) => key },
-	t: (key: string) => key,
-}));
+// Include the substitution arguments, so the cell tooltips can be asserted.
+const translate = (key: string, args?: string[]) =>
+	args ? `${key}(${args.join(",")})` : key;
+
+mock.module("~/utils/i18n", () => ({ i18n: { t: translate }, t: translate }));
 
 const { render } = await import("solid-js/web");
 const { ModelUsageTable } = await import("./ModelUsageTable");
@@ -16,10 +21,14 @@ const usage = (partial: Partial<ModelUsage>): ModelUsage => ({
 	completionTokens: 0,
 	totalTokens: 0,
 	cachedTokens: 0,
-	ttftSamples: 0,
-	ttftMs: 0,
-	generationMs: 0,
+	recent: [],
 	updatedAt: 0,
+	...partial,
+});
+
+const sample = (partial: Partial<ModelRequestSample>): ModelRequestSample => ({
+	completionTokens: 0,
+	generationMs: 0,
 	...partial,
 });
 
@@ -35,6 +44,11 @@ const cellsOf = (host: Element, row: number): string[] =>
 		(cell) => cell.textContent?.trim() ?? "",
 	);
 
+const tilesOf = (host: Element, row: number): (string | null)[] =>
+	Array.from(host.querySelectorAll("tbody tr")[row].querySelectorAll("td")).map(
+		(cell) => cell.getAttribute("title"),
+	);
+
 test("renders measured metrics for a streamed model", () => {
 	const host = renderTable([
 		{
@@ -46,9 +60,10 @@ test("renders measured metrics for a streamed model", () => {
 				completionTokens: 400,
 				totalTokens: 1600,
 				// 400 tokens over 20 s is 20.0 tokens per second.
-				generationMs: 20000,
-				ttftSamples: 2,
-				ttftMs: 900,
+				recent: [
+					sample({ completionTokens: 300, generationMs: 15000, ttftMs: 500 }),
+					sample({ completionTokens: 100, generationMs: 5000, ttftMs: 400 }),
+				],
 			}),
 		},
 	]);
@@ -61,6 +76,18 @@ test("renders measured metrics for a streamed model", () => {
 		"20.0",
 		"450 ms",
 	]);
+	expect(tilesOf(host, 0)).toEqual([
+		null,
+		null,
+		null,
+		null,
+		"settings.stats.modelWindowSamples(2)",
+		"settings.stats.modelWindowSamples(2)",
+	]);
+	// A long label is truncated, so its full text lives in a tooltip.
+	expect(host.querySelector("tbody tr td div")?.getAttribute("title")).toBe(
+		"Service / A",
+	);
 });
 
 test("dashes metrics that have no sample and falls back to the model id", () => {
@@ -78,5 +105,27 @@ test("dashes metrics that have no sample and falls back to the model id", () => 
 		(0).toLocaleString(),
 		"—",
 		"—",
+	]);
+	expect(tilesOf(host, 0).slice(4)).toEqual([null, null]);
+});
+
+test("counts unary requests towards throughput but not first-token latency", () => {
+	const host = renderTable([
+		{
+			id: "model-c",
+			usage: usage({
+				requests: 2,
+				recent: [
+					sample({ completionTokens: 50, generationMs: 1000 }),
+					sample({ completionTokens: 50, generationMs: 1000, ttftMs: 200 }),
+				],
+			}),
+		},
+	]);
+
+	expect(cellsOf(host, 0).slice(4)).toEqual(["50.0", "200 ms"]);
+	expect(tilesOf(host, 0).slice(4)).toEqual([
+		"settings.stats.modelWindowSamples(2)",
+		"settings.stats.modelWindowSamples(1)",
 	]);
 });
