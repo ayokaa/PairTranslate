@@ -21,6 +21,22 @@ export const formatBytes = (bytes: number): string => {
 		: `${value.toFixed(1)} ${BYTE_UNITS[exponent]}`;
 };
 
+/**
+ * Human readable latency, e.g. `0 ms`, `820 ms`, `1.24 s`, `12.5 s`.
+ *
+ * Sub-second values keep whole milliseconds because that is the resolution
+ * users compare models at; longer waits switch to seconds so the digit count
+ * stays short.
+ */
+export const formatLatency = (ms: number): string => {
+	if (!Number.isFinite(ms) || ms <= 0) return "0 ms";
+	return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
+};
+
+/** One decimal place for throughput figures such as tokens per second. */
+export const formatRate = (value: number): string =>
+	Number.isFinite(value) && value > 0 ? value.toFixed(1) : "0.0";
+
 /** Percentage rounded to a whole number, clamped to 0-100. */
 export const formatPercent = (value: number, total: number): string => {
 	if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) {

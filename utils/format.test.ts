@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { formatBytes, formatPercent } from "./format";
+import {
+	formatBytes,
+	formatLatency,
+	formatPercent,
+	formatRate,
+} from "./format";
 
 describe("formatBytes", () => {
 	test("reports zero and non-finite input as 0 B", () => {
@@ -46,5 +51,39 @@ describe("formatPercent", () => {
 	test("clamps outside 0-100", () => {
 		expect(formatPercent(15, 10)).toBe("100%");
 		expect(formatPercent(-5, 10)).toBe("0%");
+	});
+});
+
+describe("formatLatency", () => {
+	test("guards against zero and invalid input", () => {
+		expect(formatLatency(0)).toBe("0 ms");
+		expect(formatLatency(-5)).toBe("0 ms");
+		expect(formatLatency(Number.NaN)).toBe("0 ms");
+	});
+
+	test("keeps whole milliseconds below one second", () => {
+		expect(formatLatency(1)).toBe("1 ms");
+		expect(formatLatency(820.4)).toBe("820 ms");
+		expect(formatLatency(999)).toBe("999 ms");
+	});
+
+	test("switches to seconds with two decimals", () => {
+		expect(formatLatency(1000)).toBe("1.00 s");
+		expect(formatLatency(1240)).toBe("1.24 s");
+		expect(formatLatency(12500)).toBe("12.50 s");
+	});
+});
+
+describe("formatRate", () => {
+	test("keeps one decimal", () => {
+		expect(formatRate(42.34)).toBe("42.3");
+		expect(formatRate(0.05)).toBe("0.1");
+		expect(formatRate(50)).toBe("50.0");
+	});
+
+	test("reports zero for empty and invalid values", () => {
+		expect(formatRate(0)).toBe("0.0");
+		expect(formatRate(-3)).toBe("0.0");
+		expect(formatRate(Number.NaN)).toBe("0.0");
 	});
 });

@@ -1,6 +1,9 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 import "~/utils/test/dom-setup";
 import { PROMPT_ID } from "~/utils/constants";
+import type { ServiceSettings } from "~/utils/settings";
+import type { ResolvedLLMModel } from "~/utils/settings/services";
+import * as realSettingsServicesModule from "~/utils/settings/services";
 import type { AdaptationRule } from "~/utils/web-adaptation/model";
 import {
 	getStructureKey,
@@ -41,15 +44,25 @@ mock.module("~/utils/settings/helper", () => ({
 	getSettingsMigrationError: async () => undefined,
 	clearSettingsMigrationError: async () => {},
 }));
+// The test settings reference an adaptation model without registering a
+// service for it, so model lookup falls back to a stub result.
+//
+// Every other export delegates to the real module: Bun keeps module mocks
+// process-wide, and a blanket stub here used to leak into later test files,
+// where lookups then answered with an empty model for any input.
+//
+// Snapshot the module before mocking it: mock.module patches exported bindings
+// in place, so a later read through the namespace would call back into the
+// mock itself.
+const realSettingsServices = { ...realSettingsServicesModule };
 mock.module("~/utils/settings/services", () => ({
-	resolveLLMModel: () => ({}),
-	findServiceForModelRef: () => ({ queue: { maxTokensPerBatch: Infinity } }),
-	resolveQueueSettings: () => ({
-		requestConcurrency: 4,
-		tokensPerMinute: 60000,
-		maxBatchSize: 10,
-		maxTokensPerBatch: Infinity,
-	}),
+	...realSettingsServices,
+	resolveLLMModel: (
+		services: Record<string, ServiceSettings>,
+		modelId: string | undefined,
+	): ResolvedLLMModel | undefined =>
+		realSettingsServices.resolveLLMModel(services, modelId) ??
+		({} as ResolvedLLMModel),
 }));
 mock.module("~/utils/page-context", () => ({ getPageContext: () => ({}) }));
 

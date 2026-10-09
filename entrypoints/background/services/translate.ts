@@ -47,6 +47,7 @@ import type { LLMModelSettings, ServiceSettings } from "~/utils/settings";
 import { getSettings, listenSettings } from "~/utils/settings/helper";
 import {
 	findServiceForModelRef,
+	formatLLMModelLabel,
 	type ResolvedLLMModel,
 	resolveLLMModel,
 	resolveQueueSettings,
@@ -63,7 +64,10 @@ import {
 	skippedForPayload,
 	type TranslationResponse,
 } from "~/utils/translation-result";
-import { recordTranslationStats } from "~/utils/translation-stats";
+import {
+	type ModelUsageDelta,
+	recordTranslationStats,
+} from "~/utils/translation-stats";
 import type { TranslateContext } from "~/utils/types";
 
 const SINGLE_TEXT_SERVICES = new Set(["deeplx", "browser"]);
@@ -97,6 +101,35 @@ const payloadChars = (payload: TranslatePayload): number =>
  */
 const savedEntryCount = (output: unknown): number =>
 	Array.isArray(output) ? output.length : 1;
+
+/**
+ * Accumulate one model request into a per-model statistics delta.
+ *
+ * `generationMs` is the window the TPS figure divides: streaming requests
+ * measure from the first token (TTFT is reported separately), unary requests
+ * measure the whole call. `ttftMs` is only passed for streaming requests,
+ * where a first-token latency actually exists.
+ */
+const buildModelUsageDelta = (
+	target: ResolvedLLMModel,
+	usage: {
+		promptTokens: number;
+		completionTokens: number;
+		totalTokens: number;
+		cachedTokens: number;
+	},
+	timing: { generationMs: number; ttftMs?: number },
+): ModelUsageDelta => ({
+	label: formatLLMModelLabel(target.service.name, target.model.name),
+	requests: 1,
+	promptTokens: usage.promptTokens,
+	completionTokens: usage.completionTokens,
+	totalTokens: usage.totalTokens,
+	cachedTokens: usage.cachedTokens,
+	ttftSamples: timing.ttftMs === undefined ? 0 : 1,
+	ttftMs: timing.ttftMs ?? 0,
+	generationMs: timing.generationMs,
+});
 
 const toStreamChunk = (value: unknown): string => {
 	if (typeof value === "string") {
@@ -453,6 +486,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		};
 		let reasoning: string | undefined;
 		let outputIndices: (number | undefined)[] | undefined;
+		let generationMs = 0;
 		let stepIndex = 0;
 		for (const step of prompt.steps) {
 			stepIndex += 1;
@@ -479,7 +513,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				const schema = isStructuredOutput(step.output)
 					? (step.output.schema as JSONSchema)
 					: undefined;
+				const startedAt = performance.now();
 				const response = await client.chat(request, schema, signal);
+				generationMs += performance.now() - startedAt;
 				usage.promptTokens += response.usage?.promptTokens ?? 0;
 				usage.completionTokens += response.usage?.completionTokens ?? 0;
 				usage.totalTokens +=
@@ -533,6 +569,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			webAdaptationTotalTokens:
 				promptId === PROMPT_ID.webAdaptation ? usage.totalTokens : 0,
 			chars: payloadChars(textPayload),
+			models: {
+				[target.modelId]: buildModelUsageDelta(target, usage, { generationMs }),
+			},
 		});
 		return {
 			result: outputs.at(-1),
@@ -571,6 +610,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				totalTokens: 0,
 				cachedTokens: 0,
 			};
+			// Time spent in the non-streaming prelude steps, added to the
+			// streaming window when the final step reports its TPS.
+			let preludeMs = 0;
 			const lastIndex = prompt.steps.length - 1;
 			for (let index = 0; index < lastIndex; index++) {
 				const step = prompt.steps[index];
@@ -597,7 +639,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					const schema = isStructuredOutput(step.output)
 						? (step.output.schema as JSONSchema)
 						: undefined;
+					const startedAt = performance.now();
 					const response = await client.chat(request, schema, signal);
+					preludeMs += performance.now() - startedAt;
 					usage.promptTokens += response.usage?.promptTokens ?? 0;
 					usage.completionTokens += response.usage?.completionTokens ?? 0;
 					usage.totalTokens +=
@@ -659,15 +703,21 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			const { promise: completion, resolve: resolveCompletion } =
 				Promise.withResolvers<number>();
 			const source = client.chatStream(request, undefined, signal);
+			// The request is issued by the first `next()`, so timing starts there
+			// rather than when the generator object was created.
+			let streamStartedAt = 0;
+			let firstTokenAt = 0;
 			return {
 				iterator: (async function* () {
 					try {
 						while (true) {
+							if (streamStartedAt === 0) streamStartedAt = performance.now();
 							const next = await source.next();
 							if (next.done) {
 								if (next.value?.reasoning) {
 									yield { reasoning: next.value.reasoning };
 								}
+								const endedAt = performance.now();
 								traceLlms("response", {
 									service: service.name,
 									model: model.name,
@@ -690,12 +740,26 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 									totalTokens: usage.totalTokens,
 									cachedTokens: usage.cachedTokens,
 									chars: payloadChars(textPayload),
+									models: {
+										[target.modelId]: buildModelUsageDelta(target, usage, {
+											generationMs:
+												preludeMs +
+												(firstTokenAt > 0
+													? endedAt - firstTokenAt
+													: endedAt - streamStartedAt),
+											ttftMs:
+												firstTokenAt > 0
+													? firstTokenAt - streamStartedAt
+													: undefined,
+										}),
+									},
 								});
 								resolveCompletion(next.value?.usage?.completionTokens ?? 0);
 								return;
 							}
 							const chunk = next.value;
 							if (chunk?.content || chunk?.reasoning) {
+								if (firstTokenAt === 0) firstTokenAt = performance.now();
 								yield chunk;
 							}
 						}

@@ -1,6 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { browser } from "#imports";
 import { Stats } from "~/components/Stats";
+import { ModelUsageTable } from "~/components/settings/ModelUsageTable";
 import { SectionHeading } from "~/components/settings/SectionHeading";
 import { SectionResetButton } from "~/components/settings/SectionResetButton";
 import { SettingsCard } from "~/components/settings/SettingsCard";
@@ -10,7 +11,10 @@ import { t } from "~/utils/i18n";
 import {
 	emptyTranslationStats,
 	getTranslationStats,
+	modelUsageList,
+	normalizeTranslationStats,
 	resetTranslationStats,
+	type StoredTranslationStats,
 	type TranslationStats,
 } from "~/utils/translation-stats";
 import { useCacheStats } from "../hooks/useCacheStats";
@@ -36,10 +40,11 @@ export default (props: { navId: string }) => {
 			if (areaName !== "local") return;
 			const change = changes[STORAGE_KEYS.translationStats];
 			if (!change) return;
-			setStats({
-				...emptyTranslationStats(),
-				...(change.newValue as Partial<TranslationStats> | undefined),
-			});
+			setStats(
+				normalizeTranslationStats(
+					change.newValue as StoredTranslationStats | undefined,
+				),
+			);
 		};
 		browser.storage.onChanged.addListener(listener);
 		onCleanup(() => {
@@ -101,6 +106,8 @@ export default (props: { navId: string }) => {
 			value: () => stats().webAdaptationTotalTokens.toLocaleString(),
 		},
 	];
+
+	const modelRows = () => modelUsageList(stats().models);
 
 	// The cache group is a live snapshot rather than an accumulated counter, so
 	// it deliberately sits outside the reset button's reach.
@@ -190,6 +197,25 @@ export default (props: { navId: string }) => {
 					t("settings.stats.webAdaptationTokenUsage"),
 					webAdaptationTokenMetrics,
 				)}
+
+				<div>
+					<SectionHeading size="sm" class="mb-0">
+						{t("settings.stats.modelGroup")}
+					</SectionHeading>
+					<Show
+						when={modelRows().length > 0}
+						fallback={
+							<div class="rounded-box border border-base-300 bg-base-200/70 p-4 text-sm text-base-content/60">
+								{t("settings.stats.modelEmpty")}
+							</div>
+						}
+					>
+						<ModelUsageTable models={modelRows()} />
+					</Show>
+					<p class="mt-2 text-[11px] text-base-content/60">
+						{t("settings.stats.modelGroupDesc")}
+					</p>
+				</div>
 
 				{/* Keyed on the data itself so a background refresh updates the
 				    numbers in place instead of collapsing the group. */}
