@@ -731,6 +731,7 @@ replicate = "Replicate"
 alephAlpha = "Aleph Alpha"
 glm = "GLM"
 deepseek = "Deepseek"
+siliconFlow = "SiliconFlow"
 other = "Outro"
 minimax = "MiniMax"
 

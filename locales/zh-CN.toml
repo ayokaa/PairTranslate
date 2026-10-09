@@ -731,6 +731,7 @@ replicate = "Replicate"
 alephAlpha = "Aleph Alpha"
 glm = "GLM"
 deepseek = "Deepseek"
+siliconFlow = "硅基流动"
 other = "其他"
 
 # Service Names

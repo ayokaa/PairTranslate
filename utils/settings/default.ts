@@ -365,6 +365,12 @@ export const LLMServiceTemplates = [
 	},
 	{
 		type: "llm" as const,
+		name: t("templates.llm.siliconFlow"),
+		baseUrl: "https://api.siliconflow.cn/v1",
+		apiSpec: "openai" as const,
+	},
+	{
+		type: "llm" as const,
 		name: t("templates.llm.other"),
 		baseUrl: "",
 		apiSpec: "openai" as const,

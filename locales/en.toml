@@ -732,6 +732,7 @@ replicate = "Replicate"
 alephAlpha = "Aleph Alpha"
 glm = "GLM"
 deepseek = "Deepseek"
+siliconFlow = "SiliconFlow"
 other = "Other"
 
 # Service Names
