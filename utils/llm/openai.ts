@@ -3,6 +3,7 @@ import { autoStripMarkdown } from "../json-autocomplete";
 import {
 	getMinimaxReasoningConfig,
 	getOpenAIReasoningConfig,
+	getSiliconFlowReasoningConfig,
 } from "./thinking";
 import type {
 	ChatRequest,
@@ -35,9 +36,12 @@ export function createOpenAIClient(config: ClientConfig): LLMClient {
 
 	const baseUrl = config.baseUrl ?? "";
 	const isMinimax = baseUrl.includes("minimaxi.com");
+	const isSiliconFlow = baseUrl.includes("siliconflow");
 	const getReasoningConfig = isMinimax
 		? getMinimaxReasoningConfig
-		: getOpenAIReasoningConfig;
+		: isSiliconFlow
+			? getSiliconFlowReasoningConfig
+			: getOpenAIReasoningConfig;
 
 	const handleError = (error: unknown): LLMError => {
 		if (error instanceof OpenAI.APIError) {
@@ -193,6 +197,11 @@ export function createOpenAIClient(config: ClientConfig): LLMClient {
 					{ signal },
 				);
 
+				// Providers differ on when usage shows up: OpenAI only sends it in a
+				// final usage-only chunk, while SiliconFlow attaches it to every
+				// chunk. Keep the last one and stop only when the stream ends;
+				// returning on the first usage chunk would drop all content.
+				let usage: EndResponse["usage"];
 				for await (const chunk of stream) {
 					const delta = chunk.choices[0]?.delta;
 					const content = delta?.content;
@@ -205,19 +214,17 @@ export function createOpenAIClient(config: ClientConfig): LLMClient {
 						yield { reasoning };
 					}
 					if (chunk.usage) {
-						return {
-							usage: {
-								promptTokens: chunk.usage.prompt_tokens,
-								completionTokens: chunk.usage.completion_tokens,
-								totalTokens: chunk.usage.total_tokens,
-								cachedTokens:
-									chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
-							},
+						usage = {
+							promptTokens: chunk.usage.prompt_tokens,
+							completionTokens: chunk.usage.completion_tokens,
+							totalTokens: chunk.usage.total_tokens,
+							cachedTokens:
+								chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
 						};
 					}
 				}
 
-				return {};
+				return usage ? { usage } : {};
 			} catch (error) {
 				if (error instanceof Error && error.name === "AbortError") {
 					throw error;

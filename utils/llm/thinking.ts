@@ -27,6 +27,12 @@ type OpenAIReasoningEffort =
 	| "max";
 type OpenAIThinkingType = "enabled" | "disabled";
 
+/** Request additions a provider needs to honor the thinking budget. */
+export type ReasoningConfig = {
+	reasoningEffort?: OpenAIReasoningEffort;
+	extraBody?: Record<string, unknown>;
+};
+
 const THINKING_BUDGET_RATIOS: Record<Exclude<ThinkingBudget, "off">, number> = {
 	low: 0.2,
 	medium: 0.5,
@@ -68,7 +74,9 @@ export const mapOpenAIReasoningEffort = (
 ): OpenAIReasoningEffort =>
 	thinkingBudget === "off" ? "none" : thinkingBudget;
 
-export const getOpenAIReasoningConfig = (thinkingBudget?: ThinkingBudget) => {
+export const getOpenAIReasoningConfig = (
+	thinkingBudget?: ThinkingBudget,
+): ReasoningConfig => {
 	if (!thinkingBudget) {
 		return {};
 	}
@@ -92,7 +100,9 @@ export const getOpenAIReasoningConfig = (thinkingBudget?: ThinkingBudget) => {
 
 type MinimaxThinkingType = "adaptive" | "disabled";
 
-export const getMinimaxReasoningConfig = (thinkingBudget?: ThinkingBudget) => {
+export const getMinimaxReasoningConfig = (
+	thinkingBudget?: ThinkingBudget,
+): ReasoningConfig => {
 	if (!thinkingBudget) {
 		return {};
 	}
@@ -110,6 +120,41 @@ export const getMinimaxReasoningConfig = (thinkingBudget?: ThinkingBudget) => {
 			thinking: {
 				type,
 			},
+		},
+	};
+};
+
+/**
+ * SiliconFlow documents thinking control as `enable_thinking` plus a
+ * `thinking_budget` in tokens (128..32768, default 4096); it has no
+ * `reasoning_effort`, so the generic OpenAI mapping does not apply.
+ */
+const SILICONFLOW_THINKING_BUDGETS: Record<
+	Exclude<ThinkingBudget, "off">,
+	number
+> = {
+	low: 1024,
+	medium: 4096,
+	high: 16384,
+	xhigh: 24576,
+	max: 32768,
+};
+
+export const getSiliconFlowReasoningConfig = (
+	thinkingBudget?: ThinkingBudget,
+): ReasoningConfig => {
+	if (!thinkingBudget) {
+		return {};
+	}
+
+	if (thinkingBudget === "off") {
+		return { extraBody: { enable_thinking: false } };
+	}
+
+	return {
+		extraBody: {
+			enable_thinking: true,
+			thinking_budget: SILICONFLOW_THINKING_BUDGETS[thinkingBudget],
 		},
 	};
 };

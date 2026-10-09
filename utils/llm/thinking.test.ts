@@ -6,6 +6,7 @@ import {
 	getGoogleThinkingConfig,
 	getMinimaxReasoningConfig,
 	getOpenAIReasoningConfig,
+	getSiliconFlowReasoningConfig,
 	isGemini3Model,
 } from "./thinking";
 
@@ -164,6 +165,37 @@ test("minimax reasoning config uses adaptive thinking type", () => {
 			thinking: {
 				type: "adaptive",
 			},
+		},
+	});
+});
+
+test("siliconflow reasoning config uses enable_thinking and thinking_budget", () => {
+	expect(getSiliconFlowReasoningConfig(undefined)).toEqual({});
+
+	expect(getSiliconFlowReasoningConfig("off")).toEqual({
+		extraBody: {
+			enable_thinking: false,
+		},
+	});
+
+	expect(getSiliconFlowReasoningConfig("low")).toEqual({
+		extraBody: {
+			enable_thinking: true,
+			thinking_budget: 1024,
+		},
+	});
+
+	expect(getSiliconFlowReasoningConfig("medium")).toEqual({
+		extraBody: {
+			enable_thinking: true,
+			thinking_budget: 4096,
+		},
+	});
+
+	expect(getSiliconFlowReasoningConfig("max")).toEqual({
+		extraBody: {
+			enable_thinking: true,
+			thinking_budget: 32768,
 		},
 	});
 });
