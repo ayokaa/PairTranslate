@@ -6,6 +6,8 @@ import {
 	appendAdaptationPatch,
 	extendPaths,
 	findAdaptationRule,
+	MAX_PATH_PATTERNS,
+	MAX_RULES_PER_HOST,
 	matchesPath,
 	parseAdaptationRules,
 	resolvePatchForDocument,
@@ -76,6 +78,7 @@ describe("web adaptation scope", () => {
 			hostname: "example.com",
 			pathname: "/blog/second",
 			structureKey: "abc12345",
+			baselineRule: null,
 			source: "automatic" as const,
 			patch,
 		};
@@ -96,6 +99,7 @@ describe("web adaptation scope", () => {
 				hostname: "example.com",
 				pathname: "/blog/second",
 				structureKey: "fedcba98",
+				baselineRule: null,
 				source: "automatic",
 				patch: { ...patch, roots: ["main.other"] },
 			},
@@ -115,6 +119,7 @@ describe("web adaptation scope", () => {
 				hostname: "example.com",
 				pathname: "/blog/first",
 				structureKey: "fedcba98",
+				baselineRule: null,
 				source: "automatic",
 				patch: { ...patch, roots: ["main.other"] },
 			},
@@ -139,7 +144,11 @@ describe("web adaptation scope", () => {
 				["/blog/first"],
 				options,
 			);
-			const result = upsertAdaptationRule([existing], proposal, 2);
+			const result = upsertAdaptationRule(
+				[existing],
+				{ ...proposal, baselineRule: existing },
+				2,
+			);
 			expect(result.result).toBe("unchanged");
 			expect(result.rules).toEqual([existing]);
 		}
@@ -398,4 +407,376 @@ test("appended fields are deduplicated and stay inside the schema", () => {
 			updatedAt: 1,
 		}).success,
 	).toBe(true);
+});
+
+test("only explicitly removed saved exclusions are subtracted from a patch", () => {
+	const existing = { ...patch, excludes: ["nav", ".wrong-exclusion"] };
+	expect(
+		appendAdaptationPatch(
+			existing,
+			{
+				roots: [],
+				excludes: ["footer"],
+				includes: [],
+				promoteTags: [],
+			},
+			[".wrong-exclusion"],
+		),
+	).toEqual({ ...patch, excludes: ["footer", "nav"] });
+});
+
+test("a stale proposal cannot overwrite another analysis's recovered paragraph", () => {
+	const original = rule("00000000-0000-4000-8000-000000000001", [
+		"/blog/first",
+	]);
+	const saved = { ...original, patch: { ...patch, includes: ["p.recovered"] } };
+	const result = upsertAdaptationRule(
+		[saved],
+		{
+			hostname: original.hostname,
+			pathname: "/blog/first",
+			structureKey: original.structureKey,
+			baselineRule: original,
+			source: "manual",
+			patch: { ...patch, excludes: ["nav"] },
+		},
+		Date.now(),
+	);
+	expect(result.result).toBe("stale");
+	expect(result.rules).toEqual([saved]);
+});
+
+test("a deleted or disabled baseline is never resurrected by a pending trial", () => {
+	const original = rule("00000000-0000-4000-8000-000000000001", [
+		"/blog/first",
+	]);
+	const proposal = {
+		hostname: original.hostname,
+		pathname: "/blog/first",
+		structureKey: original.structureKey,
+		baselineRule: original,
+		source: "manual" as const,
+		patch: { ...patch, includes: ["p.recovered"] },
+	};
+	expect(upsertAdaptationRule([], proposal, Date.now()).result).toBe("stale");
+	const disabled = { ...original, enabled: false };
+	expect(upsertAdaptationRule([disabled], proposal, Date.now()).rules).toEqual([
+		disabled,
+	]);
+	expect(upsertAdaptationRule([disabled], proposal, Date.now()).result).toBe(
+		"stale",
+	);
+});
+
+test("disabled scopes follow the same specificity as enabled scopes", () => {
+	const broad = rule("00000000-0000-4000-8000-000000000001", ["/blog/*"]);
+	const exact = rule("00000000-0000-4000-8000-000000000002", ["/blog/first"]);
+	expect(
+		findAdaptationRule(
+			[{ ...broad, enabled: false }, exact],
+			"example.com",
+			"/blog/first",
+			exact.structureKey,
+		),
+	).toBe(exact);
+	expect(
+		findAdaptationRule(
+			[broad, { ...exact, enabled: false }],
+			"example.com",
+			"/blog/first",
+			exact.structureKey,
+		),
+	).toBeUndefined();
+});
+
+test("automatic proposals cannot override a matching manual wildcard", () => {
+	const broad = rule("00000000-0000-4000-8000-000000000001", ["/blog/*"], {
+		source: "manual",
+	});
+	const result = upsertAdaptationRule(
+		[broad],
+		{
+			hostname: broad.hostname,
+			pathname: "/blog/first",
+			structureKey: broad.structureKey,
+			baselineRule: broad,
+			source: "automatic",
+			patch: { ...patch, includes: ["p.recovered"] },
+		},
+		Date.now(),
+	);
+	expect(result.result).toBe("unchanged");
+	expect(result.rules).toEqual([broad]);
+});
+
+test("legacy rules match only a supplied legacy fingerprint and can update in place", () => {
+	const old = rule("00000000-0000-4000-8000-000000000001", ["/blog/first"]);
+	const key = "layout:abc12345";
+	expect(
+		findAdaptationRule([old], old.hostname, "/blog/first", key),
+	).toBeUndefined();
+	expect(
+		findAdaptationRule([old], old.hostname, "/blog/first", key, {
+			legacyStructureKey: old.structureKey,
+		}),
+	).toBe(old);
+	const result = upsertAdaptationRule(
+		[old],
+		{
+			hostname: old.hostname,
+			pathname: "/blog/first",
+			structureKey: key,
+			legacyStructureKey: old.structureKey,
+			baselineRule: old,
+			source: "manual",
+			patch: { ...patch, includes: ["p.recovered"] },
+		},
+		Date.now(),
+	);
+	expect(result.result).toBe("updated");
+	expect(result.rules.map((item) => [item.id, item.structureKey])).toEqual([
+		[old.id, key],
+	]);
+});
+
+test("removing the final exact exclusion restores defaults without an empty rule", () => {
+	const old = rule("00000000-0000-4000-8000-000000000001", ["/blog/first"], {
+		patch: { roots: [], excludes: ["p.body"], includes: [], promoteTags: [] },
+	});
+	const result = upsertAdaptationRule(
+		[old],
+		{
+			hostname: old.hostname,
+			pathname: "/blog/first",
+			structureKey: old.structureKey,
+			baselineRule: old,
+			source: "manual",
+			patch: { roots: [], excludes: [], includes: [], promoteTags: [] },
+		},
+		Date.now(),
+	);
+	expect(result.result).toBe("updated");
+	expect(result.rules).toEqual([]);
+});
+
+test("an empty exact override prevents a broader exclusion from returning", () => {
+	const broad = rule("00000000-0000-4000-8000-000000000001", ["/blog/*"]);
+	const exact = rule("00000000-0000-4000-8000-000000000002", ["/blog/first"]);
+	const empty = { roots: [], excludes: [], includes: [], promoteTags: [] };
+	const result = upsertAdaptationRule(
+		[broad, exact],
+		{
+			hostname: exact.hostname,
+			pathname: "/blog/first",
+			structureKey: exact.structureKey,
+			baselineRule: exact,
+			source: "manual",
+			patch: empty,
+		},
+		Date.now(),
+	);
+	expect(
+		findAdaptationRule(
+			result.rules,
+			exact.hostname,
+			"/blog/first",
+			exact.structureKey,
+		)?.patch,
+	).toEqual(empty);
+	expect(
+		findAdaptationRule(
+			result.rules,
+			exact.hostname,
+			"/blog/other",
+			exact.structureKey,
+		),
+	).toBe(broad);
+});
+
+test("a full path budget always retains the page just verified", () => {
+	const paths = Array.from(
+		{ length: MAX_PATH_PATTERNS },
+		(_, index) => `/section-${index}/long-article`,
+	);
+	const existing = rule("00000000-0000-4000-8000-000000000001", paths);
+	const pathname = "/a";
+	const result = upsertAdaptationRule(
+		[existing],
+		{
+			hostname: existing.hostname,
+			pathname,
+			structureKey: existing.structureKey,
+			baselineRule: null,
+			source: existing.source,
+			patch,
+		},
+		Date.now(),
+	);
+	expect(result.result).toBe("updated");
+	expect(result.rules[0].pathPatterns).toHaveLength(MAX_PATH_PATTERNS);
+	expect(
+		findAdaptationRule(
+			result.rules,
+			existing.hostname,
+			pathname,
+			existing.structureKey,
+		)?.patch,
+	).toEqual(patch);
+});
+
+test("merging equivalent patches never turns a manual page into an automatic rule", () => {
+	const existing = rule("00000000-0000-4000-8000-000000000001", [
+		"/blog/first",
+	]);
+	const result = upsertAdaptationRule(
+		[existing],
+		{
+			hostname: existing.hostname,
+			pathname: "/blog/second",
+			structureKey: existing.structureKey,
+			baselineRule: null,
+			source: "manual",
+			patch,
+		},
+		Date.now(),
+	);
+	expect(result.result).toBe("added");
+	expect(
+		findAdaptationRule(
+			result.rules,
+			existing.hostname,
+			"/blog/second",
+			existing.structureKey,
+		)?.source,
+	).toBe("manual");
+	expect(
+		findAdaptationRule(
+			result.rules,
+			existing.hostname,
+			"/blog/first",
+			existing.structureKey,
+		),
+	).toBe(existing);
+});
+
+test("an already-covered equivalent wildcard cannot hide a different active baseline", () => {
+	const legacy = rule("00000000-0000-4000-8000-000000000001", ["/blog/*"], {
+		updatedAt: Date.now(),
+	});
+	const newerAlgorithm = rule(
+		"00000000-0000-4000-8000-000000000002",
+		["/blog/*"],
+		{
+			structureKey: `layout:${legacy.structureKey}`,
+			patch: { ...patch, excludes: ["nav"] },
+		},
+	);
+	const result = upsertAdaptationRule(
+		[legacy, newerAlgorithm],
+		{
+			hostname: legacy.hostname,
+			pathname: "/blog/first",
+			structureKey: newerAlgorithm.structureKey,
+			legacyStructureKey: legacy.structureKey,
+			baselineRule: legacy,
+			source: legacy.source,
+			patch: newerAlgorithm.patch,
+		},
+		Date.now(),
+	);
+	expect(result.result).toBe("added");
+	expect(
+		findAdaptationRule(
+			result.rules,
+			legacy.hostname,
+			"/blog/first",
+			newerAlgorithm.structureKey,
+			{
+				legacyStructureKey: legacy.structureKey,
+			},
+		)?.patch,
+	).toEqual(newerAlgorithm.patch);
+});
+
+test("manual analysis of an unchanged wildcard does not add an exact duplicate", () => {
+	const broad = rule("00000000-0000-4000-8000-000000000001", ["/blog/*"]);
+	const result = upsertAdaptationRule(
+		[broad],
+		{
+			hostname: broad.hostname,
+			pathname: "/blog/first",
+			structureKey: broad.structureKey,
+			baselineRule: broad,
+			source: "manual",
+			patch: broad.patch,
+		},
+		Date.now(),
+	);
+	expect(result.result).toBe("unchanged");
+	expect(result.rules).toEqual([broad]);
+});
+
+test("a changed manual wildcard trial creates only a page-specific override", () => {
+	const broad = rule("00000000-0000-4000-8000-000000000001", ["/blog/*"]);
+	const patch = { ...broad.patch, includes: ["p.recovered"] };
+	const result = upsertAdaptationRule(
+		[broad],
+		{
+			hostname: broad.hostname,
+			pathname: "/blog/first",
+			structureKey: broad.structureKey,
+			baselineRule: broad,
+			source: "manual",
+			patch,
+		},
+		Date.now(),
+	);
+	expect(result.result).toBe("added");
+	expect(result.rules).toHaveLength(2);
+	expect(
+		findAdaptationRule(
+			result.rules,
+			broad.hostname,
+			"/blog/first",
+			broad.structureKey,
+		)?.patch,
+	).toEqual(patch);
+	expect(
+		findAdaptationRule(
+			result.rules,
+			broad.hostname,
+			"/blog/other",
+			broad.structureKey,
+		),
+	).toBe(broad);
+});
+
+test("the just-verified rule survives a full host budget with future stored timestamps", () => {
+	const now = Date.now();
+	const existing = Array.from({ length: MAX_RULES_PER_HOST }, (_, index) =>
+		rule(crypto.randomUUID(), [`/section-${index}/page`], {
+			structureKey: index.toString(16).padStart(8, "0"),
+			// A millisecond is the stored timestamp's resolution; one tick is enough
+			// to make an imported rule newer than this verified write.
+			updatedAt: now + 1,
+		}),
+	);
+	const proposal = {
+		hostname: "example.com",
+		pathname: "/new",
+		structureKey: "ffffffff",
+		baselineRule: null,
+		source: "automatic" as const,
+		patch,
+	};
+	const result = upsertAdaptationRule(existing, proposal, now);
+	expect(result.rules).toHaveLength(MAX_RULES_PER_HOST);
+	expect(
+		findAdaptationRule(
+			result.rules,
+			proposal.hostname,
+			proposal.pathname,
+			proposal.structureKey,
+		)?.patch,
+	).toEqual(patch);
 });

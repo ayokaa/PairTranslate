@@ -34,16 +34,23 @@ const REINCLUSION_TARGET_PROTECTED_SELECTOR = [
 ].join(", ");
 const SAFE_SELECTOR_PATTERN = /^[-a-zA-Z0-9_#. >[\]="'^$]+$/;
 
+/** Existing per-field limits, shared by additions and explicit removals. */
+const MAX_EXCLUDES = 12;
+const MAX_INCLUDES = 12;
+const MAX_PROMOTE_TAGS = 8;
+
 export const AdaptationPatch = z.strictObject({
 	roots: z.array(Selector).default([]),
-	excludes: z.array(Selector).max(12).default([]),
+	excludes: z.array(Selector).max(MAX_EXCLUDES).default([]),
 	// Match the existing per-rule exclusion-selector budget.
-	includes: z.array(Selector).max(12).default([]),
-	promoteTags: z.array(Tag).max(8).default([]),
+	includes: z.array(Selector).max(MAX_INCLUDES).default([]),
+	promoteTags: z.array(Tag).max(MAX_PROMOTE_TAGS).default([]),
 });
 export type AdaptationPatch = z.infer<typeof AdaptationPatch>;
 
 export const AdaptationSuggestion = AdaptationPatch.extend({
+	// A removal cannot exceed the existing exclusion-selector budget.
+	removeExcludes: z.array(Selector).max(MAX_EXCLUDES).default([]),
 	reason: z.string().max(500).optional(),
 });
 
@@ -54,24 +61,17 @@ const EMPTY_PATCH: AdaptationPatch = {
 	promoteTags: [],
 };
 
-/** Field caps mirroring AdaptationPatch, so an appended rule still validates. */
-const MAX_EXCLUDES = 12;
-const MAX_INCLUDES = 12;
-const MAX_PROMOTE_TAGS = 8;
-
 /**
  * Append a proposal to the patch currently in force.
  *
- * Rules only ever grow: the model is told to suggest a small declarative
- * change, so an analysis that mentions one field must not drop the roots or
- * exclusions saved earlier. Each field is a deduplicated union inside the
- * patch schema, and when a field is full the saved selectors win over the new
- * proposal. A proposal that adds nothing yields the existing patch unchanged,
- * which callers detect as "no change".
+ * Omitting a field never drops saved selectors. An explicit exclusion removal
+ * is the only subtraction and still needs an extraction trial before saving.
+ * When a field is full, retained saved selectors win over new additions.
  */
 export function appendAdaptationPatch(
 	existing: AdaptationPatch | undefined,
 	incoming: AdaptationPatch,
+	removeExcludes: string[] = [],
 ): AdaptationPatch {
 	const base = existing ? normalizePatch(existing) : EMPTY_PATCH;
 	const addition = normalizePatch(incoming);
@@ -86,7 +86,11 @@ export function appendAdaptationPatch(
 	};
 	return {
 		roots: cappedUnion(base.roots, addition.roots, Number.POSITIVE_INFINITY),
-		excludes: cappedUnion(base.excludes, addition.excludes, MAX_EXCLUDES),
+		excludes: cappedUnion(
+			base.excludes.filter((selector) => !removeExcludes.includes(selector)),
+			addition.excludes,
+			MAX_EXCLUDES,
+		),
 		includes: cappedUnion(base.includes, addition.includes, MAX_INCLUDES),
 		promoteTags: cappedUnion(
 			base.promoteTags,
@@ -123,15 +127,22 @@ export const MAX_RULES_PER_HOST = 20;
  * Keep the rule list bounded per host, dropping the least recently updated
  * entries first. A rule touched by the current upsert is always kept.
  */
-export function enforceRuleBudget(rules: AdaptationRule[]): AdaptationRule[] {
+export function enforceRuleBudget(
+	rules: AdaptationRule[],
+	retainedRuleId?: string,
+): AdaptationRule[] {
 	if (rules.length <= MAX_RULES_PER_HOST) return rules;
 	const perHost = new Map<string, number>();
 	const keptIds = new Set<string>();
-	// Newest first, so the rule an upsert just touched always survives; iterating
-	// the reversed array keeps the relative order stable for equal timestamps.
+	// Always retain the verified rule, including after a clock rollback or an
+	// import with future timestamps. Reverse iteration resolves other time ties.
 	for (const rule of [...rules]
 		.reverse()
-		.sort((a, b) => b.updatedAt - a.updatedAt)) {
+		.sort(
+			(a, b) =>
+				Number(b.id === retainedRuleId) - Number(a.id === retainedRuleId) ||
+				b.updatedAt - a.updatedAt,
+		)) {
 		const count = perHost.get(rule.hostname) ?? 0;
 		if (count >= MAX_RULES_PER_HOST) continue;
 		perHost.set(rule.hostname, count + 1);
@@ -145,6 +156,9 @@ export type AdaptationProposal = {
 	hostname: string;
 	pathname: string;
 	structureKey: string;
+	legacyStructureKey?: string;
+	/** Null means the trial used the default parser without a matching rule. */
+	baselineRule: AdaptationRule | null;
 	source: AdaptationRule["source"];
 	patch: AdaptationPatch;
 };
@@ -152,7 +166,12 @@ export type AdaptationProposal = {
 export const AdaptationProposalSchema = z.strictObject({
 	hostname: z.string().regex(/^[a-z0-9.-]{1,253}$/i),
 	pathname: z.string().startsWith("/").max(500),
-	structureKey: z.string().regex(/^[a-f0-9]{8}$/i),
+	structureKey: z.string().regex(/^(?:layout:)?[a-f0-9]{8}$/i),
+	legacyStructureKey: z
+		.string()
+		.regex(/^[a-f0-9]{8}$/i)
+		.optional(),
+	baselineRule: AdaptationRule.nullable(),
 	source: z.enum(["manual", "automatic"]),
 	patch: AdaptationPatch,
 });
@@ -177,13 +196,14 @@ export function findAdaptationRule(
 	hostname: string,
 	pathname: string,
 	structureKey: string,
+	options: { legacyStructureKey?: string; includeDisabled?: boolean } = {},
 ): AdaptationRule | undefined {
-	return rules
+	const matched = rules
 		.filter(
 			(rule) =>
-				rule.enabled &&
 				rule.hostname === hostname &&
-				rule.structureKey === structureKey &&
+				(rule.structureKey === structureKey ||
+					rule.structureKey === options.legacyStructureKey) &&
 				rule.pathPatterns.some((pattern) => matchesPath(pattern, pathname)),
 		)
 		.sort((a, b) => {
@@ -191,11 +211,7 @@ export function findAdaptationRule(
 				Math.max(
 					...rule.pathPatterns
 						.filter((pattern) => matchesPath(pattern, pathname))
-						.map((pattern) =>
-							pattern.endsWith("/*")
-								? pattern.length - 2
-								: pattern.length + 1000,
-						),
+						.map(specificityScore),
 				);
 			return (
 				specificity(b) - specificity(a) ||
@@ -203,6 +219,8 @@ export function findAdaptationRule(
 				b.updatedAt - a.updatedAt
 			);
 		})[0];
+	// A disabled specific scope is also a deliberate override of a broader rule.
+	return matched?.enabled || options.includeDisabled ? matched : undefined;
 }
 
 const unique = (values: string[]) =>
@@ -238,6 +256,28 @@ export function patchesEqual(a: AdaptationPatch, b: AdaptationPatch): boolean {
 	return (
 		JSON.stringify(normalizePatch(a)) === JSON.stringify(normalizePatch(b))
 	);
+}
+
+/** Compare the complete saved baseline used by a trial or stale-root scan. */
+export function adaptationRulesEqual(
+	a: AdaptationRule | null | undefined,
+	b: AdaptationRule | null | undefined,
+): boolean {
+	const state = (rule: AdaptationRule | null | undefined) =>
+		rule
+			? JSON.stringify({
+					id: rule.id,
+					hostname: rule.hostname,
+					structureKey: rule.structureKey,
+					pathPatterns: [...rule.pathPatterns].sort(),
+					patch: normalizePatch(rule.patch),
+					enabled: rule.enabled,
+					source: rule.source,
+					createdAt: rule.createdAt,
+					updatedAt: rule.updatedAt,
+				})
+			: undefined;
+	return state(a) === state(b);
 }
 
 /**
@@ -459,10 +499,14 @@ export function extendPaths(patterns: string[], pathname: string): string[] {
 	const extended = extendPathsUnbounded(patterns, path);
 	if (extended.length <= MAX_PATH_PATTERNS) return extended;
 	// The schema caps pathPatterns, so growing past it would make the saved rule
-	// invalid and block every future settings migration. Keep the most specific
-	// patterns instead.
+	// invalid and block every future settings migration. The verified page must
+	// remain covered; retain its scope before the other most specific patterns.
 	return [...extended]
-		.sort((a, b) => specificityScore(b) - specificityScore(a))
+		.sort(
+			(a, b) =>
+				Number(matchesPath(b, path)) - Number(matchesPath(a, path)) ||
+				specificityScore(b) - specificityScore(a),
+		)
 		.slice(0, MAX_PATH_PATTERNS)
 		.sort();
 }
@@ -482,28 +526,63 @@ export function upsertAdaptationRule(
 	rules: AdaptationRule[],
 	proposal: AdaptationProposal,
 	now: number,
-): { rules: AdaptationRule[]; result: "added" | "updated" | "unchanged" } {
+): {
+	rules: AdaptationRule[];
+	result: "added" | "updated" | "unchanged" | "stale";
+} {
 	const patch = normalizePatch(proposal.patch);
 	const pathname = normalizePathname(proposal.pathname);
-	const exactIndex = rules.findIndex(
-		(rule) =>
-			rule.hostname === proposal.hostname &&
-			rule.structureKey === proposal.structureKey &&
-			rule.pathPatterns.includes(pathname),
+	const currentRule = findAdaptationRule(
+		rules,
+		proposal.hostname,
+		pathname,
+		proposal.structureKey,
+		{ legacyStructureKey: proposal.legacyStructureKey, includeDisabled: true },
 	);
+	if (currentRule?.enabled && patchesEqual(currentRule.patch, patch)) {
+		return { rules, result: "unchanged" };
+	}
+	if (!adaptationRulesEqual(currentRule, proposal.baselineRule)) {
+		// A full patch was verified against this baseline. Combining it with a
+		// different saved patch without another trial would invalidate that proof.
+		return { rules, result: "stale" };
+	}
+	if (
+		currentRule &&
+		(!currentRule.enabled ||
+			(currentRule.source === "manual" && proposal.source === "automatic"))
+	)
+		return { rules, result: "unchanged" };
+	if (Object.values(patch).every((items) => items.length === 0)) {
+		if (!currentRule) return { rules, result: "unchanged" };
+		if (
+			currentRule.pathPatterns.length === 1 &&
+			currentRule.pathPatterns.includes(pathname) &&
+			!findAdaptationRule(
+				rules.filter((rule) => rule.id !== currentRule.id),
+				proposal.hostname,
+				pathname,
+				proposal.structureKey,
+				{
+					legacyStructureKey: proposal.legacyStructureKey,
+					includeDisabled: true,
+				},
+			)
+		) {
+			return {
+				rules: rules.filter((rule) => rule.id !== currentRule.id),
+				result: "updated",
+			};
+		}
+		// A shared wildcard still needs an exact empty override for this page;
+		// deleting it would restore the wildcard's exclusion on the next scan.
+	}
+	const exactIndex = currentRule?.pathPatterns.includes(pathname)
+		? rules.findIndex((rule) => rule.id === currentRule.id)
+		: -1;
 	let replacedExact = false;
 	if (exactIndex >= 0) {
 		const rule = rules[exactIndex];
-		if (
-			!rule.enabled ||
-			(rule.source === "manual" && proposal.source === "automatic")
-		)
-			return { rules, result: "unchanged" };
-		if (
-			rule.structureKey === proposal.structureKey &&
-			patchesEqual(rule.patch, patch)
-		)
-			return { rules, result: "unchanged" };
 		if (rule.pathPatterns.length === 1) {
 			return {
 				rules: enforceRuleBudget(
@@ -518,6 +597,7 @@ export function upsertAdaptationRule(
 								}
 							: item,
 					),
+					rule.id,
 				),
 				result: "updated",
 			};
@@ -536,8 +616,12 @@ export function upsertAdaptationRule(
 	const matchingIndex = rules.findIndex(
 		(rule) =>
 			rule.enabled &&
+			rule.source === proposal.source &&
 			rule.hostname === proposal.hostname &&
 			rule.structureKey === proposal.structureKey &&
+			// Extending an already-covered, lower-priority rule would leave the
+			// different baseline active. This page needs an exact override instead.
+			!rule.pathPatterns.some((pattern) => matchesPath(pattern, pathname)) &&
 			patchesEqual(rule.patch, patch),
 	);
 	if (matchingIndex >= 0) {
@@ -552,33 +636,24 @@ export function upsertAdaptationRule(
 						? { ...rule, pathPatterns, updatedAt: now }
 						: item,
 				),
+				rule.id,
 			),
 			result: "updated",
 		};
 	}
-	const disabledWildcard = rules.some(
-		(rule) =>
-			rule.hostname === proposal.hostname &&
-			!rule.enabled &&
-			rule.structureKey === proposal.structureKey &&
-			rule.pathPatterns.some((pattern) => matchesPath(pattern, pathname)),
-	);
-	if (disabledWildcard) return { rules, result: "unchanged" };
+	const addedRule: AdaptationRule = {
+		id: crypto.randomUUID(),
+		hostname: proposal.hostname,
+		pathPatterns: [pathname],
+		structureKey: proposal.structureKey,
+		enabled: true,
+		source: proposal.source,
+		patch,
+		createdAt: now,
+		updatedAt: now,
+	};
 	return {
-		rules: enforceRuleBudget([
-			...rules,
-			{
-				id: crypto.randomUUID(),
-				hostname: proposal.hostname,
-				pathPatterns: [pathname],
-				structureKey: proposal.structureKey,
-				enabled: true,
-				source: proposal.source,
-				patch,
-				createdAt: now,
-				updatedAt: now,
-			},
-		]),
+		rules: enforceRuleBudget([...rules, addedRule], addedRule.id),
 		result: replacedExact ? "updated" : "added",
 	};
 }

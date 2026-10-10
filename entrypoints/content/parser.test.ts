@@ -3,6 +3,7 @@ import "~/utils/test/dom-setup";
 import type { AdaptationRule } from "~/utils/web-adaptation/model";
 
 const deletedRules: string[] = [];
+const deletedBaselines: Array<AdaptationRule | undefined> = [];
 const rules: AdaptationRule[] = [];
 let parserIndex: number | null = null;
 
@@ -28,8 +29,12 @@ Object.assign(globalThis, {
 		},
 		rpc: {
 			matchParser: async () => parserIndex,
-			deleteWebAdaptationRule: async (id: string) => {
+			deleteWebAdaptationRule: async (
+				id: string,
+				baselineRule?: AdaptationRule,
+			) => {
 				deletedRules.push(id);
+				deletedBaselines.push(baselineRule);
 				return true;
 			},
 		},
@@ -77,6 +82,31 @@ test("a stale rule is dropped and the default scan is restored", async () => {
 
 		expect(await sectionsOf(listener)).toContain("Article body text");
 		expect(deletedRules).toEqual(["3f2504e0-4f89-11d3-9a0c-0305e82c3300"]);
+		expect(deletedBaselines.at(-1)).toEqual(rules[0]);
+	} finally {
+		main.remove();
+	}
+});
+
+test("internal baseline scans never delete a saved rule", async () => {
+	const main = document.createElement("main");
+	main.innerHTML = "<p>Article body text</p>";
+	document.body.append(main);
+	try {
+		deletedRules.length = 0;
+		const savedRules = [
+			rule(["main.old-shell"], "00000000-0000-4000-8000-000000000001"),
+		];
+		const listener = await getDomListener(
+			"example.com",
+			{
+				listenNew: false,
+				recordStructureKey: false,
+			},
+			savedRules,
+		);
+		expect(await sectionsOf(listener)).toContain("Article body text");
+		expect(deletedRules).toEqual([]);
 	} finally {
 		main.remove();
 	}

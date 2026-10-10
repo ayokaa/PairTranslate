@@ -65,6 +65,8 @@ const Content = (props: { children?: JSX.Element }) => {
 				return t("popup.webAdaptation.unavailable");
 			case "failed":
 				return t("popup.webAdaptation.failed");
+			case "stale":
+				return t("popup.webAdaptation.stale");
 			default:
 				return "";
 		}

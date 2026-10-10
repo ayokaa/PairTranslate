@@ -8,7 +8,10 @@ import type {
 	TranslationStreamChunk,
 } from "./translation-result";
 import type { TranslateContext, TranslateQueueStatus } from "./types";
-import type { AdaptationProposal } from "./web-adaptation/model";
+import type {
+	AdaptationProposal,
+	AdaptationRule,
+} from "./web-adaptation/model";
 
 /** Live translation-cache snapshot reported by the background service worker. */
 export type CacheStats = LRUStats;
@@ -61,8 +64,11 @@ export interface WebAdaptationService extends RpcService {
 	releaseWebAdaptationCheck(key: string): Promise<void>;
 	commitWebAdaptation(
 		proposal: AdaptationProposal,
-	): Promise<"added" | "updated" | "unchanged">;
-	deleteWebAdaptationRule(id: string): Promise<boolean>;
+	): Promise<"added" | "updated" | "unchanged" | "stale">;
+	deleteWebAdaptationRule(
+		id: string,
+		baselineRule?: AdaptationRule,
+	): Promise<boolean>;
 }
 
 export interface AllServices

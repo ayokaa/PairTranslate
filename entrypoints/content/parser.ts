@@ -8,17 +8,20 @@ import {
 import {
 	type AdaptationPatch,
 	type AdaptationRule,
+	adaptationRulesEqual,
 	findAdaptationRule,
 	parseAdaptationRules,
 } from "~/utils/web-adaptation/model";
 import {
+	getLastStructureIdentity,
+	getLegacyStructureKey,
 	getStructureKey,
 	setLastStructureKey,
 } from "~/utils/web-adaptation/structure";
 
-// A stale rule is reported once per content script lifetime; the storage change
-// itself re-triggers the parser with the rule already gone.
-const droppedStaleRules = new Set<string>();
+// Suppress duplicate removal requests for one saved version. An updated rule
+// can be inspected again, and an old scan must never delete its replacement.
+const droppedStaleRules = new Map<string, AdaptationRule>();
 
 export const getDomListener = async (
 	domain: string,
@@ -33,26 +36,40 @@ export const getDomListener = async (
 		rules ?? (await getSettings()).webAdaptation.rules,
 	);
 	const structureKey = getStructureKey(document);
+	const pathname = window.location.pathname;
+	const previous = getLastStructureIdentity(document, pathname);
+	const legacyStructureKey =
+		previous?.key === structureKey && previous.legacyKey
+			? previous.legacyKey
+			: savedRules.some(
+						(rule) =>
+							rule.hostname === domain &&
+							!rule.structureKey.startsWith("layout:"),
+					)
+				? getLegacyStructureKey(document)
+				: undefined;
 	if (options.recordStructureKey !== false) {
-		setLastStructureKey(document, structureKey);
+		setLastStructureKey(document, structureKey, pathname, legacyStructureKey);
 	}
 	const matchedRule = overridePatch
 		? undefined
-		: findAdaptationRule(
-				savedRules,
-				domain,
-				window.location.pathname,
-				structureKey,
-			);
+		: findAdaptationRule(savedRules, domain, pathname, structureKey, {
+				legacyStructureKey,
+			});
 	const patch = overridePatch ?? matchedRule?.patch;
 	if (
+		options.recordStructureKey !== false &&
 		matchedRule &&
-		!droppedStaleRules.has(matchedRule.id) &&
+		!adaptationRulesEqual(droppedStaleRules.get(matchedRule.id), matchedRule) &&
 		hasStaleAdaptationRoots(patch, document)
 	) {
 		// The page no longer matches the saved boundary. Keep translating with
 		// the default scan and drop the rule instead of silently stopping.
-		droppedStaleRules.add(matchedRule.id);
+		droppedStaleRules.set(matchedRule.id, matchedRule);
+		const releaseRemoval = () => {
+			if (droppedStaleRules.get(matchedRule.id) === matchedRule)
+				droppedStaleRules.delete(matchedRule.id);
+		};
 		console.warn(
 			"[pair-translate] web adaptation rule no longer matches this page; removing it and restoring the default scan",
 		);
@@ -63,9 +80,13 @@ export const getDomListener = async (
 		// the whole page stops translating.
 		try {
 			void Promise.resolve(
-				window.rpc.deleteWebAdaptationRule(matchedRule.id),
-			).catch(() => {});
-		} catch {}
+				window.rpc.deleteWebAdaptationRule(matchedRule.id, matchedRule),
+			).then((removed) => {
+				if (!removed) releaseRemoval();
+			}, releaseRemoval);
+		} catch {
+			releaseRemoval();
+		}
 	}
 	return listener(applyAdaptationPatch(options, patch, document));
 };

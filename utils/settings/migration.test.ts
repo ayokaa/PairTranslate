@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { LEGACY_WEB_ADAPTATION_PROMPT } from "./legacy-web-adaptation-prompt";
 import { SETTINGS_VERSION } from "./version";
 
 mock.module("~/utils/i18n", () => ({
@@ -18,6 +19,7 @@ mock.module("@wxt-dev/browser", () => ({ browser: mockBrowser }));
 
 const { migrateSettings } = await import("./migration");
 const { generateDefaultSettings } = await import("./default");
+const { PromptSettings } = await import("./def");
 const { PROMPT_ID } = await import("~/utils/constants");
 
 describe("migrateSettings", () => {
@@ -525,4 +527,92 @@ describe("migrateSettings", () => {
 			defaults.prompts[PROMPT_ID.webAdaptation],
 		);
 	});
+
+	test("upgrades unchanged saved adaptation prompts while preserving rules and names", () => {
+		const defaults = generateDefaultSettings();
+		const oldPrompt = {
+			name: "Configured adaptation",
+			...LEGACY_WEB_ADAPTATION_PROMPT,
+		};
+		const webAdaptation = {
+			...defaults.webAdaptation,
+			autoEnabled: true,
+			rules: [
+				{
+					id: "00000000-0000-4000-8000-000000000001",
+					hostname: "example.com",
+					pathPatterns: ["/blog/*"],
+					structureKey: "abc12345",
+					enabled: false,
+					source: "manual" as const,
+					patch: {
+						roots: ["main"],
+						excludes: ["nav"],
+						includes: [],
+						promoteTags: [],
+					},
+					createdAt: 1,
+					updatedAt: 1,
+				},
+			],
+		};
+		const result = migrateSettings({
+			...defaults,
+			__v: 12,
+			webAdaptation,
+			prompts: { ...defaults.prompts, [PROMPT_ID.webAdaptation]: oldPrompt },
+		});
+		expect(result.__v).toBe(SETTINGS_VERSION);
+		expect(result.prompts[PROMPT_ID.webAdaptation]).toEqual({
+			...defaults.prompts[PROMPT_ID.webAdaptation],
+			name: oldPrompt.name,
+		});
+		expect(result.prompts[PROMPT_ID.webAdaptation].systemPrompt).toContain(
+			"removeExcludes",
+		);
+		expect(result.webAdaptation).toEqual(webAdaptation);
+		expect(migrateSettings(result)).toEqual(result);
+	});
+
+	test.each([
+		[
+			"system",
+			{
+				systemPrompt: `${LEGACY_WEB_ADAPTATION_PROMPT.systemPrompt}\nCustom instruction.`,
+			},
+		],
+		[
+			"user message",
+			{ steps: [{ message: "Custom page analysis", output: "string" }] },
+		],
+		[
+			"multiple steps",
+			{
+				steps: [
+					...LEGACY_WEB_ADAPTATION_PROMPT.steps,
+					{ message: "Custom follow-up", output: "string" },
+				],
+			},
+		],
+		["input/output", { input: "stringArray", output: "structured" }],
+	] as const)(
+		"keeps customized adaptation prompt behavior during v12 migration: %s",
+		(_name, change) => {
+			const defaults = generateDefaultSettings();
+			const prompt = {
+				name: "Custom adaptation",
+				...LEGACY_WEB_ADAPTATION_PROMPT,
+				...change,
+			};
+			const result = migrateSettings({
+				...defaults,
+				__v: 12,
+				prompts: { ...defaults.prompts, [PROMPT_ID.webAdaptation]: prompt },
+			});
+			expect(result.prompts[PROMPT_ID.webAdaptation]).toEqual(
+				PromptSettings.parse(prompt),
+			);
+			expect(result.__v).toBe(SETTINGS_VERSION);
+		},
+	);
 });

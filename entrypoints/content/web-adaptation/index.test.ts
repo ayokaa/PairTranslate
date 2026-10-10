@@ -4,7 +4,12 @@ import { PROMPT_ID } from "~/utils/constants";
 import type { ServiceSettings } from "~/utils/settings";
 import type { ResolvedLLMModel } from "~/utils/settings/services";
 import * as realSettingsServicesModule from "~/utils/settings/services";
-import type { AdaptationRule } from "~/utils/web-adaptation/model";
+import {
+	type AdaptationPatch,
+	type AdaptationProposal,
+	type AdaptationRule,
+	upsertAdaptationRule,
+} from "~/utils/web-adaptation/model";
 import {
 	getStructureKey,
 	resetLastStructureKey,
@@ -95,19 +100,35 @@ mock.module("../parser", () => ({
 		_domain: string,
 		_options: unknown,
 		_rules: unknown,
-		patch?: unknown,
+		patch?: AdaptationPatch,
 	) => {
 		siteParserScans += 1;
 		if (removePageOnSiteScan) document.body.replaceChildren();
 		return (async function* () {
-			const elements = patch
-				? [articleOne, articleTwo, articleText]
-				: (siteParserElements ??
+			let elements = [
+				...(siteParserElements ??
 					(extractNothingBeforePatch
 						? []
 						: includeExistingArticleInParser
 							? [navText, articleOne, articleTwo]
-							: [navText]));
+							: [navText])),
+			];
+			if (
+				patch?.includes.includes("p.article-text") &&
+				!elements.includes(articleText)
+			)
+				elements.push(articleText);
+			if (patch?.roots.length)
+				elements = elements.filter((element) =>
+					patch.roots.some((selector) => {
+						const root = document.querySelector(selector);
+						return root === element || root?.contains(element);
+					}),
+				);
+			if (patch?.excludes.length)
+				elements = elements.filter(
+					(element) => !element.closest(patch.excludes.join(", ")),
+				);
 			for (const element of elements) {
 				const node = element.firstChild as Node;
 				yield [node, node] as const;
@@ -131,6 +152,8 @@ let diagnosticOutput = "诊断译文";
 let reservedChecks = 0;
 let completedChecks = 0;
 let releasedChecks = 0;
+let reserveAllowed = true;
+let onModelRequest: (() => Promise<void>) | undefined;
 Object.assign(globalThis, {
 	window: {
 		location: {
@@ -151,11 +174,13 @@ Object.assign(globalThis, {
 					return { output: diagnosticOutput };
 				if (skippedResponse) return { output: "", skipped: true };
 				sentPayload = JSON.parse(text);
-				return { output: modelOutput };
+				const output = modelOutput;
+				await onModelRequest?.();
+				return { output };
 			},
 			reserveWebAdaptationCheck: async () => {
 				reservedChecks += 1;
-				return true;
+				return reserveAllowed;
 			},
 			completeWebAdaptationCheck: async () => {
 				completedChecks += 1;
@@ -165,7 +190,13 @@ Object.assign(globalThis, {
 			},
 			commitWebAdaptation: async (proposal: unknown) => {
 				committed = proposal;
-				return "added";
+				const result = upsertAdaptationRule(
+					settings.webAdaptation.rules,
+					proposal as AdaptationProposal,
+					Date.now(),
+				);
+				settings.webAdaptation.rules = result.rules;
+				return result.result;
 			},
 			matchWebsiteRule: async () => matchedWebsiteRuleIndex,
 			deleteWebAdaptationRule: async () => true,
@@ -203,6 +234,10 @@ beforeEach(() => {
 	reservedChecks = 0;
 	completedChecks = 0;
 	releasedChecks = 0;
+	reserveAllowed = true;
+	onModelRequest = undefined;
+	window.location.href = "https://example.com/article/one";
+	window.location.pathname = "/article/one";
 	const firstNode = articleOne.firstChild;
 	const secondNode = articleTwo.firstChild;
 	if (!firstNode || !secondNode) throw new Error("Expected article text nodes");
@@ -245,27 +280,20 @@ test("manual analysis sends untranslated text, then commits a validated include 
 	});
 });
 
-test("manual analysis needs two pairs like the automatic path", async () => {
+test("manual recovery can use missing content when automatic evidence is insufficient", async () => {
 	clearTranslationObservations();
 	includeExistingArticleInParser = false;
 
-	// One pair is not enough for either entry.
+	settings.webAdaptation.autoEnabled = true;
 	recordTranslationObservation(
 		[articleOne.firstChild as Node, articleOne.firstChild as Node],
 		"Article paragraph one",
 		"译文一",
 	);
-	expect(await runWebAdaptation("manual")).toBe("unchanged");
+	expect(await runWebAdaptation("automatic")).toBe("unchanged");
 	expect(sentPayload).toBeUndefined();
 	expect(siteParserScans).toBe(0);
 
-	// Two pairs unlock the manual click, and the untranslated scan still finds the
-	// text the site parser filtered out.
-	recordTranslationObservation(
-		[articleTwo.firstChild as Node, articleTwo.firstChild as Node],
-		"Article paragraph two",
-		"译文二",
-	);
 	expect(await runWebAdaptation("manual")).toBe("added");
 	expect(sentPayload).toMatchObject({
 		untranslated: [
@@ -338,7 +366,7 @@ test("automatic analysis skips full-page sampling when observed pairs are insuff
 	expect(siteParserScans).toBe(0);
 });
 
-test("automatic analysis skips sampling when a matching rule already exists", async () => {
+test("automatic analysis improves a saved automatic rule after its cooldown", async () => {
 	settings.webAdaptation.autoEnabled = true;
 	(settings.webAdaptation.rules as AdaptationRule[]).push({
 		id: modelId,
@@ -352,8 +380,12 @@ test("automatic analysis skips sampling when a matching rule already exists", as
 		updatedAt: 1,
 	});
 
-	expect(await runWebAdaptation("automatic")).toBe("unchanged");
-	expect(siteParserScans).toBe(0);
+	expect(await runWebAdaptation("automatic")).toBe("updated");
+	expect(reservedChecks).toBe(1);
+	expect(committed).toMatchObject({
+		baselineRule: { patch: { excludes: ["nav"] } },
+		patch: { excludes: ["nav"], includes: ["p.article-text"] },
+	});
 });
 
 test("automatic analysis releases its reservation when the model returns an invalid schema", async () => {
@@ -372,13 +404,13 @@ test("automatic analysis releases its reservation when the model returns an inva
 	expect(committed).toBeUndefined();
 });
 
-test("automatic analysis does not reserve when the page loses all evidence", async () => {
+test("automatic analysis releases an early reservation when evidence disappears", async () => {
 	settings.webAdaptation.autoEnabled = true;
 	removePageOnSiteScan = true;
 
 	expect(await runWebAdaptation("automatic")).toBe("unavailable");
-	expect(reservedChecks).toBe(0);
-	expect(releasedChecks).toBe(0);
+	expect(reservedChecks).toBe(1);
+	expect(releasedChecks).toBe(1);
 	expect(completedChecks).toBe(0);
 });
 
@@ -499,7 +531,7 @@ test("a saved rule is offered to the model when re-analysing manually", async ()
 		},
 	];
 
-	expect(await runWebAdaptation("manual")).toBe("added");
+	expect(await runWebAdaptation("manual")).toBe("updated");
 	// The model sees the rule in force...
 	expect(
 		(sentPayload as { currentPatch?: { roots: string[] } }).currentPatch?.roots,
@@ -513,7 +545,8 @@ test("a saved rule is offered to the model when re-analysing manually", async ()
 			promoteTags: [],
 		},
 	});
-	// Automatic analysis still skips a layout that already has a rule.
+	// The manual update is now protected from automatic editing.
+	settings.webAdaptation.autoEnabled = true;
 	expect(await runWebAdaptation("automatic")).toBe("unchanged");
 });
 
@@ -568,15 +601,120 @@ test("the extracted index keeps sections beyond the character budget", async () 
 	for (const element of created) element.remove();
 });
 
-test("neither entry analyses a page without two pairs", async () => {
-	// A site parser that extracts nothing also produces no translation, so there
-	// is no coverage to improve and neither entry spends the budget.
+test("manual analysis recovers filtered text even when there are no translated pairs", async () => {
 	clearTranslationObservations();
 	includeExistingArticleInParser = false;
 	extractNothingBeforePatch = true;
 
-	expect(await runWebAdaptation("manual")).toBe("unchanged");
+	settings.webAdaptation.autoEnabled = true;
 	expect(await runWebAdaptation("automatic")).toBe("unchanged");
 	expect(sentPayload).toBeUndefined();
 	expect(siteParserScans).toBe(0);
+	expect(await runWebAdaptation("manual")).toBe("added");
+	expect(sentPayload).toMatchObject({
+		pairs: [],
+		untranslated: expect.arrayContaining([
+			expect.objectContaining({ text: "Useful article paragraph" }),
+		]),
+	});
+});
+
+test("cooldown skips sampling even when an automatic rule already matches", async () => {
+	settings.webAdaptation.autoEnabled = true;
+	reserveAllowed = false;
+	settings.webAdaptation.rules = [
+		{
+			id: modelId,
+			hostname: "example.com",
+			pathPatterns: ["/article/one"],
+			structureKey: getStructureKey(document),
+			enabled: true,
+			source: "automatic",
+			patch: { roots: [], excludes: ["nav"], includes: [], promoteTags: [] },
+			createdAt: 1,
+			updatedAt: 1,
+		},
+	];
+	expect(await runWebAdaptation("automatic")).toBe("unchanged");
+	expect(reservedChecks).toBe(1);
+	expect(siteParserScans).toBe(0);
+	expect(sentPayload).toBeUndefined();
+});
+
+test("manual analysis queues behind the automatic trial and retains its recovered content", async () => {
+	settings.webAdaptation.autoEnabled = true;
+	let entered!: () => void;
+	let resume!: () => void;
+	const started = new Promise<void>((resolve) => {
+		entered = resolve;
+	});
+	const paused = new Promise<void>((resolve) => {
+		resume = resolve;
+	});
+	let firstRequest = true;
+	onModelRequest = async () => {
+		if (firstRequest) {
+			firstRequest = false;
+			entered();
+			await paused;
+		}
+	};
+	const automatic = runWebAdaptation("automatic");
+	await started;
+	const manual = runWebAdaptation("manual");
+	await Promise.resolve();
+	expect(sentRequests).toHaveLength(1);
+	modelOutput = JSON.stringify({
+		roots: [],
+		excludes: ["nav"],
+		includes: [],
+		promoteTags: [],
+	});
+	resume();
+	expect(await Promise.all([automatic, manual])).toEqual(["added", "updated"]);
+	expect(settings.webAdaptation.rules.map((rule) => rule.patch)).toEqual([
+		{
+			roots: [],
+			excludes: ["nav"],
+			includes: ["p.article-text"],
+			promoteTags: [],
+		},
+	]);
+	expect(sentRequests).toHaveLength(2);
+});
+
+test("a cross-context rule change rejects the stale trial and releases its cooldown", async () => {
+	settings.webAdaptation.autoEnabled = true;
+	onModelRequest = async () => {
+		settings.webAdaptation.rules = [
+			{
+				id: modelId,
+				hostname: "example.com",
+				pathPatterns: ["/article/one"],
+				structureKey: getStructureKey(document),
+				enabled: true,
+				source: "manual",
+				patch: { roots: [], excludes: ["nav"], includes: [], promoteTags: [] },
+				createdAt: 1,
+				updatedAt: 1,
+			},
+		];
+	};
+	expect(await runWebAdaptation("automatic")).toBe("stale");
+	expect(settings.webAdaptation.rules[0].patch.includes).toEqual([]);
+	expect(settings.webAdaptation.rules[0].patch.excludes).toEqual(["nav"]);
+	expect(releasedChecks).toBe(1);
+	expect(completedChecks).toBe(0);
+});
+
+test("navigation during a model request cannot commit to the new page", async () => {
+	settings.webAdaptation.autoEnabled = true;
+	onModelRequest = async () => {
+		window.location.href = "https://example.com/article/other";
+		window.location.pathname = "/article/other";
+	};
+	expect(await runWebAdaptation("automatic")).toBe("stale");
+	expect(committed).toBeUndefined();
+	expect(releasedChecks).toBe(1);
+	expect(completedChecks).toBe(0);
 });

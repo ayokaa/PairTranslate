@@ -58,6 +58,7 @@ const proposal = {
 	hostname: "example.com",
 	pathname: "/article",
 	structureKey: "abcd1234",
+	baselineRule: null,
 	source: "manual" as const,
 	patch: { roots: ["main"], excludes: [], includes: [], promoteTags: [] },
 };
@@ -185,4 +186,82 @@ test("a host cannot accumulate unbounded rules", async () => {
 			(rule) => rule.structureKey === "00000000",
 		),
 	).toBe(false);
+});
+
+test("serialized same-page commits reject a second proposal using an old baseline", async () => {
+	const service = createWebAdaptationService();
+	settings.webAdaptation.autoEnabled = true;
+	const recovered = {
+		roots: [],
+		excludes: [],
+		includes: ["p.recovered"],
+		promoteTags: [],
+	};
+	const results = await Promise.all([
+		service.commitWebAdaptation({
+			...proposal,
+			source: "automatic",
+			patch: recovered,
+		}),
+		service.commitWebAdaptation({
+			...proposal,
+			patch: { roots: [], excludes: ["nav"], includes: [], promoteTags: [] },
+		}),
+	]);
+	expect(results).toEqual(["added", "stale"]);
+	expect(settings.webAdaptation.rules.map((item) => item.patch)).toEqual([
+		recovered,
+	]);
+});
+
+test("a fresh baseline permits a verified follow-up without losing prior recovery", async () => {
+	const service = createWebAdaptationService();
+	await service.commitWebAdaptation(proposal);
+	const baseline = settings.webAdaptation.rules[0];
+	const patch = { ...baseline.patch, includes: ["p.recovered"] };
+	expect(
+		await service.commitWebAdaptation({
+			...proposal,
+			baselineRule: baseline,
+			patch,
+		}),
+	).toBe("updated");
+	expect(settings.webAdaptation.rules.map((item) => item.patch)).toEqual([
+		patch,
+	]);
+});
+
+test("turning automation off cancels a pending automatic commit", async () => {
+	const service = createWebAdaptationService();
+	expect(
+		await service.commitWebAdaptation({ ...proposal, source: "automatic" }),
+	).toBe("stale");
+	expect(settings.webAdaptation.rules).toEqual([]);
+	expect(await service.commitWebAdaptation(proposal)).toBe("added");
+});
+
+test("a stale-root deletion cannot remove a rule updated after the scan", async () => {
+	const service = createWebAdaptationService();
+	const original = rule();
+	const updated = {
+		...original,
+		patch: { ...original.patch, includes: ["p.recovered"] },
+	};
+	settings.webAdaptation.rules = [updated];
+	expect(await service.deleteWebAdaptationRule(original.id, original)).toBe(
+		false,
+	);
+	expect(settings.webAdaptation.rules).toEqual([updated]);
+	expect(await service.deleteWebAdaptationRule(updated.id, updated)).toBe(true);
+	expect(settings.webAdaptation.rules).toEqual([]);
+});
+
+test("a completed check is reservable again once the existing cooldown expires", async () => {
+	const service = createWebAdaptationService();
+	const key = "cafe1234";
+	const cooldown = 7 * 24 * 60 * 60 * 1000;
+	stored[STORAGE_KEYS.webAdaptationChecks] = { [key]: Date.now() };
+	expect(await service.reserveWebAdaptationCheck(key)).toBe(false);
+	stored[STORAGE_KEYS.webAdaptationChecks] = { [key]: Date.now() - cooldown };
+	expect(await service.reserveWebAdaptationCheck(key)).toBe(true);
 });

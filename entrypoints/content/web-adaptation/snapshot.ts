@@ -1,5 +1,6 @@
 import {
-	getLastStructureKey,
+	getLastStructureIdentity,
+	getLegacyStructureKey,
 	getStructureKey,
 	isSafePageElement,
 	safeRole,
@@ -55,8 +56,6 @@ function elementPath(element: Element): string {
 }
 
 function safePairs(observations: TranslationObservation[]) {
-	let sourceCharacters = 0;
-	const includedSources = new Set<string>();
 	const uniquePairs = new Map<
 		string,
 		{
@@ -94,32 +93,17 @@ function safePairs(observations: TranslationObservation[]) {
 		occurrences: number;
 	}> = [];
 	for (const item of uniquePairs.values()) {
-		const isNewSource = !includedSources.has(item.source);
-		if (
-			isNewSource &&
-			sourceCharacters + item.source.length > MAX_ADAPTATION_SOURCE_CHARACTERS
-		)
-			continue;
 		pairs.push({
 			paths: [...item.paths],
 			source: item.source,
 			translation: item.translation,
 			occurrences: item.occurrences,
 		});
-		if (isNewSource) {
-			includedSources.add(item.source);
-			sourceCharacters += item.source.length;
-		}
 	}
-	return { pairs, includedSources, sourceCharacters };
+	return pairs;
 }
 
-function safeUntranslated(
-	samples: UntranslatedSample[],
-	includedSources: Set<string>,
-	initialSourceCharacters: number,
-) {
-	let sourceCharacters = initialSourceCharacters;
+function safeUntranslated(samples: UntranslatedSample[]) {
 	const uniqueSamples = new Map<
 		string,
 		{ paths: Set<string>; text: string; occurrences: number }
@@ -146,22 +130,48 @@ function safeUntranslated(
 		occurrences: number;
 	}> = [];
 	for (const sample of uniqueSamples.values()) {
-		if (
-			!includedSources.has(sample.text) &&
-			sourceCharacters + sample.text.length > MAX_ADAPTATION_SOURCE_CHARACTERS
-		)
-			continue;
 		untranslated.push({
 			paths: [...sample.paths],
 			text: sample.text,
 			occurrences: sample.occurrences,
 		});
-		if (!includedSources.has(sample.text)) {
-			includedSources.add(sample.text);
-			sourceCharacters += sample.text.length;
-		}
 	}
 	return untranslated;
+}
+
+/** Give each evidence type a turn without inventing another budget or ratio. */
+function selectEvidence(
+	allPairs: ReturnType<typeof safePairs>,
+	allUntranslated: ReturnType<typeof safeUntranslated>,
+) {
+	const pairs: typeof allPairs = [];
+	const untranslated: typeof allUntranslated = [];
+	const sources = new Set<string>();
+	let sourceCharacters = 0;
+	const fits = (source: string) => {
+		if (sources.has(source)) return true;
+		if (sourceCharacters + source.length > MAX_ADAPTATION_SOURCE_CHARACTERS)
+			return false;
+		sources.add(source);
+		sourceCharacters += source.length;
+		return true;
+	};
+	const pairIterator = allPairs.values();
+	const untranslatedIterator = allUntranslated.values();
+	let pair = pairIterator.next();
+	let missed = untranslatedIterator.next();
+	while (!pair.done || !missed.done) {
+		// Missing content must not wait until translated sources fill the budget.
+		if (!missed.done) {
+			if (fits(missed.value.text)) untranslated.push(missed.value);
+			missed = untranslatedIterator.next();
+		}
+		if (!pair.done) {
+			if (fits(pair.value.source)) pairs.push(pair.value);
+			pair = pairIterator.next();
+		}
+	}
+	return { pairs, untranslated };
 }
 
 export function matchUntranslatedEvidence(
@@ -240,20 +250,21 @@ export function buildPageSnapshot(
 		...getTranslationObservations(),
 		...extraPairs,
 	]);
+	const evidence = selectEvidence(
+		safePairData,
+		safeUntranslated(untranslatedSamples),
+	);
+	const structureKey = getStructureKey(document);
+	const previous = getLastStructureIdentity(document, pathname);
 	return {
 		hostname: window.location.hostname,
 		pathname,
-		// Prefer the key the parser matched this page with: a rule stored under
-		// a key recomputed from a later DOM state can never match again.
-		// Prefer the key the parser matched this page with: a rule stored under
-		// a key recomputed from a later DOM state can never match again.
-		structureKey: getLastStructureKey(document) ?? getStructureKey(document),
+		structureKey,
+		legacyStructureKey:
+			previous?.key === structureKey && previous.legacyKey
+				? previous.legacyKey
+				: getLegacyStructureKey(document),
 		outline,
-		pairs: safePairData.pairs,
-		untranslated: safeUntranslated(
-			untranslatedSamples,
-			safePairData.includedSources,
-			safePairData.sourceCharacters,
-		),
+		...evidence,
 	};
 }

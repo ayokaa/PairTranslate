@@ -10,6 +10,7 @@ import { SettingsToggle } from "~/components/settings/SettingsToggle";
 import { useSettings } from "~/hooks/settings";
 import { t } from "~/utils/i18n";
 import { selectLLMModelOptions } from "~/utils/settings/services";
+import type { AdaptationRule } from "~/utils/web-adaptation/model";
 
 export default (props: { navId: string }) => {
 	const { settings, setSettings } = useSettings();
@@ -19,6 +20,21 @@ export default (props: { navId: string }) => {
 			{ value: "", label: t("settings.webAdaptation.noModel") },
 			...selectLLMModelOptions(settings.services),
 		];
+	});
+	const ruleGroups = createMemo(() => {
+		const groups = new Map<
+			string,
+			{ hostname: string; rules: AdaptationRule[] }
+		>();
+		for (const rule of settings.webAdaptation.rules) {
+			let group = groups.get(rule.hostname);
+			if (!group) {
+				group = { hostname: rule.hostname, rules: [] };
+				groups.set(rule.hostname, group);
+			}
+			group.rules.push(rule);
+		}
+		return [...groups.values()];
 	});
 
 	return (
@@ -65,83 +81,104 @@ export default (props: { navId: string }) => {
 				}
 			>
 				<div class="space-y-3">
-					<For each={settings.webAdaptation.rules}>
-						{(rule, index) => (
-							<div class="rounded-xl border border-base-300 p-4">
-								<div class="flex flex-wrap items-start gap-3">
-									<Globe2 size={18} class="mt-1 text-base-content/60" />
-									<div class="min-w-0 flex-1">
-										<p class="break-all font-medium">
-											{t("settings.webAdaptation.site")}: {rule.hostname}
-										</p>
-										<p class="break-all font-mono text-xs text-base-content/60">
-											{rule.pathPatterns.join(", ")} · #{rule.structureKey}
-										</p>
-										<p class="mt-1 text-xs text-base-content/60">
-											{t("settings.webAdaptation.source")}:{" "}
-											{rule.source === "manual"
-												? t("settings.webAdaptation.sourceManual")
-												: t("settings.webAdaptation.sourceAutomatic")}{" "}
-											· {new Date(rule.updatedAt).toLocaleString()}
-										</p>
-									</div>
-									<SettingsToggle
-										aria-label={`${t("settings.webAdaptation.title")}: ${rule.hostname}`}
-										checked={rule.enabled}
-										onChange={(event) =>
-											setSettings(
-												"webAdaptation",
-												"rules",
-												index(),
-												"enabled",
-												event.currentTarget.checked,
-											)
-										}
-									/>
-									<DangerButton
-										class="tooltip"
-										data-tip={t("common.delete")}
-										size="sm"
-										aria-label={t("common.delete")}
-										confirmMessage={t("settings.webAdaptation.removeConfirm")}
-										onClick={() => {
-											setSettings("webAdaptation", "rules", (rules) =>
-												rules.filter((item) => item.id !== rule.id),
-											);
-										}}
-									>
-										<Trash2 size={16} />
-									</DangerButton>
+					<For each={ruleGroups()}>
+						{(group) => (
+							<section
+								aria-label={group.hostname}
+								class="rounded-xl border border-base-300 p-4"
+							>
+								<div class="flex flex-wrap items-center gap-3">
+									<Globe2 size={18} class="text-base-content/60" />
+									<p class="min-w-0 flex-1 break-all font-medium">
+										{group.hostname}
+									</p>
+									<span class="text-xs text-base-content/60">
+										{t("settings.webAdaptation.ruleCount", [
+											`${group.rules.length}`,
+										])}
+									</span>
 								</div>
-								<details class="mt-3 text-xs text-base-content/70">
-									<summary class="cursor-pointer">
-										{t("settings.webAdaptation.selectors")}
-									</summary>
-									<div class="mt-2 space-y-1 break-all font-mono">
-										<Show when={rule.patch.roots.length > 0}>
-											<p>
-												{t("settings.webAdaptation.roots")}:{" "}
-												{rule.patch.roots.join(", ")}
-											</p>
-										</Show>
-										<Show when={rule.patch.excludes.length > 0}>
-											<p>
-												{t("settings.webAdaptation.excludes")}:{" "}
-												{rule.patch.excludes.join(", ")}
-											</p>
-										</Show>
-										<Show when={rule.patch.includes.length > 0}>
-											<p>
-												{t("settings.webAdaptation.includes")}:{" "}
-												{rule.patch.includes.join(", ")}
-											</p>
-										</Show>
-										<Show when={rule.patch.promoteTags.length > 0}>
-											<p>{rule.patch.promoteTags.join(", ")}</p>
-										</Show>
-									</div>
-								</details>
-							</div>
+								<div class="mt-3 space-y-3">
+									<For each={group.rules}>
+										{(rule) => (
+											<div class="rounded-xl border border-base-300 p-4">
+												<div class="flex flex-wrap items-start gap-3">
+													<div class="min-w-0 flex-1">
+														<p class="break-all font-mono text-xs text-base-content/60">
+															{rule.pathPatterns.join(", ")} · #
+															{rule.structureKey}
+														</p>
+														<p class="mt-1 text-xs text-base-content/60">
+															{`${t("settings.webAdaptation.source")}: ${
+																rule.source === "manual"
+																	? t("settings.webAdaptation.sourceManual")
+																	: t("settings.webAdaptation.sourceAutomatic")
+															} · ${new Date(rule.updatedAt).toLocaleString()}`}
+														</p>
+													</div>
+													<SettingsToggle
+														aria-label={`${t("settings.webAdaptation.title")}: ${rule.hostname} ${rule.pathPatterns.join(", ")} #${rule.structureKey}`}
+														checked={rule.enabled}
+														onChange={(event) =>
+															setSettings(
+																"webAdaptation",
+																"rules",
+																(item) => item.id === rule.id,
+																"enabled",
+																event.currentTarget.checked,
+															)
+														}
+													/>
+													<DangerButton
+														class="tooltip"
+														data-tip={t("common.delete")}
+														size="sm"
+														aria-label={t("common.delete")}
+														confirmMessage={t(
+															"settings.webAdaptation.removeConfirm",
+														)}
+														onClick={() => {
+															setSettings("webAdaptation", "rules", (rules) =>
+																rules.filter((item) => item.id !== rule.id),
+															);
+														}}
+													>
+														<Trash2 size={16} />
+													</DangerButton>
+												</div>
+												<details class="mt-3 text-xs text-base-content/70">
+													<summary class="cursor-pointer">
+														{t("settings.webAdaptation.selectors")}
+													</summary>
+													<div class="mt-2 space-y-1 break-all font-mono">
+														<Show when={rule.patch.roots.length > 0}>
+															<p>
+																{t("settings.webAdaptation.roots")}:{" "}
+																{rule.patch.roots.join(", ")}
+															</p>
+														</Show>
+														<Show when={rule.patch.excludes.length > 0}>
+															<p>
+																{t("settings.webAdaptation.excludes")}:{" "}
+																{rule.patch.excludes.join(", ")}
+															</p>
+														</Show>
+														<Show when={rule.patch.includes.length > 0}>
+															<p>
+																{t("settings.webAdaptation.includes")}:{" "}
+																{rule.patch.includes.join(", ")}
+															</p>
+														</Show>
+														<Show when={rule.patch.promoteTags.length > 0}>
+															<p>{rule.patch.promoteTags.join(", ")}</p>
+														</Show>
+													</div>
+												</details>
+											</div>
+										)}
+									</For>
+								</div>
+							</section>
 						)}
 					</For>
 				</div>

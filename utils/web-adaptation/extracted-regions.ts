@@ -4,18 +4,19 @@ const compact = (text: string) => text.replace(/\s+/g, "");
 
 export function createExtractedRegionMatcher(
 	extracted: ExtractionSample[],
+	normalize: (text: string) => string = compact,
 ): (candidate: ExtractionSample) => boolean {
-	const textByElement = new Map<Element, Set<string>>();
+	const textByElement = new Map<Element, string[]>();
 	for (const sample of extracted) {
-		const text = compact(sample.text);
+		const text = normalize(sample.text);
 		if (!text) continue;
-		const texts = textByElement.get(sample.element) ?? new Set<string>();
-		texts.add(text);
+		const texts = textByElement.get(sample.element) ?? [];
+		texts.push(text);
 		textByElement.set(sample.element, texts);
 	}
 
 	return (candidate) => {
-		const text = compact(candidate.text);
+		const text = normalize(candidate.text);
 		if (!text) return false;
 
 		// An extracted section can contain this candidate even when its element
@@ -26,7 +27,7 @@ export function createExtractedRegionMatcher(
 			element = element.parentElement
 		) {
 			const directSamples = textByElement.get(element);
-			if (directSamples?.has(text)) return true;
+			if (directSamples?.includes(text)) return true;
 			for (const sample of directSamples ?? []) {
 				if (sample.includes(text)) return true;
 			}
@@ -46,6 +47,6 @@ export function createExtractedRegionMatcher(
 		) {
 			fragments.push(...(textByElement.get(node as Element) ?? []));
 		}
-		return compact(fragments.join("")).includes(text);
+		return normalize(fragments.join("")).includes(text);
 	};
 }

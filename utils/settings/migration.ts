@@ -4,7 +4,7 @@ import type {
 	ServiceSettings,
 	ServicesSettings,
 } from "./def";
-import { SettingsSchema } from "./def";
+import { PromptSettings, SettingsSchema } from "./def";
 import {
 	generateDebugSettings,
 	generatePromptSettings,
@@ -13,6 +13,7 @@ import {
 	generateTranslateSettings,
 	generateWebAdaptationSettings,
 } from "./default";
+import { LEGACY_WEB_ADAPTATION_PROMPT } from "./legacy-web-adaptation-prompt";
 import { SETTINGS_VERSION } from "./version";
 
 type LegacyLLMService = {
@@ -159,6 +160,11 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 		if (version === 11) {
 			working = migrateV11ToV12(working as SettingsSchema);
 			version = 12;
+			continue;
+		}
+		if (version === 12) {
+			working = migrateV12ToV13(working as SettingsSchema);
+			version = 13;
 			continue;
 		}
 
@@ -436,6 +442,34 @@ function migrateV11ToV12(oldSettings: SettingsSchema): SettingsSchema {
 		},
 		__v: 12,
 	};
+}
+
+function migrateV12ToV13(oldSettings: SettingsSchema): SettingsSchema {
+	const parsed = PromptSettings.safeParse(
+		oldSettings.prompts[PROMPT_ID.webAdaptation],
+	);
+	if (parsed.success) {
+		// Schema parsing gives a stable field order and defaults. The display name
+		// is user metadata; preserve it while comparing the entire prompt behavior.
+		const { name, ...definition } = parsed.data;
+		if (
+			JSON.stringify(definition) ===
+			JSON.stringify(LEGACY_WEB_ADAPTATION_PROMPT)
+		) {
+			return {
+				...oldSettings,
+				prompts: {
+					...oldSettings.prompts,
+					[PROMPT_ID.webAdaptation]: {
+						...generatePromptSettings()[PROMPT_ID.webAdaptation],
+						name,
+					},
+				},
+				__v: 13,
+			};
+		}
+	}
+	return { ...oldSettings, __v: 13 };
 }
 
 function getSettingsVersion(raw: unknown): number {

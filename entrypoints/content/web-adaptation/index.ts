@@ -18,12 +18,15 @@ import {
 	AdaptationSuggestion,
 	appendAdaptationPatch,
 	findAdaptationRule,
-	matchesPath,
 	normalizePathname,
 	parseAdaptationRules,
+	patchesEqual,
 	validatePatch,
 } from "~/utils/web-adaptation/model";
-import { isSafePageElement } from "~/utils/web-adaptation/structure";
+import {
+	getStructureKey,
+	isSafePageElement,
+} from "~/utils/web-adaptation/structure";
 import {
 	type ExtractionSample,
 	improvesExtraction,
@@ -37,15 +40,14 @@ import {
 import { buildPageSnapshot, matchUntranslatedEvidence } from "./snapshot";
 
 /**
- * Hard cap on the number of untranslated samples kept for one analysis. The
- * character budget above bounds their text; this bounds the list itself on
- * extremely fragmented pages.
+ * Retain the existing sample-count cap for both local extraction indexes and
+ * untranslated evidence on extremely fragmented pages. Only outgoing evidence
+ * is also restricted by the shared character budget.
  */
 const MAX_ADAPTATION_SAMPLE_COUNT = 50_000;
 /**
- * Source/translation pairs required before an analysis may spend the adaptation
- * budget. Both entries share it: the trigger is the only difference between
- * them.
+ * Retain the existing evidence threshold for automatic analysis. An explicit
+ * manual request can instead supply safe untranslated evidence.
  */
 const MIN_ADAPTATION_PAIRS = 2;
 
@@ -56,24 +58,27 @@ export type WebAdaptationResult =
 	| "disabled"
 	| "noModel"
 	| "unavailable"
-	| "failed";
+	| "failed"
+	| "stale";
+
+// Serialize the entire trial, including manual requests made during an
+// automatic analysis. Background baseline checks also protect other tabs.
+let analysisQueue: Promise<unknown> = Promise.resolve();
+
+export function runWebAdaptation(
+	source: "manual" | "automatic",
+): Promise<WebAdaptationResult> {
+	const result = analysisQueue.then(() => analyzePage(source));
+	analysisQueue = result.catch(() => {});
+	return result;
+}
 
 async function collectSamples(
 	rules: AdaptationRule[],
 	filterInteractive: boolean,
 	patch?: AdaptationPatch,
-	/**
-	 * Bound the collection by the shared character budget.
-	 *
-	 * A trial run compares a bounded sample, which is enough to judge a change.
-	 * The extracted index instead answers "did the site parser extract this
-	 * text?" for the whole page, so it must not lose sections to the budget: a
-	 * dropped section is reported to the model as untranslated text.
-	 */
-	characterBudget = true,
 ): Promise<ExtractionSample[]> {
 	const result: ExtractionSample[] = [];
-	let totalCharacters = 0;
 	const listener = await getDomListener(
 		window.location.hostname,
 		{
@@ -96,14 +101,12 @@ async function collectSamples(
 		const text = getMarkdownFromSection(section).trim();
 		const element = section[0].parentElement;
 		if (!element || !text) continue;
-		if (
-			characterBudget &&
-			totalCharacters + text.length > MAX_ADAPTATION_SOURCE_CHARACTERS
-		)
-			continue;
-		if (result.length >= MAX_ADAPTATION_SAMPLE_COUNT) break;
+		// Local verification must include long-article tails and the recovered
+		// region. Only the outgoing snapshot shares the source-character budget.
+		// Refuse an incomplete index rather than treating truncated text as missing.
+		if (result.length >= MAX_ADAPTATION_SAMPLE_COUNT)
+			throw new Error("Page extraction exceeds the adaptation sample limit");
 		result.push({ text, element });
-		totalCharacters += text.length;
 	}
 	return result;
 }
@@ -111,12 +114,12 @@ async function collectSamples(
 async function collectUntranslatedSamples(
 	rules: AdaptationRule[],
 	filterInteractive: boolean,
+	baselinePatch: AdaptationPatch,
 ): Promise<ExtractionSample[]> {
 	const extracted = await collectSamples(
 		rules,
 		filterInteractive,
-		undefined,
-		false,
+		baselinePatch,
 	);
 	const matchesExtractedRegion = createExtractedRegionMatcher(extracted);
 	const samples: ExtractionSample[] = [];
@@ -141,7 +144,8 @@ async function collectUntranslatedSamples(
 			sourceCharacters + text.length > MAX_ADAPTATION_SOURCE_CHARACTERS
 		)
 			continue;
-		if (samples.length >= MAX_ADAPTATION_SAMPLE_COUNT) break;
+		if (samples.length >= MAX_ADAPTATION_SAMPLE_COUNT)
+			throw new Error("Page extraction exceeds the adaptation sample limit");
 		elementSources.add(key);
 		seenByElement.set(element, elementSources);
 		if (!seenSources.has(key)) {
@@ -162,7 +166,7 @@ function checkKey(value: string): string {
 	return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-export async function runWebAdaptation(
+async function analyzePage(
 	source: "manual" | "automatic",
 ): Promise<WebAdaptationResult> {
 	if (!/^https?:$/.test(window.location.protocol) || !document.body)
@@ -189,69 +193,31 @@ export async function runWebAdaptation(
 	const dstLang = websiteRule?.targetLang || settings.translate.targetLang;
 	const initialUrl = window.location.href;
 	let snapshot = buildPageSnapshot();
-	const disabledRule = rules.find(
-		(rule) =>
-			!rule.enabled &&
-			rule.hostname === snapshot.hostname &&
-			rule.structureKey === snapshot.structureKey &&
-			rule.pathPatterns.some((pattern) =>
-				matchesPath(pattern, snapshot.pathname),
-			),
-	);
-	if (disabledRule) {
-		// A disabled rule is a deliberate "do not adapt this layout" decision;
-		// report it instead of pretending nothing changed.
-		return "disabled";
-	}
-	// Manual re-analysis needs to see the rule in force; automatic analysis never
-	// re-examines a layout that already has one.
 	const existingRule = findAdaptationRule(
 		rules,
 		snapshot.hostname,
 		snapshot.pathname,
 		snapshot.structureKey,
+		{ legacyStructureKey: snapshot.legacyStructureKey, includeDisabled: true },
 	);
-	if (source === "automatic" && existingRule) return "unchanged";
-	// One evidence rule for both entries: at least two source/translation pairs.
-	// The trigger is the only difference between manual and automatic.
-	if (snapshot.pairs.length < MIN_ADAPTATION_PAIRS) return "unchanged";
-	const untranslatedSamples = await collectUntranslatedSamples(
-		rules,
-		filterInteractive,
-	);
-	snapshot = buildPageSnapshot([], untranslatedSamples);
-	const verificationSamples = matchUntranslatedEvidence(
-		untranslatedSamples,
-		snapshot.untranslated,
-	);
-	let reservedCheckKey: string | undefined;
-	const releaseReservedCheck = async () => {
-		const key = reservedCheckKey;
-		if (!key) return;
-		reservedCheckKey = undefined;
-		try {
-			await window.rpc.releaseWebAdaptationCheck(key);
-		} catch {
-			// A failed analysis must not remain as a cooldown reservation.
-		}
-	};
-	const completeReservedCheck = async () => {
-		const key = reservedCheckKey;
-		if (!key) return;
-		reservedCheckKey = undefined;
-		try {
-			await window.rpc.completeWebAdaptationCheck(key);
-		} catch {
-			try {
-				await window.rpc.releaseWebAdaptationCheck(key);
-			} catch {
-				// Cooldown bookkeeping must not block the analysis result.
-			}
-		}
-	};
-	if (snapshot.pairs.length === 0 && snapshot.untranslated.length === 0) {
-		return "unavailable";
+	if (existingRule && !existingRule.enabled) {
+		// A disabled rule is a deliberate "do not adapt this layout" decision;
+		// report it instead of pretending nothing changed.
+		return "disabled";
 	}
+	if (source === "automatic") {
+		if (existingRule?.source === "manual") return "unchanged";
+		if (snapshot.pairs.length < MIN_ADAPTATION_PAIRS) return "unchanged";
+	}
+	const initialStructureKey = snapshot.structureKey;
+	const baselinePatch: AdaptationPatch = existingRule?.patch ?? {
+		roots: [],
+		excludes: [],
+		includes: [],
+		promoteTags: [],
+	};
+	let reservedCheckKey: string | undefined;
+	let completed = false;
 	if (source === "automatic") {
 		const key = checkKey(
 			`${snapshot.hostname}|${normalizePathname(snapshot.pathname)}|${snapshot.structureKey}|${modelId}`,
@@ -259,9 +225,24 @@ export async function runWebAdaptation(
 		if (!(await window.rpc.reserveWebAdaptationCheck(key))) return "unchanged";
 		reservedCheckKey = key;
 	}
-	let response: Awaited<ReturnType<typeof window.rpc.unary>>;
 	try {
-		response = await window.rpc.unary(
+		const untranslatedSamples = await collectUntranslatedSamples(
+			rules,
+			filterInteractive,
+			baselinePatch,
+		);
+		snapshot = buildPageSnapshot([], untranslatedSamples);
+		if (snapshot.pairs.length === 0 && snapshot.untranslated.length === 0)
+			return "unavailable";
+		const pageChanged = () =>
+			window.location.href !== initialUrl ||
+			getStructureKey(document) !== initialStructureKey;
+		if (pageChanged()) return "stale";
+		const verificationSamples = matchUntranslatedEvidence(
+			untranslatedSamples,
+			snapshot.untranslated,
+		);
+		const response = await window.rpc.unary(
 			{},
 			{
 				modelId,
@@ -273,80 +254,71 @@ export async function runWebAdaptation(
 				outline: snapshot.outline,
 				pairs: snapshot.pairs,
 				untranslated: snapshot.untranslated,
-				// The model sees the rule in force: its proposal is appended to
-				// this patch, so it only has to mention what it wants to add.
+				// Additions retain this baseline; removals must name saved excludes.
 				currentPatch: existingRule?.patch,
 			}),
 		);
-	} catch (error) {
-		await releaseReservedCheck();
-		throw error;
-	}
-	// A skipped response carries no suggestion: the same-language short-circuit
-	// answers with an empty string, which used to surface as a JSON parse
-	// failure. Report the real outcome, and settle the check so the seven-day
-	// cooldown applies instead of retrying on every translation batch.
-	if (
-		response.skipped &&
-		(typeof response.output !== "string" || !response.output.trim())
-	) {
-		await completeReservedCheck();
-		return "failed";
-	}
-	let raw: unknown;
-	try {
-		raw =
-			typeof response.output === "string"
-				? autoStripMarkdown<unknown>(response.output)
-				: response.output;
-	} catch {
-		await releaseReservedCheck();
-		return "failed";
-	}
-	const suggestion = AdaptationSuggestion.safeParse(raw);
-	if (!suggestion.success) {
-		await releaseReservedCheck();
-		return "failed";
-	}
-	const hasProposal =
-		suggestion.data.roots.length +
-			suggestion.data.excludes.length +
-			suggestion.data.includes.length +
-			suggestion.data.promoteTags.length >
-		0;
-	if (!hasProposal) {
-		await completeReservedCheck();
-		return "unchanged";
-	}
-	const patch = validatePatch(
-		{
+		if (pageChanged()) return "stale";
+		if (
+			response.skipped &&
+			(typeof response.output !== "string" || !response.output.trim())
+		) {
+			completed = true;
+			return "failed";
+		}
+		let raw: unknown;
+		try {
+			raw =
+				typeof response.output === "string"
+					? autoStripMarkdown<unknown>(response.output)
+					: response.output;
+		} catch {
+			return "failed";
+		}
+		const suggestion = AdaptationSuggestion.safeParse(raw);
+		if (!suggestion.success) return "failed";
+		const incoming: AdaptationPatch = {
 			roots: suggestion.data.roots,
 			excludes: suggestion.data.excludes,
 			includes: suggestion.data.includes,
 			promoteTags: suggestion.data.promoteTags,
-		},
-		document,
-	);
-	if (!patch) {
-		await releaseReservedCheck();
-		return "failed";
-	}
-	if (window.location.href !== initialUrl) {
-		await completeReservedCheck();
-		return "unchanged";
-	}
-	// The saved rule is appended to, never rewritten: what the trial run checks
-	// is exactly what gets stored.
-	const finalPatch = appendAdaptationPatch(existingRule?.patch, patch);
-	try {
-		const baseline = await collectSamples(rules, filterInteractive);
+		};
+		const removals = suggestion.data.removeExcludes;
+		if (
+			removals.some(
+				(selector) =>
+					!baselinePatch.excludes.includes(selector) ||
+					incoming.excludes.includes(selector),
+			)
+		)
+			return "failed";
+		const hasAdditions = Object.values(incoming).some(
+			(items) => items.length > 0,
+		);
+		const patch = hasAdditions ? validatePatch(incoming, document) : incoming;
+		if (!patch) return "failed";
+		const finalPatch = appendAdaptationPatch(baselinePatch, patch, removals);
+		if (patchesEqual(baselinePatch, finalPatch)) {
+			completed = true;
+			return "unchanged";
+		}
+		const requiresAddition =
+			removals.length > 0 ||
+			finalPatch.includes.some(
+				(selector) => !baselinePatch.includes.includes(selector),
+			);
+		const baseline = await collectSamples(
+			rules,
+			filterInteractive,
+			baselinePatch,
+		);
 		const candidate = await collectSamples(
 			rules,
 			filterInteractive,
 			finalPatch,
 		);
-		// A root change can hide content the sampling budget never reached, so the
-		// trial also checks that no baseline sample fell outside the new roots.
+		if (pageChanged()) return "stale";
+		// Check the full local extraction index, including content outside new roots.
 		const scope = finalPatch.roots.length
 			? resolveAdaptationRoots(finalPatch, document)
 			: undefined;
@@ -355,43 +327,47 @@ export async function runWebAdaptation(
 				baseline,
 				candidate,
 				verificationSamples,
-				finalPatch.includes.length > 0,
+				requiresAddition,
 				scope,
 			)
 		) {
-			await completeReservedCheck();
+			completed = true;
 			return "unchanged";
 		}
+		if (pageChanged()) return "stale";
 		const result = await window.rpc.commitWebAdaptation({
 			hostname: snapshot.hostname,
 			pathname: snapshot.pathname,
 			structureKey: snapshot.structureKey,
+			legacyStructureKey: snapshot.legacyStructureKey,
+			baselineRule: existingRule ?? null,
 			source,
 			patch: finalPatch,
 		});
-		await completeReservedCheck();
+		completed = result !== "stale";
 		return result;
-	} catch (error) {
-		await releaseReservedCheck();
-		throw error;
+	} finally {
+		if (reservedCheckKey) {
+			try {
+				if (completed)
+					await window.rpc.completeWebAdaptationCheck(reservedCheckKey);
+				else await window.rpc.releaseWebAdaptationCheck(reservedCheckKey);
+			} catch {
+				try {
+					await window.rpc.releaseWebAdaptationCheck(reservedCheckKey);
+				} catch {
+					// Bookkeeping cannot override a verified result or request failure.
+				}
+			}
+		}
 	}
 }
 
 export function initializeWebAdaptation(): void {
 	let active: Promise<WebAdaptationResult> | undefined;
-	// Manual requests belong to separate clicks, so they queue behind whatever is
-	// running instead of silently reusing an automatic analysis in flight.
-	let manualQueue: Promise<unknown> = Promise.resolve();
 	const start = (source: "manual" | "automatic") => {
 		if (source === "manual") {
-			const task = manualQueue.then(() =>
-				runWebAdaptation("manual").catch(() => "failed" as const),
-			);
-			manualQueue = task.then(
-				() => undefined,
-				() => undefined,
-			);
-			return task;
+			return runWebAdaptation("manual").catch(() => "failed" as const);
 		}
 		if (active) return active;
 		active = runWebAdaptation("automatic")
@@ -421,7 +397,7 @@ export function initializeWebAdaptation(): void {
 		// Only the top frame analyses automatically: sub-frames would spend the
 		// adaptation budget on hosts the user never asked about.
 		if (window.top !== window) return;
-		if (getTranslationObservationCount() < 2) return;
+		if (getTranslationObservationCount() < MIN_ADAPTATION_PAIRS) return;
 		pendingAutomaticCheck = true;
 		if (timer !== undefined) window.clearTimeout(timer);
 		timer = undefined;
@@ -430,7 +406,8 @@ export function initializeWebAdaptation(): void {
 			timer = undefined;
 			if (activeTranslationRequests > 0) return;
 			pendingAutomaticCheck = false;
-			if (getTranslationObservationCount() >= 2) void start("automatic");
+			if (getTranslationObservationCount() >= MIN_ADAPTATION_PAIRS)
+				void start("automatic");
 		}, 2500);
 	};
 	const onTranslationActivity = (event: Event) => {

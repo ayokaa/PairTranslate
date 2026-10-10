@@ -171,7 +171,7 @@ test("sends safe untranslated candidates alongside translated pairs", () => {
 	});
 });
 
-test("shares the source-character budget between translated and untranslated text", () => {
+test("missing evidence receives budget before a translated source can consume it all", () => {
 	const article = document.querySelector("main");
 	const translated = document.createElement("p");
 	const untranslated = document.createElement("p");
@@ -188,7 +188,10 @@ test("shares the source-character budget between translated and untranslated tex
 			[],
 			[{ text: "Filtered paragraph", element: untranslated }],
 		),
-	).toMatchObject({ untranslated: [] });
+	).toMatchObject({
+		pairs: [],
+		untranslated: [expect.objectContaining({ text: "Filtered paragraph" })],
+	});
 });
 
 test("matches snapshot evidence by both normalized text and DOM path", () => {

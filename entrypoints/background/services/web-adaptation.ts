@@ -4,6 +4,8 @@ import type { WebAdaptationService } from "~/utils/rpc";
 import { getSettings, saveSettings } from "~/utils/settings/helper";
 import {
 	AdaptationProposalSchema,
+	AdaptationRule,
+	adaptationRulesEqual,
 	parseAdaptationRules,
 	upsertAdaptationRule,
 	WebAdaptationSettings,
@@ -70,12 +72,19 @@ export function createWebAdaptationService(): WebAdaptationService {
 			return serialize(async () => {
 				const proposal = AdaptationProposalSchema.parse(input);
 				const settings = await getSettings();
+				// The user can turn automation off while a model request is pending.
+				if (
+					proposal.source === "automatic" &&
+					!settings.webAdaptation.autoEnabled
+				)
+					return "stale";
 				const result = upsertAdaptationRule(
 					parseAdaptationRules(settings.webAdaptation.rules),
 					proposal,
 					Date.now(),
 				);
-				if (result.result === "unchanged") return result.result;
+				if (result.result === "unchanged" || result.result === "stale")
+					return result.result;
 				const webAdaptation = {
 					...settings.webAdaptation,
 					rules: result.rules,
@@ -91,11 +100,22 @@ export function createWebAdaptationService(): WebAdaptationService {
 				return result.result;
 			});
 		},
-		deleteWebAdaptationRule(id: string) {
+		deleteWebAdaptationRule(id: string, baselineRule?: AdaptationRule) {
 			return serialize(async () => {
 				if (typeof id !== "string" || !id) return false;
 				const settings = await getSettings();
 				const rules = parseAdaptationRules(settings.webAdaptation.rules);
+				if (baselineRule !== undefined) {
+					const expected = AdaptationRule.safeParse(baselineRule);
+					if (
+						!expected.success ||
+						!adaptationRulesEqual(
+							rules.find((rule) => rule.id === id),
+							expected.data,
+						)
+					)
+						return false;
+				}
 				const remaining = rules.filter((rule) => rule.id !== id);
 				if (remaining.length === rules.length) return false;
 				await saveSettings({

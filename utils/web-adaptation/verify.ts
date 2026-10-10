@@ -1,3 +1,5 @@
+import { createExtractedRegionMatcher } from "./extracted-regions";
+
 export type ExtractionSample = { text: string; element: Element };
 
 const compact = (value: string) => value.replace(/\s+/g, "").toLowerCase();
@@ -44,6 +46,8 @@ export function improvesExtraction(
 	if (candidate.length === 0) return false;
 	const before = compact(baseline.map((item) => item.text).join(""));
 	const after = compact(candidate.map((item) => item.text).join(""));
+	const inBaseline = createExtractedRegionMatcher(baseline, compact);
+	const inCandidate = createExtractedRegionMatcher(candidate, compact);
 	const retainedMainRoots = [
 		...new Set(
 			candidate
@@ -67,39 +71,20 @@ export function improvesExtraction(
 		)
 			return false;
 	}
-	const relatedSamplesContain = (
-		samples: ExtractionSample[],
-		expected: ExtractionSample,
-	) => {
-		const relatedText = compact(
-			samples
-				.filter(
-					(item) =>
-						item.element === expected.element ||
-						item.element.contains(expected.element) ||
-						expected.element.contains(item.element),
-				)
-				.map((item) => item.text)
-				.join(""),
-		);
-		return relatedText.includes(compact(expected.text));
-	};
 	const addedUntranslatedCandidate = untranslatedCandidates.some(
 		(sample) =>
-			relatedSamplesContain(candidate, sample) &&
-			!relatedSamplesContain(baseline, sample) &&
+			inCandidate(sample) &&
+			!inBaseline(sample) &&
 			!isSafeRemoval(sample.element, retainedMainRoots),
 	);
 	if (requireUntranslatedAddition && !addedUntranslatedCandidate) return false;
-	const addedSamples = candidate.filter(
-		(item) => !before.includes(compact(item.text)),
-	);
+	// Equal text elsewhere does not prove this region was already extracted.
+	const addedSamples = candidate.filter((item) => !inBaseline(item));
 	if (
 		addedSamples.some((item) => isSafeRemoval(item.element, retainedMainRoots))
 	)
 		return false;
 	if (
-		requireUntranslatedAddition &&
 		addedSamples.some(
 			(item) =>
 				!untranslatedCandidates.some(
@@ -113,35 +98,15 @@ export function improvesExtraction(
 	)
 		return false;
 	if (baseline.length === 0) return addedUntranslatedCandidate;
-	const removed = baseline.filter((item) => {
-		const text = compact(item.text);
-		// Text surviving elsewhere on the page does not prove this region
-		// survived: a duplicated paragraph used to mask the dropped copy.
-		if (!after.includes(text)) return true;
-		const regionText = compact(
-			candidate
-				.filter(
-					(entry) =>
-						entry.element === item.element ||
-						entry.element.contains(item.element) ||
-						item.element.contains(entry.element),
-				)
-				.map((entry) => entry.text)
-				.join(""),
-		);
-		return !regionText.includes(text);
-	});
+	const removed = baseline.filter((item) => !inCandidate(item));
 	const unsafeRemoved = removed.some(
 		(item) => !isSafeRemoval(item.element, retainedMainRoots),
 	);
 	if (unsafeRemoved) return false;
-	const added =
-		addedUntranslatedCandidate ||
-		(addedSamples.length > 0 && untranslatedCandidates.length === 0);
 	const lessFragmented =
 		candidate.length < baseline.length &&
 		before.length > 0 &&
 		after.length >= before.length * 0.9 &&
 		after.length <= before.length * 1.2;
-	return added || lessFragmented || removed.length > 0;
+	return addedUntranslatedCandidate || lessFragmented || removed.length > 0;
 }

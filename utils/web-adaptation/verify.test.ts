@@ -194,3 +194,35 @@ test("content outside the new roots still blocks a narrowing candidate", () => {
 		shell.remove();
 	}
 });
+
+test("identical body text cannot conceal a newly extracted navigation copy", () => {
+	const main = document.createElement("main");
+	const body = document.createElement("p");
+	main.append(body);
+	const nav = document.createElement("nav");
+	const copy = document.createElement("p");
+	nav.append(copy);
+	const baseline = [{ text: "Repeated text", element: body }];
+	expect(
+		improvesExtraction(
+			baseline,
+			[...baseline, { text: "Repeated text", element: copy }],
+			[{ text: "Repeated text", element: copy }],
+			true,
+		),
+	).toBe(false);
+});
+
+test("unproved additions cannot make a root change look like an improvement", () => {
+	const main = document.createElement("main");
+	const before = document.createElement("p");
+	const unknown = document.createElement("p");
+	main.append(before, unknown);
+	const baseline = [{ text: "Known body paragraph", element: before }];
+	expect(
+		improvesExtraction(baseline, [
+			...baseline,
+			{ text: "Unsampled addition", element: unknown },
+		]),
+	).toBe(false);
+});
