@@ -76,6 +76,48 @@ describe("page context cache", () => {
 });
 
 describe("page context generation gate", () => {
+	test("explicit preparation reuses captured content and one inflight request", async () => {
+		const response = Promise.withResolvers<{ output: string }>();
+		let calls = 0;
+		(window as unknown as { rpc: unknown }).rpc = {
+			unary: () => {
+				calls++;
+				return response.promise;
+			},
+		};
+		let ctx!: ReturnType<typeof usePageContext>;
+		const dispose = createRoot((dispose) => {
+			ctx = usePageContext({
+				modelId: () => "explicit-model",
+				srcLang: () => "en",
+				dstLang: () => "zh",
+				active: () => true,
+				generate: () => false,
+			});
+			return dispose;
+		});
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(calls).toBe(0);
+		// Translation UI now excludes the article from extraction. Preparation
+		// must use the snapshot captured on mount rather than reading it again.
+		const article = document.querySelector("article");
+		article?.setAttribute("data-pt-translated", "");
+		try {
+			const first = ctx.ensure();
+			const second = ctx.ensure();
+			expect(calls).toBe(1);
+			expect(ctx.ready()).toBe(false);
+			response.resolve({ output: "prepared once" });
+			expect(await first).toBe("prepared once");
+			expect(await second).toBe("prepared once");
+			expect(ctx.text()).toBe("prepared once");
+			expect(ctx.ready()).toBe(true);
+		} finally {
+			article?.removeAttribute("data-pt-translated");
+			dispose();
+		}
+	});
+
 	test("captures the content while held, and only calls the model once wanted", async () => {
 		let calls = 0;
 		(window as unknown as { rpc: unknown }).rpc = {

@@ -152,6 +152,14 @@ const buildSettings = () => {
 };
 
 let unary: Awaited<ReturnType<typeof createTranslateService>>["unary"];
+let cachedUnary: Awaited<
+	ReturnType<typeof createTranslateService>
+>["cachedUnary"];
+const statDeltas: { cacheHits?: number; chars?: number }[] = [];
+mock.module("~/utils/translation-stats", () => ({
+	recordTranslationStats: (delta: { cacheHits?: number; chars?: number }) =>
+		statDeltas.push(delta),
+}));
 const seed = async (texts: string[]) => {
 	for (const text of texts) {
 		const key = await computeCacheKey(PROMPT, MODEL, text, ctx, SRC, DST);
@@ -170,9 +178,52 @@ const options = (overrides: Partial<{ cleanCache: boolean }> = {}) => ({
 beforeEach(async () => {
 	enqueued.length = 0;
 	cacheCalls.get = 0;
+	statDeltas.length = 0;
 	await fakeCache.clear();
 	settings = buildSettings();
-	unary = (await createTranslateService()).unary;
+	({ unary, cachedUnary } = await createTranslateService());
+});
+
+test("a cache-only hit needs neither page context nor the model queue", async () => {
+	await seed(segments);
+	const response = await cachedUnary(
+		{ ...ctx, pageContext: undefined },
+		options(),
+		segments,
+	);
+	expect(response?.output).toEqual(segments.map(cached));
+	expect(enqueued).toEqual([]);
+	expect(statDeltas).toEqual([
+		{ cacheHits: segments.length, chars: segments.join("").length },
+	]);
+});
+
+test("a cache-only partial miss never translates or double-counts hits", async () => {
+	await seed(segments.slice(0, 7));
+	const before = entries.size;
+	expect(await cachedUnary(ctx, options(), segments)).toBeNull();
+	expect(enqueued).toEqual([]);
+	expect(entries.size).toBe(before);
+	expect(statDeltas).toEqual([]);
+	const response = await unary(ctx, options(), segments);
+	expect(response.output).toEqual([
+		...segments.slice(0, 7).map(cached),
+		fresh(segments[7]),
+	]);
+	expect(
+		statDeltas.reduce((sum, delta) => sum + (delta.cacheHits ?? 0), 0),
+	).toBe(7);
+});
+
+test("cache-only reads respect disabled caching and forced retranslation", async () => {
+	await seed(segments);
+	expect(
+		await cachedUnary(ctx, options({ cleanCache: true }), segments),
+	).toBeNull();
+	expect(entries.size).toBe(segments.length);
+	settings.debug.disableCache = true;
+	expect(await cachedUnary(ctx, options(), segments)).toBeNull();
+	expect(enqueued).toEqual([]);
 });
 
 test("a fully cached batch never enters the model queue", async () => {

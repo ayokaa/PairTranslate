@@ -21,6 +21,11 @@ export interface CoreService extends RpcService {
 }
 
 export interface TranslateService extends RpcService {
+	cachedUnary(
+		ctx: TranslateContext,
+		options: TranslateOptions,
+		text?: string | string[],
+	): Promise<TranslationResponse<any> | null>;
 	unary(
 		ctx: TranslateContext,
 		options: TranslateOptions,

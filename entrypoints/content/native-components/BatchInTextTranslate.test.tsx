@@ -13,11 +13,15 @@ mock.module("~/hooks/progress-indicator", () => ({
 	mightUseProgressIndicator: () => undefined,
 }));
 mock.module("~/hooks/page-context", () => ({
-	usePageContext: () => ({ text: () => undefined, ready: () => true }),
+	usePageContext: () => ({
+		text: () => undefined,
+		ensure: () => Promise.resolve(undefined),
+	}),
 	getCachedPageContext: () => undefined,
 }));
 
 const settings = {
+	summary: { pageContextModel: "context-model" },
 	translate: {
 		inTextTranslateModel: "m1",
 		sourceLang: "auto",
@@ -39,6 +43,7 @@ Object.assign(globalThis, {
 		innerHeight: 768,
 		document,
 		rpc: {
+			cachedUnary: async () => null,
 			unary: (_ctx: unknown, _opts: unknown, texts: string[]) => {
 				requests.push(texts);
 				return Promise.resolve(texts.map((text) => `[${text}]`));

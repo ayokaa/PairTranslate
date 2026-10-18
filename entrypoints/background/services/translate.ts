@@ -839,6 +839,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		ctx: TranslateContext,
 		options: TranslateOptions,
 		text: string | string[] | undefined,
+		recordHits = true,
 	): Promise<PreparedUnary> => {
 		const modelId = options.modelId;
 		const promptId = options.promptId;
@@ -956,7 +957,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				// segments came from the cache saved 12 translations, and the
 				// statistics have to say so — otherwise a partly cached page
 				// reports zero hits and the hit rate looks far worse than it is.
-				if (hitEntries > 0) {
+				if (recordHits && hitEntries > 0) {
 					recordTranslationStats({ cacheHits: hitEntries, chars: hitChars });
 				}
 			}
@@ -1264,6 +1265,27 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 	};
 
 	return {
+		async cachedUnary(
+			ctx: TranslateContext,
+			options: TranslateOptions,
+			text?: string | string[],
+		) {
+			// A miss must never generate a translation without its page context.
+			// Partial hits are counted by unary() when that batch is translated.
+			if (options.cleanCache) return null;
+			const prepared = await prepareUnary(ctx, options, text, false);
+			if (prepared.skip) {
+				return skippedUnaryResponse(prepared.payload, options.promptId);
+			}
+			const served = await cachedUnaryResponse(options, prepared);
+			if (served && prepared.thinCacheState) {
+				recordTranslationStats({
+					cacheHits: prepared.thinCacheState.values.length,
+					chars: payloadChars(prepared.payload),
+				});
+			}
+			return served ?? null;
+		},
 		async unary(
 			ctx: TranslateContext,
 			options: TranslateOptions,

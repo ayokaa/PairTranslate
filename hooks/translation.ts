@@ -49,52 +49,6 @@ const detectionSample = (texts: string[]) =>
 		.join(" ")
 		.slice(0, 512);
 
-export type SameLanguageSkip = "pending" | "skip" | "translate";
-
-/**
- * Whether this text is about to be skipped as same-language, decided as early
- * as it can be. "pending" lets callers hold off work a skipped batch does not
- * need: generating the page context costs one LLM round trip per page, and a
- * skipped batch never reaches the model that context exists for.
- */
-export function useSameLanguageSkip(
-	texts: () => string[],
-	options: {
-		promptId: string;
-		srcLang: () => string;
-		dstLang: () => string;
-	},
-) {
-	const [state, setState] = createSignal<SameLanguageSkip>("pending");
-	createEffect(() => {
-		const list = texts();
-		if (list.length === 0) return;
-		// A batch only ever loses members after it is dispatched, so the first
-		// answer stands. Re-deciding would flip this back to "pending" and make
-		// callers tear down work they had already settled.
-		if (state() !== "pending") return;
-		let alive = true;
-		onCleanup(() => {
-			alive = false;
-		});
-		void detectAndSkip(
-			detectionSample(list),
-			options.srcLang(),
-			options.dstLang(),
-			options.promptId,
-		)
-			.then((skip) => {
-				if (alive) setState(skip ? "skip" : "translate");
-			})
-			.catch(() => {
-				// A detector that throws is not evidence of anything; send the
-				// batch down the normal path and let it decide again there.
-				if (alive) setState("translate");
-			});
-	});
-	return state;
-}
-
 type Pending = {
 	(): undefined;
 	loading: true;
@@ -164,7 +118,8 @@ export function createBatchTranslation(
 		srcLang: () => string | undefined;
 		dstLang: () => string;
 		thinCache?: boolean;
-		enabled?: () => boolean;
+		/** Prepare context only when the batch cannot be served from cache. */
+		beforeTranslate?: () => Promise<unknown>;
 		ctx?: () => Record<string, unknown>;
 	},
 ): BatchReturn {
@@ -179,6 +134,12 @@ export function createBatchTranslation(
 	const [textResult, setTextResult] = createStore<(string | undefined)[]>([]);
 	const [error, setError] = createStore<(TranslateError | undefined)[]>([]);
 	const [skipped, setSkipped] = createStore<boolean[]>([]);
+	const pending = new Set<AbortController>();
+	const cancelPending = () => {
+		for (const controller of pending) controller.abort();
+		pending.clear();
+	};
+	onCleanup(cancelPending);
 
 	const normalizeSkipped = (
 		value: TranslationSkipped,
@@ -227,69 +188,96 @@ export function createBatchTranslation(
 			setSkipped([]);
 		});
 
-	// The sample both sides of the skip decision agree on: one short headline is
-	// a coin flip for the detector, the joined batch is not.
-	const detectAndSkipTexts = (texts: string[]) =>
-		detectAndSkip(detectionSample(texts), srcLang(), dstLang(), promptId);
+	const applyResponse = (
+		resp: TranslateUnaryPayload<string[]>,
+		len: number,
+	) => {
+		const normalized = normalizeUnaryResponse<string[]>(resp);
+		const translated = Array.isArray(normalized.output)
+			? normalized.output
+			: [normalized.output];
+		setResultTexts(translated, normalized.skipped);
+		if (translated.length < len) {
+			batch(() => {
+				setError(
+					{ from: translated.length, to: len - 1 },
+					batchMismatchError(len, translated.length),
+				);
+				setTextResult({ from: translated.length, to: len - 1 }, undefined);
+			});
+		}
+	};
 
-	const translate = async (texts: string[], cleanCache = false) => {
+	const translate = (texts: string[], cleanCache = false) => {
 		const modelId_ = modelId();
 		if (modelId_ === undefined) {
 			setAllError(noModelError(), texts.length);
 			return;
 		}
 
-		if (await detectAndSkipTexts(texts)) {
-			setAllSkipped(texts.length);
-			return;
-		}
-
-		const endTracking = progressCtx?.beginRequest(modelId_);
+		const srcLang_ = srcLang() || "auto";
+		const dstLang_ = dstLang();
+		const requestOptions = {
+			modelId: modelId_,
+			promptId,
+			srcLang: srcLang_,
+			dstLang: dstLang_,
+			cleanCache,
+			thinCache,
+		};
 		setAllLoading(texts.length);
 
 		const abortController = new AbortController();
-		window.rpc
-			.unary(
-				ctx(),
-				{
-					modelId: modelId_,
+		pending.add(abortController);
+		let endTracking: (() => void) | undefined;
+		void (async () => {
+			try {
+				const skip = await detectAndSkip(
+					detectionSample(texts),
+					srcLang_,
+					dstLang_,
 					promptId,
-					srcLang: srcLang() || "auto",
-					dstLang: dstLang(),
-					cleanCache,
-					thinCache,
-				},
-				texts,
-				abortController.signal,
-			)
-			.then((resp) => {
-				const normalized = normalizeUnaryResponse<string[]>(resp);
-				const translated = Array.isArray(normalized.output)
-					? normalized.output
-					: [normalized.output];
-				setResultTexts(translated, normalized.skipped);
-				translated.length < texts.length &&
-					batch(() => {
-						setError(
-							{ from: translated.length, to: texts.length - 1 },
-							batchMismatchError(texts.length, translated.length),
-						);
-						setTextResult(
-							{ from: translated.length, to: texts.length - 1 },
-							undefined,
-						);
-					});
-			})
-			.catch((e) => {
+				);
 				if (abortController.signal.aborted) return;
-				setAllError(convertGenericError(e), texts.length);
-			})
-			.finally(() => endTracking?.());
-
-		onCleanup(() => abortController.abort());
+				if (skip) {
+					setAllSkipped(texts.length);
+					return;
+				}
+				if (options.beforeTranslate && !cleanCache) {
+					const cached = await window.rpc.cachedUnary(
+						ctx(),
+						requestOptions,
+						texts,
+						abortController.signal,
+					);
+					if (abortController.signal.aborted) return;
+					if (cached) {
+						applyResponse(cached, texts.length);
+						return;
+					}
+				}
+				endTracking = progressCtx?.beginRequest(modelId_);
+				await options.beforeTranslate?.();
+				if (abortController.signal.aborted) return;
+				const resp = await window.rpc.unary(
+					ctx(),
+					requestOptions,
+					texts,
+					abortController.signal,
+				);
+				if (!abortController.signal.aborted) applyResponse(resp, texts.length);
+			} catch (e) {
+				if (!abortController.signal.aborted) {
+					setAllError(convertGenericError(e), texts.length);
+				}
+			} finally {
+				pending.delete(abortController);
+				endTracking?.();
+			}
+		})();
 	};
 
-	const translateSingle = async (index: number, text_: string) => {
+	const translateSingle = (index: number, text_: string) => {
 		const modelId_ = modelId();
 		if (modelId_ === undefined) {
 			batch(() => {
@@ -299,16 +287,8 @@ export function createBatchTranslation(
 			return;
 		}
 
-		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
-			batch(() => {
-				setError(index, undefined);
-				setTextResult(index, undefined);
-				setSkipped(index, true);
-			});
-			return;
-		}
-
-		const endTracking = progressCtx?.beginRequest(modelId_);
+		const srcLang_ = srcLang() || "auto";
+		const dstLang_ = dstLang();
 		batch(() => {
 			setError(index, undefined);
 			setTextResult(index, undefined);
@@ -316,20 +296,32 @@ export function createBatchTranslation(
 		});
 
 		const abortController = new AbortController();
-		window.rpc
-			.unary(
-				ctx(),
-				{
-					modelId: modelId_,
-					promptId,
-					srcLang: srcLang() || "auto",
-					dstLang: dstLang(),
-					cleanCache: true,
-				},
-				text_,
-				abortController.signal,
-			)
-			.then((resp) => {
+		pending.add(abortController);
+		let endTracking: (() => void) | undefined;
+		void (async () => {
+			try {
+				const skip = await detectAndSkip(text_, srcLang_, dstLang_, promptId);
+				if (abortController.signal.aborted) return;
+				if (skip) {
+					setSkipped(index, true);
+					return;
+				}
+				endTracking = progressCtx?.beginRequest(modelId_);
+				await options.beforeTranslate?.();
+				if (abortController.signal.aborted) return;
+				const resp = await window.rpc.unary(
+					ctx(),
+					{
+						modelId: modelId_,
+						promptId,
+						srcLang: srcLang_,
+						dstLang: dstLang_,
+						cleanCache: true,
+					},
+					text_,
+					abortController.signal,
+				);
+				if (abortController.signal.aborted) return;
 				const normalized = normalizeUnaryResponse<string | string[]>(resp);
 				const value = Array.isArray(normalized.output)
 					? normalized.output[0]
@@ -342,41 +334,28 @@ export function createBatchTranslation(
 					setTextResult(index, responseSkipped ? undefined : value);
 					setSkipped(index, responseSkipped);
 				});
-			})
-			.catch((e) => {
+			} catch (e) {
 				if (abortController.signal.aborted) return;
 				batch(() => {
 					setError(index, convertGenericError(e));
 					setTextResult(index, undefined);
 					setSkipped(index, false);
 				});
-			})
-			.finally(() => endTracking?.());
-		onCleanup(() => abortController.abort());
+			} finally {
+				pending.delete(abortController);
+				endTracking?.();
+			}
+		})();
 	};
 
 	createEffect(() => {
 		const text_ = text();
-		const enabled = options.enabled?.() ?? true;
-		if (!enabled) {
-			// Waiting on the page context must not delay a batch that is about to
-			// be skipped: the context only feeds the model, and a skipped batch
-			// never reaches one. Checking here keeps a same-language page from
-			// paying one serial context round trip — 2s measured, 16s on a slow
-			// model — only to be told afterwards that it needed no translation.
-			// A detector failure is ignored: the batch then waits for the context
-			// exactly as it did before.
-			if (modelId() !== undefined) {
-				void detectAndSkipTexts(text_)
-					.then((skip) => {
-						if (skip) setAllSkipped(text_.length);
-					})
-					.catch(() => {});
-			}
-			return;
-		}
+		if (text_.length === 0) return;
 		translate(text_);
-		onCleanup(clearAll);
+		onCleanup(() => {
+			cancelPending();
+			clearAll();
+		});
 	});
 
 	const retry = (index: number | undefined) => {

@@ -33,6 +33,7 @@ export default defineBackground(() => {
 		const clientImpl: Server<AllServices> = {
 			ping: async () => "pong",
 
+			cachedUnary: translateService.cachedUnary,
 			unary: translateService.unary,
 			stream: translateService.stream,
 			batch: translateService.batch,

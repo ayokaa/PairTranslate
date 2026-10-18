@@ -190,5 +190,18 @@ export function usePageContext(options: {
 		return cache.has(key) || failed.has(key);
 	};
 
-	return { text, ready };
+	// Callers can capture content immediately, but defer generation until a
+	// translation cache miss actually needs the context.
+	const ensure = () => {
+		const modelId = options.modelId();
+		if (!modelId || !options.active()) return Promise.resolve(undefined);
+		return ensurePageContext({
+			modelId,
+			srcLang: options.srcLang(),
+			dstLang: options.dstLang(),
+			url: url() || stripFragment(window.location.href),
+		});
+	};
+
+	return { text, ready, ensure };
 }
