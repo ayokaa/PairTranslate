@@ -52,3 +52,35 @@ test("subscribe yields initial status and subsequent updates", async () => {
 
 	await subscription.return?.(undefined);
 });
+
+test("independent callers share a model queue, while distinct model ids are isolated", async () => {
+	const hub = createQueueHub(() => ({
+		requestConcurrency: 1,
+		tokensPerMinute: 1000,
+	}));
+	const callerA = hub.queue("same-model");
+	const callerB = hub.queue("same-model");
+	expect(callerA).toBe(callerB);
+	const first = Promise.withResolvers<{
+		value: string;
+		completionTokens: number;
+	}>();
+	const a = callerA.enqueueUnary(() => first.promise, 10);
+	let secondStarted = false;
+	const b = callerB.enqueueUnary(async () => {
+		secondStarted = true;
+		return { value: "b", completionTokens: 0 };
+	}, 10);
+	const other = hub.queue("different-model");
+	expect(
+		await other.enqueueUnary(
+			async () => ({ value: "other", completionTokens: 0 }),
+			10,
+		),
+	).toBe("other");
+	expect(secondStarted).toBe(false);
+	expect(callerA.status()).toMatchObject({ running: 1, queued: 1 });
+	first.resolve({ value: "a", completionTokens: 0 });
+	expect(await Promise.all([a, b])).toEqual(["a", "b"]);
+	expect(callerA.status()).toMatchObject({ running: 0, queued: 0 });
+});

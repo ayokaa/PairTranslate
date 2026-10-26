@@ -1324,6 +1324,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			return queue.enqueueUnary(
 				() => executeUnary(ctx, options, payload, signal, prepared),
 				estimated,
+				signal,
 			);
 		},
 		stream(
@@ -1433,7 +1434,11 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 								},
 								signal,
 							);
-				const iterator = await queue.enqueueStream(streamRunner, estimated);
+				const iterator = await queue.enqueueStream(
+					streamRunner,
+					estimated,
+					signal,
+				);
 				let translationAggregate = "";
 				let reasoningAggregate = "";
 				try {
@@ -1470,10 +1475,8 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						reasoningSize: reasoningAggregate.length,
 					});
 				} finally {
-					if (signal?.aborted) {
-						// @ts-expect-error This is fine, since no one is using the value.
-						await iterator.return();
-					}
+					// Also close on an early consumer return, not just explicit aborts.
+					await iterator.return(undefined);
 				}
 			})();
 		},
