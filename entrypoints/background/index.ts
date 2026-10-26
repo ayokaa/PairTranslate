@@ -18,10 +18,7 @@ export default defineBackground(() => {
 	const frameTranslationRelay = new FrameTranslationRelay();
 	browser.runtime.onConnect.addListener(frameTranslationRelay.connect);
 
-	let ready = false;
-	const promise = async () => {
-		if (ready) return;
-
+	const start = async () => {
 		await initializeSettings();
 
 		const translateService = await createTranslateService();
@@ -56,7 +53,16 @@ export default defineBackground(() => {
 		};
 
 		setupWxtServer(clientImpl, WXT_TRANSPORTATION_NAME);
-		ready = true;
+	};
+	// Pages and frames can ping together while storage initialization is pending.
+	// Share the in-flight promise so they all use one service and queue hub.
+	let initialization: Promise<void> | undefined;
+	const initialize = () => {
+		initialization ??= start().catch((error) => {
+			initialization = undefined;
+			throw error;
+		});
+		return initialization;
 	};
 
 	// If there is no active session, background scripts will be killed.
@@ -64,7 +70,7 @@ export default defineBackground(() => {
 	browser.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 		(async () => {
 			if (msg === "ping") {
-				await promise();
+				await initialize();
 				sendResponse("pong");
 			}
 		})();
