@@ -1,4 +1,3 @@
-import katex from "katex";
 import {
 	createEffect,
 	type JSX,
@@ -9,6 +8,7 @@ import {
 import { Dynamic } from "solid-js/web";
 import { animateEnter } from "~/hooks/animation";
 import { cn } from "~/utils/cn";
+import { loadKatex } from "./katex-loader.cjs";
 
 const styles: Record<string, string> = {
 	// Headings: Hierarchical size/weight/italic for sections
@@ -84,18 +84,34 @@ const math = () => (props: { content?: string; center?: boolean }) => {
 	let ref: HTMLElement | undefined;
 
 	onMount(() => {
-		if (!ref) return;
+		const element = ref;
+		if (!element) return;
 
 		createEffect(() => {
-			if (props.content) {
-				katex.render(props.content, ref, {
+			const content = props.content;
+			const center = props.center;
+			const source = content
+				? center
+					? `$$\n${content}\n$$`
+					: `$${content}$`
+				: "";
+			element.textContent = source;
+
+			onCleanup(() => {
+				element.textContent = "";
+			});
+
+			// KaTeX disables rendering when it loads in a quirks-mode document.
+			if (!content || element.ownerDocument.compatMode !== "CSS1Compat") return;
+
+			try {
+				loadKatex().render(content, element, {
 					throwOnError: false,
 					strict: false,
-					displayMode: props.center,
+					displayMode: center,
 				});
-				onCleanup(() => {
-					ref.textContent = "";
-				});
+			} catch {
+				element.textContent = source;
 			}
 		});
 	});
