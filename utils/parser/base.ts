@@ -250,13 +250,34 @@ export async function* elementWalker(state: State): SectionGenerator {
 	};
 
 	const notifier = createNotifier();
-	const rootsList: WeakRef<Element>[] = [];
+	const rootsList: WeakRef<Node>[] = [];
+	const observedRoots: WeakRef<Node>[] = [];
+	const observedNodes = new WeakSet<Node>();
+
+	const queuePresentationScan = (element: Element) => {
+		if (isExcludedPath(element)) return;
+		// Attribute and animation changes must reproduce the initial paragraph
+		// boundary, not emit a second section for an inline descendant.
+		let root = element;
+		while (
+			root.parentElement &&
+			!state.blockTags.has(root.tagName) &&
+			!observedNodes.has(root)
+		) {
+			root = root.parentElement;
+		}
+		rootsList.push(new WeakRef(root));
+	};
+	const onPresentationChange = (event: Event) => {
+		if (event.target instanceof Element) queuePresentationScan(event.target);
+		if (rootsList.length > 0) notifier.notify();
+	};
 
 	const mutationHandler: MutationCallback = (mutations) => {
 		for (const mutation of mutations) {
 			if (mutation.type === "attributes") {
 				const target = mutation.target as Element;
-				if (!isExcludedPath(target)) rootsList.push(new WeakRef(target));
+				queuePresentationScan(target);
 				continue;
 			}
 			for (const node of mutation.addedNodes) {
@@ -276,7 +297,11 @@ export async function* elementWalker(state: State): SectionGenerator {
 		: null;
 
 	const observeElement = (el: Node) => {
-		if (el instanceof Element) observedRoots.push(new WeakRef(el));
+		if (!state.listenNew || observedNodes.has(el)) return;
+		observedNodes.add(el);
+		observedRoots.push(new WeakRef(el));
+		el.addEventListener("animationend", onPresentationChange);
+		el.addEventListener("transitionend", onPresentationChange);
 		observer?.observe(el, {
 			childList: true,
 			subtree: true,
@@ -292,9 +317,12 @@ export async function* elementWalker(state: State): SectionGenerator {
 	};
 	const cleanup = () => {
 		observer?.disconnect();
+		for (const ref of observedRoots) {
+			ref.deref()?.removeEventListener("animationend", onPresentationChange);
+			ref.deref()?.removeEventListener("transitionend", onPresentationChange);
+		}
 		if (state.listenNew) window.removeEventListener("resize", onResize);
 	};
-	const observedRoots: WeakRef<Element>[] = [];
 
 	// Iframes run their own content script. Only shadow roots need traversal
 	// from their containing document.
@@ -407,7 +435,13 @@ export async function* elementWalker(state: State): SectionGenerator {
 			const pendingRoots = rootsList.splice(0);
 			const elements = new Set(pendingRoots.map((ref) => ref.deref()));
 			for (const element of elements) {
-				if (element?.isConnected) yield* findTextElementsAndSplit(element);
+				if (!element?.isConnected) continue;
+				if (element instanceof Element)
+					yield* findTextElementsAndSplit(element);
+				else {
+					for (const child of findTextElements(element))
+						yield* paragraphSplitter(child);
+				}
 			}
 		}
 	} finally {

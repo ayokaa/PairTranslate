@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import "../test/dom-setup";
+import { Event as DOMEvent } from "linkedom";
 import { getMarkdownFromSection } from "../markdown";
 import { domListener } from "./base";
 import type { DOMSection, Options } from "./types";
@@ -356,6 +357,121 @@ test("attribute changes and resize recover skipped text without duplicate sectio
 		const end = iterator.next();
 		controller.abort();
 		expect((await end).done).toBe(true);
+	} finally {
+		controller.abort();
+		await iterator.return();
+		root.remove();
+		view.getComputedStyle = originalStyle;
+		for (const [name, descriptor] of [
+			["window", previousWindow],
+			["MutationObserver", previousObserver],
+		] as const) {
+			if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+			else Reflect.deleteProperty(globalThis, name);
+		}
+	}
+});
+
+test("inline attribute rescans retain the paragraph boundary", async () => {
+	const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+	const previousObserver = Object.getOwnPropertyDescriptor(
+		globalThis,
+		"MutationObserver",
+	);
+	Object.assign(globalThis, {
+		window: new EventTarget(),
+		MutationObserver: document.defaultView!.MutationObserver,
+	});
+	const root = document.createElement("main");
+	root.innerHTML =
+		"<p><span>First fragment.</span><span>Second fragment.</span></p>";
+	document.body.append(root);
+	const controller = new AbortController();
+	const iterator = domListener({
+		roots: [root],
+		signal: controller.signal,
+		filterInteractive: false,
+	});
+	try {
+		const first = await iterator.next();
+		if (first.done) throw new Error("Expected paragraph");
+		expect(getMarkdownFromSection(first.value)).toBe(
+			"First fragment.Second fragment.",
+		);
+		const next = iterator.next();
+		root.querySelectorAll("span")[1].className = "highlighted";
+		const paragraph = document.createElement("p");
+		paragraph.textContent = "New independent paragraph.";
+		root.append(paragraph);
+		const second = await next;
+		if (second.done) throw new Error("Expected new paragraph");
+		expect(getMarkdownFromSection(second.value)).toBe(
+			"New independent paragraph.",
+		);
+	} finally {
+		controller.abort();
+		await iterator.return();
+		root.remove();
+		for (const [name, descriptor] of [
+			["window", previousWindow],
+			["MutationObserver", previousObserver],
+		] as const) {
+			if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+			else Reflect.deleteProperty(globalThis, name);
+		}
+	}
+});
+
+test("animation completion recovers visible text without an attribute mutation", async () => {
+	const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+	const previousObserver = Object.getOwnPropertyDescriptor(
+		globalThis,
+		"MutationObserver",
+	);
+	const view = document.defaultView!;
+	const originalStyle = view.getComputedStyle;
+	Object.assign(globalThis, {
+		window: new EventTarget(),
+		MutationObserver: view.MutationObserver,
+	});
+	let transparent = true;
+	view.getComputedStyle = ((element: Element) => ({
+		display: "block",
+		visibility: "visible",
+		opacity: element.id === "fading-prose" && transparent ? "0" : "1",
+		clip: "auto",
+		position: "static",
+	})) as typeof view.getComputedStyle;
+	const root = document.createElement("main");
+	root.innerHTML =
+		'<p>Visible seed paragraph.</p><p id="fading-prose">Newly visible animated prose.</p>';
+	document.body.append(root);
+	const controller = new AbortController();
+	const iterator = domListener({
+		roots: [root],
+		signal: controller.signal,
+		filterInteractive: false,
+	});
+	try {
+		await iterator.next();
+		const next = iterator.next();
+		// Let the initial scan finish while the animation is transparent.
+		await Promise.resolve();
+		await Promise.resolve();
+		transparent = false;
+		root
+			.querySelector("#fading-prose")!
+			.dispatchEvent(
+				new DOMEvent("animationend", { bubbles: true }) as unknown as Event,
+			);
+		const control = document.createElement("p");
+		control.textContent = "Later control paragraph.";
+		root.append(control);
+		const recovered = await next;
+		if (recovered.done) throw new Error("Expected recovered animation");
+		expect(getMarkdownFromSection(recovered.value)).toBe(
+			"Newly visible animated prose.",
+		);
 	} finally {
 		controller.abort();
 		await iterator.return();
