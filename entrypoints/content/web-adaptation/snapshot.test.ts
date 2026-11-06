@@ -228,3 +228,12 @@ test("snapshot retains visible accessibility-hidden and read-only note evidence"
 		snapshot.outline.some((item) => item.classes?.includes("editor")),
 	).toBe(false);
 });
+
+test("redacts email candidates without rescanning long non-email word suffixes", () => {
+	const element = document.querySelector("p")!;
+	const text = `${"x".repeat(MAX_ADAPTATION_SOURCE_CHARACTERS - 100)} contact: test+tag@example.invalid; malformed@invalid`;
+	const snapshot = buildPageSnapshot([], [{ element, text }]);
+	expect(snapshot.untranslated[0]?.text).toBe(
+		`${"x".repeat(MAX_ADAPTATION_SOURCE_CHARACTERS - 100)} contact: [email]; malformed@invalid`,
+	);
+});

@@ -469,10 +469,28 @@ export async function* emittedFilter(
 			return [];
 		return [...node.childNodes].flatMap(visibleTexts);
 	};
+	const mathSelector =
+		"math, mjx-container, .katex, .mwe-math-element, .math.inline, .math.display";
+	const hasHiddenText = (node: Node): boolean => {
+		// Math renderers deliberately keep hidden source/accessibility copies.
+		if (
+			node instanceof Element &&
+			(node.matches(`[${DATA_CONTAINER}]`) || node.matches(mathSelector))
+		)
+			return false;
+		if (node.nodeType === Node.TEXT_NODE) {
+			return (
+				showTextNode(node) &&
+				!!node.parentElement &&
+				!isVisiblePageContent(node.parentElement)
+			);
+		}
+		return [...node.childNodes].some(hasHiddenText);
+	};
 	const uncovered = function* (node: Node): Generator<Node> {
 		const texts = visibleTexts(node);
 		if (texts.length === 0) return;
-		if (texts.every((text) => !covered.has(text))) {
+		if (texts.every((text) => !covered.has(text)) && !hasHiddenText(node)) {
 			yield node;
 		} else {
 			for (const child of node.childNodes) yield* uncovered(child);
@@ -486,14 +504,23 @@ export async function* emittedFilter(
 		}
 		const texts = nodes.flatMap(visibleTexts);
 		if (texts.length === 0) {
-			// Preserve non-text sections such as source-backed math containers.
-			if (!emptyStarts.has(section[0])) {
+			// Empty ordinary wrappers must not become pending ranges that later
+			// swallow revealed descendants. Keep source-backed math atomic.
+			const hasMath = nodes.some(
+				(node) =>
+					node instanceof Element &&
+					(node.matches(mathSelector) || node.querySelector(mathSelector)),
+			);
+			if (hasMath && !emptyStarts.has(section[0])) {
 				emptyStarts.add(section[0]);
 				yield section;
 			}
 			continue;
 		}
-		if (texts.every((text) => !covered.has(text))) {
+		if (
+			texts.every((text) => !covered.has(text)) &&
+			!nodes.some(hasHiddenText)
+		) {
 			for (const text of texts) covered.add(text);
 			yield section;
 			continue;

@@ -23,7 +23,7 @@ export type UntranslatedSample = { text: string; element: Element };
 function scrubText(value: string, limit?: number): string {
 	const scrubbed = value
 		.replace(/https?:\/\/\S+/gi, "[link]")
-		.replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, "[email]")
+		.replace(/(?<![\w.+-])[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, "[email]")
 		.replace(/\b(?:\d[ -]?){12,19}\b/g, "[number]")
 		.replace(/\s+/g, " ")
 		.trim();
