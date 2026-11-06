@@ -1,3 +1,4 @@
+import { isVisiblePageContent } from "~/utils/page-content";
 import {
 	getLastStructureIdentity,
 	getLegacyStructureKey,
@@ -67,7 +68,7 @@ function safePairs(observations: TranslationObservation[]) {
 	>();
 	for (const item of observations) {
 		const elements = (item.elements ?? [item.element]).filter(
-			isSafePageElement,
+			(element) => isSafePageElement(element) && isVisiblePageContent(element),
 		);
 		if (elements.length === 0) continue;
 		const source = scrubText(item.source);
@@ -109,7 +110,11 @@ function safeUntranslated(samples: UntranslatedSample[]) {
 		{ paths: Set<string>; text: string; occurrences: number }
 	>();
 	for (const sample of samples) {
-		if (!isSafePageElement(sample.element)) continue;
+		if (
+			!isSafePageElement(sample.element) ||
+			!isVisiblePageContent(sample.element)
+		)
+			continue;
 		const text = scrubText(sample.text);
 		if (!text) continue;
 		const existing = uniqueSamples.get(text);
@@ -217,7 +222,11 @@ export function buildPageSnapshot(
 			visited++ < MAX_OUTLINE_NODES
 		) {
 			const element = node as Element;
-			if (!seen.has(element) && isSafePageElement(element)) {
+			if (
+				!seen.has(element) &&
+				isSafePageElement(element) &&
+				isVisiblePageContent(element)
+			) {
 				seen.add(element);
 				let depth = 0;
 				let parent = element.parentElement;

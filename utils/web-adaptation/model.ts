@@ -4,6 +4,11 @@ import {
 	EXCLUDED_SELECTORS,
 	TEXT_TAGS,
 } from "~/utils/constants";
+import {
+	EDITABLE_SELECTOR,
+	isProtectedPageContent,
+	isVisiblePageContent,
+} from "~/utils/page-content";
 
 const Selector = z.string().trim().min(1).max(180);
 const Tag = z.string().regex(/^[a-zA-Z][a-zA-Z0-9-]{0,15}$/);
@@ -19,18 +24,15 @@ const REINCLUSION_PROTECTED_DESCENDANTS = [
 	"[translate=false]",
 	"[translate=no]",
 	".notranslate",
-	"[data-nosnippet]",
-	"[contenteditable]",
+	EDITABLE_SELECTOR,
 	"[hidden]",
-	"[aria-hidden='true']",
 ].join(", ");
 const REINCLUSION_TARGET_PROTECTED_SELECTOR = [
 	...EXCLUDED_SELECTORS.filter(
 		(selector) => selector !== `[${DATA_TRANSLATED}]`,
 	),
-	"[contenteditable]",
+	EDITABLE_SELECTOR,
 	"[hidden]",
-	"[aria-hidden='true']",
 ].join(", ");
 const SAFE_SELECTOR_PATTERN = /^[-a-zA-Z0-9_#. >[\]="'^$]+$/;
 
@@ -337,9 +339,7 @@ function queryRuntimeSelector(
 }
 
 function validRootMatches(matches: Element[]): boolean {
-	return !matches.some((el) =>
-		el.closest("[contenteditable], [hidden], [aria-hidden='true']"),
-	);
+	return !matches.some((el) => isProtectedPageContent(el));
 }
 
 function validExcludeMatches(matches: Element[], doc: Document): boolean {
@@ -351,6 +351,7 @@ function validIncludeMatches(matches: Element[], excludes: string[]): boolean {
 		if (
 			!TEXT_TAGS.includes(el.tagName) ||
 			!el.textContent?.trim() ||
+			!isVisiblePageContent(el) ||
 			el.closest(
 				[...excludes, REINCLUSION_TARGET_PROTECTED_SELECTOR].join(", "),
 			)
@@ -429,6 +430,39 @@ export function validatePatch(
 			return undefined;
 	}
 	return removeRedundantIncludes(patch, doc);
+}
+
+/**
+ * Salvage independently valid entries from a model suggestion, then run the
+ * strict combined validator. The caller must still trial the entire retained
+ * patch against its baseline; this does not authorize partial persistence.
+ */
+export function validateSuggestedPatch(
+	input: AdaptationPatch,
+	doc: Document,
+): AdaptationPatch | undefined {
+	const patch: AdaptationPatch = {
+		roots: [],
+		excludes: [],
+		includes: [],
+		promoteTags: [],
+	};
+	for (const field of [
+		"roots",
+		"excludes",
+		"includes",
+		"promoteTags",
+	] as const) {
+		for (const value of input[field]) {
+			const single = {
+				...EMPTY_PATCH,
+				...(field === "includes" ? { excludes: patch.excludes } : {}),
+				[field]: [value],
+			};
+			if (validatePatch(single, doc)) patch[field].push(value);
+		}
+	}
+	return validatePatch(patch, doc);
 }
 
 /**

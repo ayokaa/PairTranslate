@@ -8,6 +8,7 @@ import {
 	TEXT_TAGS,
 } from "~/utils/constants";
 import { createNotifier } from "~/utils/notify";
+import { EDITABLE_SELECTOR, isVisiblePageContent } from "~/utils/page-content";
 import type {
 	ChainedGeneratorFn,
 	DOMSection,
@@ -201,7 +202,8 @@ export async function* elementWalker(state: State): SectionGenerator {
 		// Callers either pass a root through isExcludedPath or receive an
 		// element accepted by the tree walker. Keep ancestor checks out of this
 		// per-element hot path.
-		if (!state.textTags.has(el.tagName)) return false;
+		if (!state.textTags.has(el.tagName) || !isVisiblePageContent(el))
+			return false;
 		if (hasDirectText(el)) return true;
 
 		// Math may live in a leaf container with no direct text (e.g. p >
@@ -252,6 +254,11 @@ export async function* elementWalker(state: State): SectionGenerator {
 
 	const mutationHandler: MutationCallback = (mutations) => {
 		for (const mutation of mutations) {
+			if (mutation.type === "attributes") {
+				const target = mutation.target as Element;
+				if (!isExcludedPath(target)) rootsList.push(new WeakRef(target));
+				continue;
+			}
 			for (const node of mutation.addedNodes) {
 				if (node.nodeType === Node.ELEMENT_NODE) {
 					const root = node as Element;
@@ -268,17 +275,26 @@ export async function* elementWalker(state: State): SectionGenerator {
 		? new MutationObserver(mutationHandler)
 		: null;
 
-	const observeElement = (el: Node) =>
+	const observeElement = (el: Node) => {
+		if (el instanceof Element) observedRoots.push(new WeakRef(el));
 		observer?.observe(el, {
 			childList: true,
 			subtree: true,
-			attributes: false,
+			attributes: true,
+			attributeFilter: ["class", "style", "hidden", "aria-hidden", "open"],
 			characterData: false,
 		});
+	};
 
+	const onResize = () => {
+		for (const ref of observedRoots) rootsList.push(ref);
+		notifier.notify();
+	};
 	const cleanup = () => {
 		observer?.disconnect();
+		if (state.listenNew) window.removeEventListener("resize", onResize);
 	};
+	const observedRoots: WeakRef<Element>[] = [];
 
 	// Iframes run their own content script. Only shadow roots need traversal
 	// from their containing document.
@@ -337,6 +353,10 @@ export async function* elementWalker(state: State): SectionGenerator {
 
 					// Yield block element
 					yield* findTextElementsAndSplit(el);
+				} else if (!isVisiblePageContent(el)) {
+					yield* flush();
+					// visibility can be overridden by a descendant.
+					yield* findTextElementsAndSplit(el);
 				} else {
 					// An inline element
 					if (!start) start = node;
@@ -370,36 +390,28 @@ export async function* elementWalker(state: State): SectionGenerator {
 		}
 	};
 
-	for await (const root of state.roots) {
-		if (isExcludedPath(root)) continue;
-		yield* findTextElementsAndSplit(root, true);
-		observeElement(root);
-	}
-	if (!state.listenNew) return;
-
-	if (state.signal) {
-		if (state.signal.aborted) {
-			return;
-		} else {
-			state.signal.addEventListener("abort", notifier.throw);
-		}
-	}
-
+	const onAbort = () => notifier.notify();
 	try {
-		while (true) {
-			await notifier.wait();
-			for (const ref of rootsList) {
-				const element = ref.deref();
-				if (element) {
-					yield* findTextElementsAndSplit(element);
-				}
-			}
-			rootsList.length = 0;
+		for await (const root of state.roots) {
+			observeElement(root);
+			if (isExcludedPath(root)) continue;
+			yield* findTextElementsAndSplit(root, true);
 		}
-	} catch {
-		// Only triggered on abort
+		if (!state.listenNew || state.signal?.aborted) return;
+		window.addEventListener("resize", onResize);
+		state.signal?.addEventListener("abort", onAbort);
+
+		while (!state.signal?.aborted) {
+			if (rootsList.length === 0) await notifier.wait();
+			if (state.signal?.aborted) break;
+			const pendingRoots = rootsList.splice(0);
+			const elements = new Set(pendingRoots.map((ref) => ref.deref()));
+			for (const element of elements) {
+				if (element?.isConnected) yield* findTextElementsAndSplit(element);
+			}
+		}
 	} finally {
-		state.signal?.removeEventListener("abort", notifier.throw);
+		state.signal?.removeEventListener("abort", onAbort);
 		cleanup();
 	}
 }
@@ -475,9 +487,8 @@ export function getState(options: Options = {}): State {
 	const protectedExcludedSelector = [
 		...(options.protectedExcludedSelectors || []),
 		...excludedSelectors,
-		"[contenteditable]",
+		EDITABLE_SELECTOR,
 		"[hidden]",
-		"[aria-hidden='true']",
 		...((options.filterInteractive ?? true) ? INTERACTIVE_SELECTORS : []),
 	].join(", ");
 	return {

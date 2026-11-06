@@ -1,5 +1,6 @@
 import { MathMLToLaTeX } from "mathml-to-latex";
 import { iterateNodes } from "./iter-nodes";
+import { isVisiblePageContent } from "./page-content";
 import type { DOMSection } from "./parser/types";
 /**
  * Replace full-width characters with half-width characters in markdown syntax.
@@ -71,6 +72,7 @@ type ElementHandler = (
 function* iterateMarkdown(node: Node): Generator<string, void, unknown> {
 	// 1. Handle Text Nodes
 	if (node.nodeType === Node.TEXT_NODE) {
+		if (node.parentElement && !isVisiblePageContent(node.parentElement)) return;
 		const text = node.nodeValue || "";
 
 		// Preserve separators between adjacent inline nodes, such as the
@@ -80,6 +82,11 @@ function* iterateMarkdown(node: Node): Generator<string, void, unknown> {
 	// 2. Handle Element Nodes
 	else if (node.nodeType === Node.ELEMENT_NODE) {
 		const element = node as HTMLElement;
+		if (!isVisiblePageContent(element)) {
+			// CSS visibility may be restored by descendants, unlike display:none.
+			yield* iterateChildren(element);
+			return;
+		}
 		const tagName = element.tagName.toLowerCase();
 
 		const handler = tagHandlers[tagName];
