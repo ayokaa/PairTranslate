@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import "../test/dom-setup";
+import { Event as DOMEvent } from "linkedom";
 import { getMarkdownFromSection } from "../markdown";
 import { domListener } from "./base";
 import type { DOMSection, Options } from "./types";
@@ -260,4 +261,321 @@ describe("domListener", () => {
 
 		expect(texts).toEqual(["Lead-in.", "Inside main one.", "Inside main two."]);
 	});
+});
+
+describe("page content semantics", () => {
+	test("keeps visible aria-hidden notes, read-only text and nosnippet text", async () => {
+		const root = document.createElement("main");
+		root.innerHTML = `
+			<aside aria-hidden="true"><p>A useful margin note.</p></aside>
+			<div contenteditable="false"><p>A read-only article.</p></div>
+			<div data-nosnippet><p>Text excluded from search snippets.</p></div>
+		`;
+		document.body.append(root);
+		try {
+			expect(
+				(await collectSections(root, 3)).map(getMarkdownFromSection),
+			).toEqual([
+				"A useful margin note.",
+				"A read-only article.",
+				"Text excluded from search snippets.",
+			]);
+		} finally {
+			root.remove();
+		}
+	});
+
+	test("retains actual editor, explicit hidden and no-translate boundaries", async () => {
+		const root = document.createElement("main");
+		root.innerHTML = `
+			<div contenteditable="true"><div contenteditable="false"><p>An editor island.</p></div></div>
+			<div contenteditable="plaintext-only"><p>Editable plain text.</p></div>
+			<div contenteditable><p>Editable text.</p></div>
+			<div hidden><p>Hidden text.</p></div>
+			<p translate="no">Explicitly excluded text.</p>
+			<p>Ordinary article text.</p>
+		`;
+		document.body.append(root);
+		try {
+			expect(
+				(await collectSections(root, 1)).map(getMarkdownFromSection),
+			).toEqual(["Ordinary article text."]);
+		} finally {
+			root.remove();
+		}
+	});
+});
+
+test("attribute changes and resize recover skipped text without duplicate sections", async () => {
+	const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+	const previousObserver = Object.getOwnPropertyDescriptor(
+		globalThis,
+		"MutationObserver",
+	);
+	const view = document.defaultView!;
+	const originalStyle = view.getComputedStyle;
+	const events = new EventTarget();
+	Object.assign(globalThis, {
+		window: events,
+		MutationObserver: view.MutationObserver,
+	});
+	view.getComputedStyle = ((element: Element) => ({
+		display: (element as HTMLElement).style.display || "block",
+		visibility: "visible",
+		opacity: "1",
+		position: "static",
+		clip: "auto",
+	})) as typeof view.getComputedStyle;
+	const root = document.createElement("main");
+	root.innerHTML =
+		'<p>Initially visible prose.</p><div hidden><p>Newly opened prose.</p></div><div style="display:none"><p>Responsive prose.</p></div>';
+	document.body.append(root);
+	const controller = new AbortController();
+	const iterator = domListener({
+		roots: [root],
+		signal: controller.signal,
+		filterInteractive: false,
+	});
+	try {
+		const first = await iterator.next();
+		expect(first.done).toBe(false);
+		if (first.done) throw new Error("Expected initial section");
+		expect(getMarkdownFromSection(first.value)).toBe(
+			"Initially visible prose.",
+		);
+		const afterAttribute = iterator.next();
+		root.querySelector("[hidden]")!.removeAttribute("hidden");
+		const opened = await afterAttribute;
+		if (opened.done) throw new Error("Expected revealed section");
+		expect(getMarkdownFromSection(opened.value)).toBe("Newly opened prose.");
+		const afterResize = iterator.next();
+		(root.querySelector("[style]") as HTMLElement).style.display = "block";
+		events.dispatchEvent(new Event("resize"));
+		const responsive = await afterResize;
+		if (responsive.done) throw new Error("Expected responsive section");
+		expect(getMarkdownFromSection(responsive.value)).toBe("Responsive prose.");
+		const end = iterator.next();
+		controller.abort();
+		expect((await end).done).toBe(true);
+	} finally {
+		controller.abort();
+		await iterator.return();
+		root.remove();
+		view.getComputedStyle = originalStyle;
+		for (const [name, descriptor] of [
+			["window", previousWindow],
+			["MutationObserver", previousObserver],
+		] as const) {
+			if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+			else Reflect.deleteProperty(globalThis, name);
+		}
+	}
+});
+
+test("inline attribute rescans retain the paragraph boundary", async () => {
+	const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+	const previousObserver = Object.getOwnPropertyDescriptor(
+		globalThis,
+		"MutationObserver",
+	);
+	Object.assign(globalThis, {
+		window: new EventTarget(),
+		MutationObserver: document.defaultView!.MutationObserver,
+	});
+	const root = document.createElement("main");
+	root.innerHTML =
+		"<p><span>First fragment.</span><span>Second fragment.</span></p>";
+	document.body.append(root);
+	const controller = new AbortController();
+	const iterator = domListener({
+		roots: [root],
+		signal: controller.signal,
+		filterInteractive: false,
+	});
+	try {
+		const first = await iterator.next();
+		if (first.done) throw new Error("Expected paragraph");
+		expect(getMarkdownFromSection(first.value)).toBe(
+			"First fragment.Second fragment.",
+		);
+		const next = iterator.next();
+		root.querySelectorAll("span")[1].className = "highlighted";
+		const paragraph = document.createElement("p");
+		paragraph.textContent = "New independent paragraph.";
+		root.append(paragraph);
+		const second = await next;
+		if (second.done) throw new Error("Expected new paragraph");
+		expect(getMarkdownFromSection(second.value)).toBe(
+			"New independent paragraph.",
+		);
+	} finally {
+		controller.abort();
+		await iterator.return();
+		root.remove();
+		for (const [name, descriptor] of [
+			["window", previousWindow],
+			["MutationObserver", previousObserver],
+		] as const) {
+			if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+			else Reflect.deleteProperty(globalThis, name);
+		}
+	}
+});
+
+test("animation completion recovers visible text without an attribute mutation", async () => {
+	const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+	const previousObserver = Object.getOwnPropertyDescriptor(
+		globalThis,
+		"MutationObserver",
+	);
+	const view = document.defaultView!;
+	const originalStyle = view.getComputedStyle;
+	Object.assign(globalThis, {
+		window: new EventTarget(),
+		MutationObserver: view.MutationObserver,
+	});
+	let transparent = true;
+	view.getComputedStyle = ((element: Element) => ({
+		display: "block",
+		visibility: "visible",
+		opacity: element.id === "fading-prose" && transparent ? "0" : "1",
+		clip: "auto",
+		position: "static",
+	})) as typeof view.getComputedStyle;
+	const root = document.createElement("main");
+	root.innerHTML =
+		'<p>Visible seed paragraph.</p><p id="fading-prose">Newly visible animated prose.</p>';
+	document.body.append(root);
+	const controller = new AbortController();
+	const iterator = domListener({
+		roots: [root],
+		signal: controller.signal,
+		filterInteractive: false,
+	});
+	try {
+		await iterator.next();
+		const next = iterator.next();
+		// Let the initial scan finish while the animation is transparent.
+		await Promise.resolve();
+		await Promise.resolve();
+		transparent = false;
+		root
+			.querySelector("#fading-prose")!
+			.dispatchEvent(
+				new DOMEvent("animationend", { bubbles: true }) as unknown as Event,
+			);
+		const control = document.createElement("p");
+		control.textContent = "Later control paragraph.";
+		root.append(control);
+		const recovered = await next;
+		if (recovered.done) throw new Error("Expected recovered animation");
+		expect(getMarkdownFromSection(recovered.value)).toBe(
+			"Newly visible animated prose.",
+		);
+	} finally {
+		controller.abort();
+		await iterator.return();
+		root.remove();
+		view.getComputedStyle = originalStyle;
+		for (const [name, descriptor] of [
+			["window", previousWindow],
+			["MutationObserver", previousObserver],
+		] as const) {
+			if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+			else Reflect.deleteProperty(globalThis, name);
+		}
+	}
+});
+
+for (const nested of [false, true, "empty"] as const)
+	test(`expanded ${nested === "empty" ? "empty nested" : nested ? "nested" : "sibling"} inline ranges emit only newly visible text`, async () => {
+		const previousWindow = Object.getOwnPropertyDescriptor(
+			globalThis,
+			"window",
+		);
+		const previousObserver = Object.getOwnPropertyDescriptor(
+			globalThis,
+			"MutationObserver",
+		);
+		const view = document.defaultView!;
+		const originalStyle = view.getComputedStyle;
+		Object.assign(globalThis, {
+			window: new EventTarget(),
+			MutationObserver: view.MutationObserver,
+		});
+		view.getComputedStyle = ((element: Element) => ({
+			display: (element as HTMLElement).style.display || "block",
+			visibility: "visible",
+			opacity: "1",
+			clip: "auto",
+			position: "static",
+		})) as typeof view.getComputedStyle;
+		const root = document.createElement("main");
+		root.innerHTML = nested
+			? `<p><span>First prose.<span style="display:none">${nested === "empty" ? "" : "Second prose."}</span></span></p>`
+			: '<p>First prose.<span style="display:none">Second prose.</span></p>';
+		document.body.append(root);
+		const controller = new AbortController();
+		const iterator = domListener({
+			roots: [root],
+			signal: controller.signal,
+			filterInteractive: false,
+		});
+		try {
+			const first = await iterator.next();
+			if (first.done) throw new Error("Expected first prose");
+			expect(getMarkdownFromSection(first.value)).toBe("First prose.");
+			const next = iterator.next();
+			if (nested === "empty")
+				root.querySelector("[style]")!.textContent = "Second prose.";
+			root.querySelector("[style]")!.setAttribute("style", "display:inline");
+			const control = document.createElement("p");
+			control.textContent = "Control prose.";
+			root.append(control);
+			const second = await next;
+			if (second.done) throw new Error("Expected revealed prose");
+			expect(getMarkdownFromSection(second.value)).toBe("Second prose.");
+			expect(getMarkdownFromSection(first.value)).toBe("First prose.");
+			const third = await iterator.next();
+			if (third.done) throw new Error("Expected control");
+			expect(getMarkdownFromSection(third.value)).toBe("Control prose.");
+		} finally {
+			controller.abort();
+			await iterator.return();
+			root.remove();
+			view.getComputedStyle = originalStyle;
+			for (const [name, descriptor] of [
+				["window", previousWindow],
+				["MutationObserver", previousObserver],
+			] as const) {
+				if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+				else Reflect.deleteProperty(globalThis, name);
+			}
+		}
+	});
+
+test("splitting a hidden wrapper preserves source-backed math without DOM text", async () => {
+	const view = document.defaultView!;
+	const originalStyle = view.getComputedStyle;
+	view.getComputedStyle = ((element: Element) => ({
+		display: (element as HTMLElement).style.display || "block",
+		visibility: "visible",
+		opacity: "1",
+		position: "static",
+		clip: "auto",
+	})) as typeof view.getComputedStyle;
+	const root = document.createElement("main");
+	root.innerHTML =
+		'<p>Equation prose <span><math alttext="x"></math><span style="display:none">Hidden duplicate</span></span></p>';
+	document.body.append(root);
+	try {
+		const sections = await collectSections(root, 3);
+		const text = sections.map(getMarkdownFromSection).join("");
+		expect(text).toContain("Equation prose");
+		expect(text).toContain("$x$");
+		expect(text).not.toContain("Hidden duplicate");
+	} finally {
+		root.remove();
+		view.getComputedStyle = originalStyle;
+	}
 });

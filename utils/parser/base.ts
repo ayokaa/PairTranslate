@@ -7,7 +7,9 @@ import {
 	INTERACTIVE_SELECTORS,
 	TEXT_TAGS,
 } from "~/utils/constants";
+import { getMarkdownFromSection } from "~/utils/markdown";
 import { createNotifier } from "~/utils/notify";
+import { EDITABLE_SELECTOR, isVisiblePageContent } from "~/utils/page-content";
 import type {
 	ChainedGeneratorFn,
 	DOMSection,
@@ -201,7 +203,8 @@ export async function* elementWalker(state: State): SectionGenerator {
 		// Callers either pass a root through isExcludedPath or receive an
 		// element accepted by the tree walker. Keep ancestor checks out of this
 		// per-element hot path.
-		if (!state.textTags.has(el.tagName)) return false;
+		if (!state.textTags.has(el.tagName) || !isVisiblePageContent(el))
+			return false;
 		if (hasDirectText(el)) return true;
 
 		// Math may live in a leaf container with no direct text (e.g. p >
@@ -248,10 +251,36 @@ export async function* elementWalker(state: State): SectionGenerator {
 	};
 
 	const notifier = createNotifier();
-	const rootsList: WeakRef<Element>[] = [];
+	const rootsList: WeakRef<Node>[] = [];
+	const observedRoots: WeakRef<Node>[] = [];
+	const observedNodes = new WeakSet<Node>();
+
+	const queuePresentationScan = (element: Element) => {
+		if (isExcludedPath(element)) return;
+		// Attribute and animation changes must reproduce the initial paragraph
+		// boundary, not emit a second section for an inline descendant.
+		let root = element;
+		while (
+			root.parentElement &&
+			!state.blockTags.has(root.tagName) &&
+			!observedNodes.has(root)
+		) {
+			root = root.parentElement;
+		}
+		rootsList.push(new WeakRef(root));
+	};
+	const onPresentationChange = (event: Event) => {
+		if (event.target instanceof Element) queuePresentationScan(event.target);
+		if (rootsList.length > 0) notifier.notify();
+	};
 
 	const mutationHandler: MutationCallback = (mutations) => {
 		for (const mutation of mutations) {
+			if (mutation.type === "attributes") {
+				const target = mutation.target as Element;
+				queuePresentationScan(target);
+				continue;
+			}
 			for (const node of mutation.addedNodes) {
 				if (node.nodeType === Node.ELEMENT_NODE) {
 					const root = node as Element;
@@ -268,16 +297,32 @@ export async function* elementWalker(state: State): SectionGenerator {
 		? new MutationObserver(mutationHandler)
 		: null;
 
-	const observeElement = (el: Node) =>
+	const observeElement = (el: Node) => {
+		if (!state.listenNew || observedNodes.has(el)) return;
+		observedNodes.add(el);
+		observedRoots.push(new WeakRef(el));
+		el.addEventListener("animationend", onPresentationChange);
+		el.addEventListener("transitionend", onPresentationChange);
 		observer?.observe(el, {
 			childList: true,
 			subtree: true,
-			attributes: false,
+			attributes: true,
+			attributeFilter: ["class", "style", "hidden", "aria-hidden", "open"],
 			characterData: false,
 		});
+	};
 
+	const onResize = () => {
+		for (const ref of observedRoots) rootsList.push(ref);
+		notifier.notify();
+	};
 	const cleanup = () => {
 		observer?.disconnect();
+		for (const ref of observedRoots) {
+			ref.deref()?.removeEventListener("animationend", onPresentationChange);
+			ref.deref()?.removeEventListener("transitionend", onPresentationChange);
+		}
+		if (state.listenNew) window.removeEventListener("resize", onResize);
 	};
 
 	// Iframes run their own content script. Only shadow roots need traversal
@@ -337,6 +382,10 @@ export async function* elementWalker(state: State): SectionGenerator {
 
 					// Yield block element
 					yield* findTextElementsAndSplit(el);
+				} else if (!isVisiblePageContent(el)) {
+					yield* flush();
+					// visibility can be overridden by a descendant.
+					yield* findTextElementsAndSplit(el);
 				} else {
 					// An inline element
 					if (!start) start = node;
@@ -370,55 +419,116 @@ export async function* elementWalker(state: State): SectionGenerator {
 		}
 	};
 
-	for await (const root of state.roots) {
-		if (isExcludedPath(root)) continue;
-		yield* findTextElementsAndSplit(root, true);
-		observeElement(root);
-	}
-	if (!state.listenNew) return;
-
-	if (state.signal) {
-		if (state.signal.aborted) {
-			return;
-		} else {
-			state.signal.addEventListener("abort", notifier.throw);
-		}
-	}
-
+	const onAbort = () => notifier.notify();
 	try {
-		while (true) {
-			await notifier.wait();
-			for (const ref of rootsList) {
-				const element = ref.deref();
-				if (element) {
+		for await (const root of state.roots) {
+			observeElement(root);
+			if (isExcludedPath(root)) continue;
+			yield* findTextElementsAndSplit(root, true);
+		}
+		if (!state.listenNew || state.signal?.aborted) return;
+		window.addEventListener("resize", onResize);
+		state.signal?.addEventListener("abort", onAbort);
+
+		while (!state.signal?.aborted) {
+			if (rootsList.length === 0) await notifier.wait();
+			if (state.signal?.aborted) break;
+			const pendingRoots = rootsList.splice(0);
+			const elements = new Set(pendingRoots.map((ref) => ref.deref()));
+			for (const element of elements) {
+				if (!element?.isConnected) continue;
+				if (element instanceof Element)
 					yield* findTextElementsAndSplit(element);
+				else {
+					for (const child of findTextElements(element))
+						yield* paragraphSplitter(child);
 				}
 			}
-			rootsList.length = 0;
 		}
-	} catch {
-		// Only triggered on abort
 	} finally {
-		state.signal?.removeEventListener("abort", notifier.throw);
+		state.signal?.removeEventListener("abort", onAbort);
 		cleanup();
 	}
 }
 
-// Prevents processing the exact same DOM element reference multiple times.
-// Useful if MutationObserver triggers multiple times for the same node.
+// Track visible source nodes (text or atomic math), not just a range's start: a presentation
+// change can reveal new inline text while retaining the same paragraph start.
 export async function* emittedFilter(
 	_state: State,
 	prev: SectionGenerator,
 ): SectionGenerator {
-	const emittedNodes = new WeakSet<Node>();
+	const covered = new WeakSet<Node>();
+	const mathSelector =
+		"math, mjx-container, .katex, .mwe-math-element, .math.inline, .math.display";
+	const visibleSources = (node: Node): Node[] => {
+		if (node.nodeType === Node.TEXT_NODE) {
+			return showTextNode(node) &&
+				(!node.parentElement || isVisiblePageContent(node.parentElement))
+				? [node]
+				: [];
+		}
+		if (node instanceof Element) {
+			if (node.matches(`[${DATA_CONTAINER}]`)) return [];
+			if (node.matches(mathSelector))
+				return isVisiblePageContent(node) ? [node] : [];
+		}
+		return [...node.childNodes].flatMap(visibleSources);
+	};
+
+	const hasHiddenContent = (node: Node): boolean => {
+		// Math renderers deliberately keep hidden source/accessibility copies.
+		if (node instanceof Element) {
+			if (node.matches(`[${DATA_CONTAINER}]`)) return false;
+			if (!isVisiblePageContent(node)) return true;
+			if (node.matches(mathSelector)) return false;
+		}
+		if (node.nodeType === Node.TEXT_NODE) {
+			return (
+				showTextNode(node) &&
+				!!node.parentElement &&
+				!isVisiblePageContent(node.parentElement)
+			);
+		}
+		return [...node.childNodes].some(hasHiddenContent);
+	};
+	const uncovered = function* (node: Node): Generator<Node> {
+		const texts = visibleSources(node);
+		if (texts.length === 0 || texts.every((text) => covered.has(text))) return;
+		if (texts.every((text) => !covered.has(text)) && !hasHiddenContent(node)) {
+			yield node;
+		} else {
+			for (const child of node.childNodes) yield* uncovered(child);
+		}
+	};
 	for await (const section of prev) {
-		const node = section[0];
-		if (emittedNodes.has(node)) {
+		const nodes: Node[] = [];
+		for (let node: Node | null = section[0]; node; node = node.nextSibling) {
+			nodes.push(node);
+			if (node === section[1]) break;
+		}
+		const texts = nodes.flatMap(visibleSources);
+		if (texts.length === 0) continue;
+		if (
+			texts.every((text) => !covered.has(text)) &&
+			!nodes.some(hasHiddenContent)
+		) {
+			for (const text of texts) covered.add(text);
+			yield section;
 			continue;
 		}
-		emittedNodes.add(node);
-
-		yield section;
+		const additions = nodes.flatMap((node) => [...uncovered(node)]);
+		let start: Node | undefined;
+		let end: Node | undefined;
+		for (const node of additions) {
+			for (const text of visibleSources(node)) covered.add(text);
+			if (start && end && end.nextSibling !== node) {
+				yield [start, end];
+				start = undefined;
+			}
+			start ??= node;
+			end = node;
+		}
+		if (start && end) yield [start, end];
 	}
 }
 
@@ -427,7 +537,9 @@ export async function* textContentFilter(
 	prev: SectionGenerator,
 ): SectionGenerator {
 	for await (const section of prev) {
-		const text = getTextFromSection(section).trim();
+		const text =
+			getTextFromSection(section).trim() ||
+			getMarkdownFromSection(section).trim();
 
 		if (!hasMeaningfulChars(text)) {
 			continue;
@@ -475,9 +587,8 @@ export function getState(options: Options = {}): State {
 	const protectedExcludedSelector = [
 		...(options.protectedExcludedSelectors || []),
 		...excludedSelectors,
-		"[contenteditable]",
+		EDITABLE_SELECTOR,
 		"[hidden]",
-		"[aria-hidden='true']",
 		...((options.filterInteractive ?? true) ? INTERACTIVE_SELECTORS : []),
 	].join(", ");
 	return {

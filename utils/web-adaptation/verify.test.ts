@@ -226,3 +226,44 @@ test("unproved additions cannot make a root change look like an improvement", ()
 		]),
 	).toBe(false);
 });
+
+test("aside prose can be recovered and cannot be silently removed", () => {
+	const main = document.createElement("main");
+	const body = document.createElement("p");
+	const aside = document.createElement("aside");
+	const note = document.createElement("p");
+	aside.className = "sidenote";
+	aside.append(note);
+	main.append(body, aside);
+	const article = { text: "Article text", element: body };
+	const annotation = { text: "Important explanatory note", element: note };
+	expect(
+		improvesExtraction([article], [article, annotation], [annotation], true),
+	).toBe(true);
+	expect(improvesExtraction([article, annotation], [article])).toBe(false);
+	// A main-only root must not discard an ordinary standalone aside either.
+	main.after(aside);
+	document.body.append(main, aside);
+	try {
+		expect(
+			improvesExtraction([article, annotation], [article], [], false, [main]),
+		).toBe(false);
+	} finally {
+		main.remove();
+		aside.remove();
+	}
+});
+
+test("an aside with explicit navigation semantics remains removable", () => {
+	const aside = document.createElement("aside");
+	aside.setAttribute("role", "navigation");
+	const link = document.createElement("a");
+	aside.append(link);
+	const main = document.createElement("main");
+	const paragraph = document.createElement("p");
+	main.append(paragraph);
+	const body = { text: "Article text", element: paragraph };
+	expect(
+		improvesExtraction([body, { text: "Menu", element: link }], [body]),
+	).toBe(true);
+});

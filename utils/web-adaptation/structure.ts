@@ -1,12 +1,10 @@
 import { BLOCK_TAGS, DATA_CONTAINER } from "~/utils/constants";
+import { isProtectedPageContent } from "~/utils/page-content";
 
-const IGNORED = `script, style, noscript, svg, canvas, input, textarea, select, [contenteditable], [${DATA_CONTAINER}]`;
+const IGNORED = `script, style, noscript, svg, canvas, input, textarea, select, [${DATA_CONTAINER}]`;
 
 export function isSafePageElement(element: Element): boolean {
-	return (
-		!element.closest(IGNORED) &&
-		!element.closest("[hidden], [aria-hidden='true']")
-	);
+	return !element.closest(IGNORED) && !isProtectedPageContent(element);
 }
 
 export function stableClasses(element: Element): string[] {
@@ -116,7 +114,11 @@ export function getLegacyStructureKey(doc: Document): string {
 		parts.length < MAX_STRUCTURE_PARTS &&
 		visited++ < MAX_STRUCTURE_NODES
 	) {
-		if (isSafePageElement(node)) {
+		// Keep the historical hash algorithm intact for persisted pre-layout rules.
+		if (
+			isSafePageElement(node) &&
+			!node.closest("[contenteditable], [aria-hidden='true']")
+		) {
 			parts.push(
 				`${node.tagName.toLowerCase()}.${stableClasses(node).join(".")}:${safeRole(node) ?? ""}`,
 			);

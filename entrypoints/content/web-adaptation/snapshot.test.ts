@@ -207,3 +207,33 @@ test("matches snapshot evidence by both normalized text and DOM path", () => {
 		]),
 	).toEqual([]);
 });
+
+test("snapshot retains visible accessibility-hidden and read-only note evidence", () => {
+	document.body.innerHTML = `<main><aside aria-hidden="true"><p class="note">Explanatory margin note</p></aside>
+	<div contenteditable="false"><p class="readonly">Read-only prose</p></div>
+	<div contenteditable="true"><p class="editor">Editor text</p></div></main>`;
+	const samples = [...document.querySelectorAll("p")].map((element) => ({
+		element,
+		text: element.textContent ?? "",
+	}));
+	const snapshot = buildPageSnapshot([], samples);
+	expect(snapshot.untranslated.map((item) => item.text)).toEqual([
+		"Explanatory margin note",
+		"Read-only prose",
+	]);
+	expect(snapshot.outline.some((item) => item.classes?.includes("note"))).toBe(
+		true,
+	);
+	expect(
+		snapshot.outline.some((item) => item.classes?.includes("editor")),
+	).toBe(false);
+});
+
+test("redacts email candidates without rescanning long non-email word suffixes", () => {
+	const element = document.querySelector("p")!;
+	const text = `${"x".repeat(MAX_ADAPTATION_SOURCE_CHARACTERS - 100)} contact: test+tag@example.invalid; malformed@invalid`;
+	const snapshot = buildPageSnapshot([], [{ element, text }]);
+	expect(snapshot.untranslated[0]?.text).toBe(
+		`${"x".repeat(MAX_ADAPTATION_SOURCE_CHARACTERS - 100)} contact: [email]; malformed@invalid`,
+	);
+});

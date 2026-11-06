@@ -13,6 +13,7 @@ import {
 	resolvePatchForDocument,
 	upsertAdaptationRule,
 	validatePatch,
+	validateSuggestedPatch,
 } from "./model";
 
 const patch: AdaptationPatch = {
@@ -779,4 +780,57 @@ test("the just-verified rule survives a full host budget with future stored time
 			proposal.structureKey,
 		)?.patch,
 	).toEqual(patch);
+});
+
+test("includes allow accessibility-hidden, read-only and nosnippet body content", () => {
+	const root = document.createElement("main");
+	root.innerHTML = `<aside aria-hidden="true"><p class="recover-note">Note text</p></aside>
+	<div contenteditable="false"><p class="recover-readonly">Read-only text</p></div>
+	<div data-nosnippet><p class="recover-nosnippet">Article text</p></div>`;
+	document.body.append(root);
+	try {
+		for (const selector of [
+			".recover-note",
+			".recover-readonly",
+			".recover-nosnippet",
+		]) {
+			expect(
+				validatePatch({ includes: [selector] }, document)?.includes,
+			).toEqual([selector]);
+		}
+	} finally {
+		root.remove();
+	}
+});
+
+test("a bad suggestion entry does not discard independent valid changes", () => {
+	const root = document.createElement("main");
+	root.innerHTML =
+		'<nav class="audit-nav">Navigation</nav><p class="audit-prose">Useful prose</p><p class="audit-code">Text <code>code</code></p>';
+	document.body.append(root);
+	try {
+		const result = validateSuggestedPatch(
+			{
+				roots: [],
+				excludes: ["nav.audit-nav", "body"],
+				includes: ["p.audit-prose", "p.audit-code", "p:has(script)"],
+				promoteTags: ["P", "SCRIPT"],
+			},
+			document,
+		);
+		expect(result).toEqual({
+			roots: [],
+			excludes: ["nav.audit-nav"],
+			includes: ["p.audit-prose"],
+			promoteTags: ["P"],
+		});
+		expect(
+			validateSuggestedPatch(
+				{ roots: [], excludes: ["body"], includes: [], promoteTags: [] },
+				document,
+			),
+		).toBeUndefined();
+	} finally {
+		root.remove();
+	}
 });

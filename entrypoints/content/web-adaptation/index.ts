@@ -21,7 +21,7 @@ import {
 	normalizePathname,
 	parseAdaptationRules,
 	patchesEqual,
-	validatePatch,
+	validateSuggestedPatch,
 } from "~/utils/web-adaptation/model";
 import {
 	getStructureKey,
@@ -295,7 +295,9 @@ async function analyzePage(
 		const hasAdditions = Object.values(incoming).some(
 			(items) => items.length > 0,
 		);
-		const patch = hasAdditions ? validatePatch(incoming, document) : incoming;
+		const patch = hasAdditions
+			? validateSuggestedPatch(incoming, document)
+			: incoming;
 		if (!patch) return "failed";
 		const finalPatch = appendAdaptationPatch(baselinePatch, patch, removals);
 		if (patchesEqual(baselinePatch, finalPatch)) {

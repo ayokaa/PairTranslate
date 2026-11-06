@@ -172,7 +172,6 @@ export const EXCLUDED_SELECTORS = [
 	"[translate=false]",
 	"[translate=no]",
 	".notranslate",
-	"[data-nosnippet]",
 	"img",
 	'[role="img"]',
 	"[contenteditable=true]",

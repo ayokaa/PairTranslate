@@ -5,7 +5,7 @@ export type ExtractionSample = { text: string; element: Element };
 const compact = (value: string) => value.replace(/\s+/g, "").toLowerCase();
 
 const CHROME_SELECTOR =
-	"nav, header, footer, aside, [role='navigation'], [role='banner'], [role='contentinfo']";
+	"nav, header, footer, [role='navigation'], [role='banner'], [role='contentinfo']";
 const CHROME_NAME =
 	/(?:^|[\s_-])(?:nav|menu|sidebar|toc|breadcrumb|a11y)(?:$|[\s_-])/i;
 

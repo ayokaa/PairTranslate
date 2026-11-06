@@ -340,3 +340,70 @@ test("an explicit removal must name a saved exclusion without also re-adding it"
 	expect(await runWebAdaptation("manual")).toBe("failed");
 	expect(settings.webAdaptation.rules).toEqual([original]);
 });
+
+test("manual analysis recovers an explanatory aside excluded by a saved rule", async () => {
+	parserIndex = null;
+	const aside = document.createElement("aside");
+	aside.className = "sidenote";
+	aside.setAttribute("aria-hidden", "true");
+	aside.innerHTML =
+		'<p class="margin-prose">Useful explanatory margin note</p>';
+	document.querySelector("main")!.append(aside);
+	settings.webAdaptation.rules = [
+		savedRule({
+			roots: [],
+			excludes: ["aside.sidenote"],
+			includes: [],
+			promoteTags: [],
+		}),
+	];
+	modelOutput = {
+		roots: [],
+		excludes: [],
+		includes: [],
+		promoteTags: [],
+		removeExcludes: ["aside.sidenote"],
+	};
+	expect(await runWebAdaptation("manual")).toBe("updated");
+	expect(
+		payload.untranslated.some(
+			(item) => item.text === "Useful explanatory margin note",
+		),
+	).toBe(true);
+	expect(await extractedText()).toContain("Useful explanatory margin note");
+	expect(settings.webAdaptation.rules).toHaveLength(0);
+});
+
+test("valid recovery survives an invalid sibling selector and still trials all changes", async () => {
+	modelOutput = {
+		roots: [],
+		excludes: ["body"],
+		includes: ["p.recovered"],
+		promoteTags: [],
+	};
+	expect(await runWebAdaptation("manual")).toBe("added");
+	expect(settings.webAdaptation.rules[0].patch).toEqual({
+		roots: [],
+		excludes: [],
+		includes: ["p.recovered"],
+		promoteTags: [],
+	});
+	expect(await extractedText()).toContain("Useful missed body paragraph");
+});
+
+test("salvaging selectors never bypasses preservation of useful aside text", async () => {
+	parserIndex = null;
+	const aside = document.createElement("aside");
+	aside.className = "explanation";
+	aside.innerHTML = "<p>Important explanatory prose</p>";
+	document.querySelector("main")!.append(aside);
+	modelOutput = {
+		roots: [],
+		excludes: ["aside.explanation", "body"],
+		includes: [],
+		promoteTags: [],
+	};
+	expect(await runWebAdaptation("manual")).toBe("unchanged");
+	expect(settings.webAdaptation.rules).toHaveLength(0);
+	expect(await extractedText()).toContain("Important explanatory prose");
+});
