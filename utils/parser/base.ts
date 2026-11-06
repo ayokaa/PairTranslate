@@ -450,21 +450,67 @@ export async function* elementWalker(state: State): SectionGenerator {
 	}
 }
 
-// Prevents processing the exact same DOM element reference multiple times.
-// Useful if MutationObserver triggers multiple times for the same node.
+// Track visible text coverage, not only a range's first node: a presentation
+// change can reveal new inline text while retaining the same paragraph start.
 export async function* emittedFilter(
 	_state: State,
 	prev: SectionGenerator,
 ): SectionGenerator {
-	const emittedNodes = new WeakSet<Node>();
+	const covered = new WeakSet<Node>();
+	const emptyStarts = new WeakSet<Node>();
+	const visibleTexts = (node: Node): Node[] => {
+		if (node.nodeType === Node.TEXT_NODE) {
+			return showTextNode(node) &&
+				(!node.parentElement || isVisiblePageContent(node.parentElement))
+				? [node]
+				: [];
+		}
+		if (node instanceof Element && node.matches(`[${DATA_CONTAINER}]`))
+			return [];
+		return [...node.childNodes].flatMap(visibleTexts);
+	};
+	const uncovered = function* (node: Node): Generator<Node> {
+		const texts = visibleTexts(node);
+		if (texts.length === 0) return;
+		if (texts.every((text) => !covered.has(text))) {
+			yield node;
+		} else {
+			for (const child of node.childNodes) yield* uncovered(child);
+		}
+	};
 	for await (const section of prev) {
-		const node = section[0];
-		if (emittedNodes.has(node)) {
+		const nodes: Node[] = [];
+		for (let node: Node | null = section[0]; node; node = node.nextSibling) {
+			nodes.push(node);
+			if (node === section[1]) break;
+		}
+		const texts = nodes.flatMap(visibleTexts);
+		if (texts.length === 0) {
+			// Preserve non-text sections such as source-backed math containers.
+			if (!emptyStarts.has(section[0])) {
+				emptyStarts.add(section[0]);
+				yield section;
+			}
 			continue;
 		}
-		emittedNodes.add(node);
-
-		yield section;
+		if (texts.every((text) => !covered.has(text))) {
+			for (const text of texts) covered.add(text);
+			yield section;
+			continue;
+		}
+		const additions = nodes.flatMap((node) => [...uncovered(node)]);
+		let start: Node | undefined;
+		let end: Node | undefined;
+		for (const node of additions) {
+			for (const text of visibleTexts(node)) covered.add(text);
+			if (start && end && end.nextSibling !== node) {
+				yield [start, end];
+				start = undefined;
+			}
+			start ??= node;
+			end = node;
+		}
+		if (start && end) yield [start, end];
 	}
 }
 

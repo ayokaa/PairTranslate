@@ -486,3 +486,62 @@ test("animation completion recovers visible text without an attribute mutation",
 		}
 	}
 });
+
+test("expanded inline ranges emit only newly visible text", async () => {
+	const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+	const previousObserver = Object.getOwnPropertyDescriptor(
+		globalThis,
+		"MutationObserver",
+	);
+	const view = document.defaultView!;
+	const originalStyle = view.getComputedStyle;
+	Object.assign(globalThis, {
+		window: new EventTarget(),
+		MutationObserver: view.MutationObserver,
+	});
+	view.getComputedStyle = ((element: Element) => ({
+		display: (element as HTMLElement).style.display || "block",
+		visibility: "visible",
+		opacity: "1",
+		clip: "auto",
+		position: "static",
+	})) as typeof view.getComputedStyle;
+	const root = document.createElement("main");
+	root.innerHTML =
+		'<p>First prose.<span style="display:none">Second prose.</span></p>';
+	document.body.append(root);
+	const controller = new AbortController();
+	const iterator = domListener({
+		roots: [root],
+		signal: controller.signal,
+		filterInteractive: false,
+	});
+	try {
+		const first = await iterator.next();
+		if (first.done) throw new Error("Expected first prose");
+		expect(getMarkdownFromSection(first.value)).toBe("First prose.");
+		const next = iterator.next();
+		root.querySelector("span")!.setAttribute("style", "display:inline");
+		const control = document.createElement("p");
+		control.textContent = "Control prose.";
+		root.append(control);
+		const second = await next;
+		if (second.done) throw new Error("Expected revealed prose");
+		expect(getMarkdownFromSection(second.value)).toBe("Second prose.");
+		const third = await iterator.next();
+		if (third.done) throw new Error("Expected control");
+		expect(getMarkdownFromSection(third.value)).toBe("Control prose.");
+	} finally {
+		controller.abort();
+		await iterator.return();
+		root.remove();
+		view.getComputedStyle = originalStyle;
+		for (const [name, descriptor] of [
+			["window", previousWindow],
+			["MutationObserver", previousObserver],
+		] as const) {
+			if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+			else Reflect.deleteProperty(globalThis, name);
+		}
+	}
+});
