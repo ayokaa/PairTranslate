@@ -45,6 +45,7 @@ export function TranslateNodePortal(props: {
 		insert(container, content);
 		parent.setAttribute(DATA_TRANSLATED, "");
 		parent.insertBefore(container, end.nextSibling);
+		observeMarginNoteLayout(parent);
 		props.ref?.(container);
 
 		onCleanup(() => {
@@ -54,6 +55,27 @@ export function TranslateNodePortal(props: {
 	});
 
 	return marker;
+}
+
+let marginNoteLayoutFrame: number | undefined;
+
+function observeMarginNoteLayout(parent: Element) {
+	// This site's script observes the article, but not its absolutely positioned
+	// note clones. Translation can grow a note after the article stops resizing.
+	const note = parent.closest("aside.sidenote");
+	if (!note || typeof ResizeObserver === "undefined") return;
+	if (window.location.hostname.replace(/^www\./, "") !== "seangoedecke.com")
+		return;
+	const observer = new ResizeObserver(() => {
+		if (!note.isConnected || marginNoteLayoutFrame !== undefined) return;
+		marginNoteLayoutFrame = requestAnimationFrame(() => {
+			marginNoteLayoutFrame = undefined;
+			// Let the site's existing layout algorithm preserve its own anchors/gap.
+			window.dispatchEvent(new Event("resize"));
+		});
+	});
+	observer.observe(note);
+	onCleanup(() => observer.disconnect());
 }
 
 function hideNodes(start: Node, end: Node | null) {

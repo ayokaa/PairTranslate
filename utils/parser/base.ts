@@ -7,6 +7,7 @@ import {
 	INTERACTIVE_SELECTORS,
 	TEXT_TAGS,
 } from "~/utils/constants";
+import { getMarkdownFromSection } from "~/utils/markdown";
 import { createNotifier } from "~/utils/notify";
 import { EDITABLE_SELECTOR, isVisiblePageContent } from "~/utils/page-content";
 import type {
@@ -450,34 +451,37 @@ export async function* elementWalker(state: State): SectionGenerator {
 	}
 }
 
-// Track visible text coverage, not only a range's first node: a presentation
+// Track visible source nodes (text or atomic math), not just a range's start: a presentation
 // change can reveal new inline text while retaining the same paragraph start.
 export async function* emittedFilter(
 	_state: State,
 	prev: SectionGenerator,
 ): SectionGenerator {
 	const covered = new WeakSet<Node>();
-	const emptyStarts = new WeakSet<Node>();
-	const visibleTexts = (node: Node): Node[] => {
+	const mathSelector =
+		"math, mjx-container, .katex, .mwe-math-element, .math.inline, .math.display";
+	const visibleSources = (node: Node): Node[] => {
 		if (node.nodeType === Node.TEXT_NODE) {
 			return showTextNode(node) &&
 				(!node.parentElement || isVisiblePageContent(node.parentElement))
 				? [node]
 				: [];
 		}
-		if (node instanceof Element && node.matches(`[${DATA_CONTAINER}]`))
-			return [];
-		return [...node.childNodes].flatMap(visibleTexts);
+		if (node instanceof Element) {
+			if (node.matches(`[${DATA_CONTAINER}]`)) return [];
+			if (node.matches(mathSelector))
+				return isVisiblePageContent(node) ? [node] : [];
+		}
+		return [...node.childNodes].flatMap(visibleSources);
 	};
-	const mathSelector =
-		"math, mjx-container, .katex, .mwe-math-element, .math.inline, .math.display";
-	const hasHiddenText = (node: Node): boolean => {
+
+	const hasHiddenContent = (node: Node): boolean => {
 		// Math renderers deliberately keep hidden source/accessibility copies.
-		if (
-			node instanceof Element &&
-			(node.matches(`[${DATA_CONTAINER}]`) || node.matches(mathSelector))
-		)
-			return false;
+		if (node instanceof Element) {
+			if (node.matches(`[${DATA_CONTAINER}]`)) return false;
+			if (!isVisiblePageContent(node)) return true;
+			if (node.matches(mathSelector)) return false;
+		}
 		if (node.nodeType === Node.TEXT_NODE) {
 			return (
 				showTextNode(node) &&
@@ -485,12 +489,12 @@ export async function* emittedFilter(
 				!isVisiblePageContent(node.parentElement)
 			);
 		}
-		return [...node.childNodes].some(hasHiddenText);
+		return [...node.childNodes].some(hasHiddenContent);
 	};
 	const uncovered = function* (node: Node): Generator<Node> {
-		const texts = visibleTexts(node);
-		if (texts.length === 0) return;
-		if (texts.every((text) => !covered.has(text)) && !hasHiddenText(node)) {
+		const texts = visibleSources(node);
+		if (texts.length === 0 || texts.every((text) => covered.has(text))) return;
+		if (texts.every((text) => !covered.has(text)) && !hasHiddenContent(node)) {
 			yield node;
 		} else {
 			for (const child of node.childNodes) yield* uncovered(child);
@@ -502,24 +506,11 @@ export async function* emittedFilter(
 			nodes.push(node);
 			if (node === section[1]) break;
 		}
-		const texts = nodes.flatMap(visibleTexts);
-		if (texts.length === 0) {
-			// Empty ordinary wrappers must not become pending ranges that later
-			// swallow revealed descendants. Keep source-backed math atomic.
-			const hasMath = nodes.some(
-				(node) =>
-					node instanceof Element &&
-					(node.matches(mathSelector) || node.querySelector(mathSelector)),
-			);
-			if (hasMath && !emptyStarts.has(section[0])) {
-				emptyStarts.add(section[0]);
-				yield section;
-			}
-			continue;
-		}
+		const texts = nodes.flatMap(visibleSources);
+		if (texts.length === 0) continue;
 		if (
 			texts.every((text) => !covered.has(text)) &&
-			!nodes.some(hasHiddenText)
+			!nodes.some(hasHiddenContent)
 		) {
 			for (const text of texts) covered.add(text);
 			yield section;
@@ -529,7 +520,7 @@ export async function* emittedFilter(
 		let start: Node | undefined;
 		let end: Node | undefined;
 		for (const node of additions) {
-			for (const text of visibleTexts(node)) covered.add(text);
+			for (const text of visibleSources(node)) covered.add(text);
 			if (start && end && end.nextSibling !== node) {
 				yield [start, end];
 				start = undefined;
@@ -546,7 +537,9 @@ export async function* textContentFilter(
 	prev: SectionGenerator,
 ): SectionGenerator {
 	for await (const section of prev) {
-		const text = getTextFromSection(section).trim();
+		const text =
+			getTextFromSection(section).trim() ||
+			getMarkdownFromSection(section).trim();
 
 		if (!hasMeaningfulChars(text)) {
 			continue;

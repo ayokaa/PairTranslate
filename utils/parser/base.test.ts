@@ -487,8 +487,8 @@ test("animation completion recovers visible text without an attribute mutation",
 	}
 });
 
-for (const nested of [false, true])
-	test(`expanded ${nested ? "nested" : "sibling"} inline ranges emit only newly visible text`, async () => {
+for (const nested of [false, true, "empty"] as const)
+	test(`expanded ${nested === "empty" ? "empty nested" : nested ? "nested" : "sibling"} inline ranges emit only newly visible text`, async () => {
 		const previousWindow = Object.getOwnPropertyDescriptor(
 			globalThis,
 			"window",
@@ -512,7 +512,7 @@ for (const nested of [false, true])
 		})) as typeof view.getComputedStyle;
 		const root = document.createElement("main");
 		root.innerHTML = nested
-			? '<p><span>First prose.<span style="display:none">Second prose.</span></span></p>'
+			? `<p><span>First prose.<span style="display:none">${nested === "empty" ? "" : "Second prose."}</span></span></p>`
 			: '<p>First prose.<span style="display:none">Second prose.</span></p>';
 		document.body.append(root);
 		const controller = new AbortController();
@@ -526,6 +526,8 @@ for (const nested of [false, true])
 			if (first.done) throw new Error("Expected first prose");
 			expect(getMarkdownFromSection(first.value)).toBe("First prose.");
 			const next = iterator.next();
+			if (nested === "empty")
+				root.querySelector("[style]")!.textContent = "Second prose.";
 			root.querySelector("[style]")!.setAttribute("style", "display:inline");
 			const control = document.createElement("p");
 			control.textContent = "Control prose.";
@@ -551,3 +553,29 @@ for (const nested of [false, true])
 			}
 		}
 	});
+
+test("splitting a hidden wrapper preserves source-backed math without DOM text", async () => {
+	const view = document.defaultView!;
+	const originalStyle = view.getComputedStyle;
+	view.getComputedStyle = ((element: Element) => ({
+		display: (element as HTMLElement).style.display || "block",
+		visibility: "visible",
+		opacity: "1",
+		position: "static",
+		clip: "auto",
+	})) as typeof view.getComputedStyle;
+	const root = document.createElement("main");
+	root.innerHTML =
+		'<p>Equation prose <span><math alttext="x"></math><span style="display:none">Hidden duplicate</span></span></p>';
+	document.body.append(root);
+	try {
+		const sections = await collectSections(root, 3);
+		const text = sections.map(getMarkdownFromSection).join("");
+		expect(text).toContain("Equation prose");
+		expect(text).toContain("$x$");
+		expect(text).not.toContain("Hidden duplicate");
+	} finally {
+		root.remove();
+		view.getComputedStyle = originalStyle;
+	}
+});
