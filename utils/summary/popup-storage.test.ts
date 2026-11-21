@@ -34,7 +34,8 @@ const mockBrowser = {
 mock.module("#imports", () => ({ browser: mockBrowser }));
 mock.module("@wxt-dev/browser", () => ({ browser: mockBrowser }));
 
-const { sanitizeGeometry, clampToViewport } = await import("./popup-storage");
+const { sanitizeGeometry, clampToViewport, adaptGeometryToViewport } =
+	await import("./popup-storage");
 const { loadPopupGeometry, savePopupGeometry, resetPopupGeometry } =
 	await import("./popup-storage");
 
@@ -117,6 +118,53 @@ describe("sanitizeGeometry", () => {
 		});
 		expect(result).toEqual({ x: 1, y: 2, width: 300, height: 300 });
 		expect(result).not.toHaveProperty("updatedAt");
+	});
+
+	test("preserves valid viewportWidth and viewportHeight", () => {
+		expect(
+			sanitizeGeometry({
+				x: 100,
+				y: 200,
+				width: 420,
+				height: 520,
+				viewportWidth: 1920,
+				viewportHeight: 1080,
+				updatedAt: 999,
+			}),
+		).toEqual({
+			x: 100,
+			y: 200,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		});
+	});
+
+	test("strips invalid or incomplete viewport dimensions while keeping valid geometry", () => {
+		const base = { x: 10, y: 20, width: 300, height: 300 };
+		expect(sanitizeGeometry({ ...base, viewportWidth: 1920 })).toEqual(base);
+		expect(sanitizeGeometry({ ...base, viewportHeight: 1080 })).toEqual(base);
+		expect(
+			sanitizeGeometry({ ...base, viewportWidth: 0, viewportHeight: 1080 }),
+		).toEqual(base);
+		expect(
+			sanitizeGeometry({ ...base, viewportWidth: -100, viewportHeight: 1080 }),
+		).toEqual(base);
+		expect(
+			sanitizeGeometry({
+				...base,
+				viewportWidth: Number.NaN,
+				viewportHeight: 1080,
+			}),
+		).toEqual(base);
+		expect(
+			sanitizeGeometry({
+				...base,
+				viewportWidth: "1920",
+				viewportHeight: 1080,
+			}),
+		).toEqual(base);
 	});
 });
 
@@ -279,6 +327,195 @@ describe("clampToViewport", () => {
 	});
 });
 
+describe("adaptGeometryToViewport", () => {
+	test("preserves exact geometry when viewport size is unchanged", () => {
+		const saved = {
+			x: 1400,
+			y: 200,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		};
+		expect(adaptGeometryToViewport(saved, 1920, 1080)).toEqual(saved);
+	});
+
+	test("scales size and position proportionally when viewport shrinks", () => {
+		const saved = {
+			x: 1400,
+			y: 400,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		};
+		expect(adaptGeometryToViewport(saved, 960, 540)).toEqual({
+			x: 700,
+			y: 200,
+			width: 210,
+			height: 260,
+			viewportWidth: 960,
+			viewportHeight: 540,
+		});
+	});
+
+	test("scales size and position proportionally when viewport grows", () => {
+		const saved = {
+			x: 700,
+			y: 200,
+			width: 210,
+			height: 260,
+			viewportWidth: 960,
+			viewportHeight: 540,
+		};
+		expect(adaptGeometryToViewport(saved, 1920, 1080)).toEqual({
+			x: 1400,
+			y: 400,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		});
+	});
+
+	test("adapts geometry that would be offscreen without scaling", () => {
+		const saved = {
+			x: 1488,
+			y: 548,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		};
+		// Without scaling, x=1488 > 1000-12 would be rejected as offscreen.
+		const result = adaptGeometryToViewport(saved, 1000, 700, 12);
+		expect(result).not.toBeNull();
+		expect(result!.width).toBe(219);
+		expect(result!.height).toBe(337);
+		expect(result!.x).toBe(1000 - 219 - 12);
+		expect(result!.y).toBe(700 - 337 - 12);
+	});
+
+	test("respects minimum dimensions while keeping centered alignment when shrinking", () => {
+		const centered = {
+			x: 750,
+			y: 280,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		};
+		const result = adaptGeometryToViewport(centered, 600, 400, 12);
+		expect(result).not.toBeNull();
+		expect(result!.width).toBe(200);
+		expect(result!.height).toBe(193);
+		expect(result!.x).toBe(200);
+		expect(result!.y).toBe(104);
+	});
+
+	test("keeps bottom-right anchored popup inside margins when width hits minimum", () => {
+		const bottomRight = {
+			x: 1488,
+			y: 548,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		};
+		const result = adaptGeometryToViewport(bottomRight, 600, 400, 12);
+		expect(result).not.toBeNull();
+		expect(result!.width).toBe(200);
+		expect(result!.x).toBe(600 - 200 - 12);
+		expect(result!.y).toBe(400 - result!.height - 12);
+	});
+
+	test("clamps below minimum size when viewport itself is narrower than min size", () => {
+		const saved = {
+			x: 100,
+			y: 100,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		};
+		const result = adaptGeometryToViewport(saved, 180, 140, 12);
+		expect(result).toEqual({
+			x: 12,
+			y: 12,
+			width: 156,
+			height: 116,
+			viewportWidth: 180,
+			viewportHeight: 140,
+		});
+	});
+
+	test("returns null when target viewport cannot fit margins", () => {
+		const saved = {
+			x: 100,
+			y: 100,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		};
+		expect(adaptGeometryToViewport(saved, 24, 800, 12)).toBeNull();
+		expect(adaptGeometryToViewport(saved, 800, 20, 12)).toBeNull();
+		expect(adaptGeometryToViewport(saved, 0, 800, 12)).toBeNull();
+		expect(adaptGeometryToViewport(saved, Number.NaN, 800, 12)).toBeNull();
+	});
+
+	test("returns null when geometry was outside its recorded viewport", () => {
+		const corrupted = {
+			x: 5000,
+			y: 100,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		};
+		expect(adaptGeometryToViewport(corrupted, 1280, 720, 12)).toBeNull();
+	});
+
+	test("falls back to clampToViewport for legacy geometry without viewport size", () => {
+		const legacy = { x: 700, y: 100, width: 400, height: 300 };
+		expect(adaptGeometryToViewport(legacy, 1000, 800, 12)).toEqual({
+			x: 588,
+			y: 100,
+			width: 400,
+			height: 300,
+			viewportWidth: 1000,
+			viewportHeight: 800,
+		});
+		expect(
+			adaptGeometryToViewport(
+				{ x: 1400, y: 100, width: 400, height: 300 },
+				1000,
+				800,
+				12,
+			),
+		).toBeNull();
+	});
+
+	test("handles geometry that filled or exceeded original viewport width", () => {
+		const fullWidth = {
+			x: 12,
+			y: 12,
+			width: 400,
+			height: 300,
+			viewportWidth: 400,
+			viewportHeight: 300,
+		};
+		expect(adaptGeometryToViewport(fullWidth, 800, 600, 12)).toEqual({
+			x: 12,
+			y: 12,
+			width: 776,
+			height: 576,
+			viewportWidth: 800,
+			viewportHeight: 600,
+		});
+	});
+});
+
 describe("loadPopupGeometry / savePopupGeometry", () => {
 	test("returns null when nothing is stored", async () => {
 		resetStorage();
@@ -419,12 +656,28 @@ describe("loadPopupGeometry / savePopupGeometry", () => {
 		// mock holds the data in localStore, which we deliberately do NOT clear
 		// here to model a browser restart where the extension storage survives.
 		resetStorage();
-		const geometry = { x: 77, y: 88, width: 420, height: 520 };
+		const geometry = {
+			x: 77,
+			y: 88,
+			width: 420,
+			height: 520,
+			viewportWidth: 1920,
+			viewportHeight: 1080,
+		};
 		await savePopupGeometry(geometry, "https://example.com/page");
 
 		// A subsequent load (e.g. after a long delay / browser restart) must
-		// still find the same geometry.
+		// still find the same geometry including recorded viewport size.
 		const loaded = await loadPopupGeometry("https://example.com/other-page");
 		expect(loaded).toEqual(geometry);
+	});
+
+	test("ignores save for invalid geometry dimensions", async () => {
+		resetStorage();
+		await savePopupGeometry(
+			{ x: 0, y: 0, width: 100, height: 100 },
+			"https://example.com/page",
+		);
+		expect(await loadPopupGeometry("https://example.com/page")).toBeNull();
 	});
 });

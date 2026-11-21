@@ -2,6 +2,7 @@ import { GripHorizontal, Pin, X } from "lucide-solid";
 import {
 	createContext,
 	createEffect,
+	createMemo,
 	createSignal,
 	For,
 	type JSX,
@@ -44,6 +45,7 @@ export interface PopupActions {
 	close: () => void;
 	setPosition: (x: number, y: number) => void;
 	setSize: (width: number, height: number) => void;
+	setGeometry: (x: number, y: number, width: number, height: number) => void;
 	isVisible: () => boolean;
 }
 
@@ -79,6 +81,8 @@ export const PopupProvider = (props: { children: JSX.Element }) => {
 				close: () => setState("visible", false),
 				setPosition: (x: number, y: number) => setState({ x, y }),
 				setSize: (width: number, height: number) => setState({ width, height }),
+				setGeometry: (x: number, y: number, width: number, height: number) =>
+					setState({ x, y, width, height }),
 				isVisible: () => state.visible,
 			};
 		},
@@ -147,8 +151,12 @@ const PopupImpl = (props: ImplProps) => {
 
 	let dragRef: HTMLDivElement | undefined;
 
-	const updatePositionBounds = () => {
-		const { innerWidth, innerHeight } = window;
+	const [viewport, setViewport] = createSignal({
+		width: window.innerWidth,
+		height: window.innerHeight,
+	});
+	const positionBounds = createMemo(() => {
+		const { width: innerWidth, height: innerHeight } = viewport();
 		const leastX = 64;
 		const leastY = 64;
 		return {
@@ -157,13 +165,11 @@ const PopupImpl = (props: ImplProps) => {
 			minY: Math.max(0, leastY - props.height),
 			maxY: innerHeight - leastY,
 		};
-	};
-	const [positionBounds, setPositionBounds] = createSignal(
-		updatePositionBounds(),
-	);
+	});
 
 	onMount(() => {
-		const resize = () => setPositionBounds(updatePositionBounds);
+		const resize = () =>
+			setViewport({ width: window.innerWidth, height: window.innerHeight });
 		resize();
 
 		window.addEventListener("resize", resize, { passive: true });

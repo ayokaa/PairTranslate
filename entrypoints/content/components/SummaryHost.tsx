@@ -13,7 +13,7 @@ import { loadPageState, savePageState } from "~/utils/page-state";
 import { createLogger } from "~/utils/rpc/logger";
 import { extractPageContent } from "~/utils/summary/extract";
 import {
-	clampToViewport,
+	adaptGeometryToViewport,
 	loadPopupGeometry,
 	type PopupGeometry,
 	savePopupGeometry,
@@ -48,29 +48,63 @@ export default () => {
 	const { settings } = useSettings();
 	let popupActions: PopupActions | undefined;
 	let messageListener: ((message: unknown) => void) | undefined;
+	let resizeListener: (() => void) | undefined;
 	let latestGeometry: PopupGeometry | null = null;
 	let savedGeometry: PopupGeometry | null = null;
+	let resizeAnchor: PopupGeometry | null = null;
 	const [panelInput, setPanelInput] = createSignal<SummaryInput>();
 	const [refreshToken, setRefreshToken] = createSignal(0);
 
-	const getDefaultGeometry = (height: number) => ({
-		...clampPosition(height),
-		width: SUMMARY_POPUP_WIDTH,
-		height,
-	});
+	const withCurrentViewport = (geometry: PopupGeometry): PopupGeometry => {
+		const viewportWidth = window.innerWidth;
+		const viewportHeight = window.innerHeight;
+		if (viewportWidth > 0 && viewportHeight > 0) {
+			return { ...geometry, viewportWidth, viewportHeight };
+		}
+		return geometry;
+	};
 
-	const getSummaryGeometry = () => {
+	const getDefaultGeometry = (height: number): PopupGeometry => {
+		const vw = window.innerWidth;
+		const vh = window.innerHeight;
+		const maxWidth = vw - SUMMARY_POPUP_MARGIN * 2;
+		const maxHeight = vh - SUMMARY_POPUP_MARGIN * 2;
+		const width =
+			maxWidth > 0
+				? Math.min(SUMMARY_POPUP_WIDTH, maxWidth)
+				: SUMMARY_POPUP_WIDTH;
+		const resolvedHeight = maxHeight > 0 ? Math.min(height, maxHeight) : height;
+		return withCurrentViewport({
+			...clampPosition(resolvedHeight),
+			width,
+			height: resolvedHeight,
+		});
+	};
+
+	const resolveSummaryGeometry = (): {
+		geometry: PopupGeometry;
+		anchor: PopupGeometry;
+	} => {
 		if (savedGeometry) {
-			const clamped = clampToViewport(
+			const adapted = adaptGeometryToViewport(
 				savedGeometry,
 				window.innerWidth,
 				window.innerHeight,
 				SUMMARY_POPUP_MARGIN,
 			);
-			if (clamped) return clamped;
+			if (adapted) {
+				const anchor =
+					savedGeometry.viewportWidth && savedGeometry.viewportHeight
+						? savedGeometry
+						: adapted;
+				return { geometry: adapted, anchor };
+			}
 		}
-		return getDefaultGeometry(SUMMARY_POPUP_HEIGHT);
+		const fallback = getDefaultGeometry(SUMMARY_POPUP_HEIGHT);
+		return { geometry: fallback, anchor: fallback };
 	};
+
+	const getSummaryGeometry = () => resolveSummaryGeometry().geometry;
 
 	const closeExistingPopup = () => {
 		if (popupActions) {
@@ -78,6 +112,7 @@ export default () => {
 			popupActions = undefined;
 		}
 		latestGeometry = null;
+		resizeAnchor = null;
 		if (settings.basic.restorePageState) {
 			savePageState(window.location.href, { summaryOpen: false }).catch(
 				() => {},
@@ -86,22 +121,44 @@ export default () => {
 	};
 
 	const saveGeometry = (geometry: PopupGeometry) => {
-		savedGeometry = geometry;
-		savePopupGeometry(geometry, window.location.href).catch((e) =>
-			logger.warn("Failed to save popup geometry:", e),
-		);
+		const persisted = withCurrentViewport(geometry);
+		savedGeometry = persisted;
+		resizeAnchor = persisted;
+		savePopupGeometry(
+			persisted,
+			window.location.href,
+			settings.summary.summaryGeometryMaxEntries,
+		).catch((e) => logger.warn("Failed to save popup geometry:", e));
 	};
 
 	const onMoveEnd = (x: number, y: number) => {
 		const current = latestGeometry ?? getSummaryGeometry();
-		latestGeometry = { ...current, x, y };
+		latestGeometry = withCurrentViewport({ ...current, x, y });
 		saveGeometry(latestGeometry);
 	};
 
 	const onResizeEnd = (width: number, height: number) => {
 		const current = latestGeometry ?? getSummaryGeometry();
-		latestGeometry = { ...current, width, height };
+		latestGeometry = withCurrentViewport({ ...current, width, height });
 		saveGeometry(latestGeometry);
+	};
+
+	const handleWindowResize = () => {
+		if (!popupActions?.isVisible() || !resizeAnchor) return;
+		const adapted = adaptGeometryToViewport(
+			resizeAnchor,
+			window.innerWidth,
+			window.innerHeight,
+			SUMMARY_POPUP_MARGIN,
+		);
+		if (!adapted) return;
+		latestGeometry = adapted;
+		popupActions.setGeometry(
+			adapted.x,
+			adapted.y,
+			adapted.width,
+			adapted.height,
+		);
 	};
 
 	const isSummaryDisabled = () => {
@@ -176,8 +233,9 @@ export default () => {
 		logger.info("Creating summary popup");
 		setPanelInput({ content, truncated, pageContext });
 
-		const geometry = getSummaryGeometry();
+		const { geometry, anchor } = resolveSummaryGeometry();
 		latestGeometry = geometry;
+		resizeAnchor = anchor;
 		popupActions = popup.addPopup(
 			{
 				x: geometry.x,
@@ -218,12 +276,7 @@ export default () => {
 		loadPopupGeometry(window.location.href)
 			.then((g) => {
 				if (g && !savedGeometry) {
-					savedGeometry = clampToViewport(
-						g,
-						window.innerWidth,
-						window.innerHeight,
-						SUMMARY_POPUP_MARGIN,
-					);
+					savedGeometry = g;
 				}
 			})
 			.catch((e) => logger.warn("Failed to load popup geometry:", e))
@@ -257,11 +310,17 @@ export default () => {
 
 		messageListener = listener;
 		browser.runtime.onMessage.addListener(listener);
+
+		resizeListener = handleWindowResize;
+		window.addEventListener("resize", handleWindowResize, { passive: true });
 	});
 
 	onCleanup(() => {
 		if (messageListener) {
 			browser.runtime.onMessage.removeListener(messageListener);
+		}
+		if (resizeListener) {
+			window.removeEventListener("resize", resizeListener);
 		}
 	});
 

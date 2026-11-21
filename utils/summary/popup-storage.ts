@@ -7,6 +7,8 @@ export type PopupGeometry = {
 	y: number;
 	width: number;
 	height: number;
+	viewportWidth?: number;
+	viewportHeight?: number;
 };
 
 type StoredPopupGeometry = PopupGeometry & {
@@ -20,6 +22,17 @@ const MIN_HEIGHT = 150;
 
 /** Cap the number of tracked domains to bound storage growth (LRU by updatedAt). */
 const MAX_ENTRIES = 1000;
+
+const hasValidViewport = (value: {
+	viewportWidth?: unknown;
+	viewportHeight?: unknown;
+}): value is { viewportWidth: number; viewportHeight: number } =>
+	typeof value.viewportWidth === "number" &&
+	typeof value.viewportHeight === "number" &&
+	Number.isFinite(value.viewportWidth) &&
+	Number.isFinite(value.viewportHeight) &&
+	value.viewportWidth > 0 &&
+	value.viewportHeight > 0;
 
 export function sanitizeGeometry(value: unknown): PopupGeometry | null {
 	if (!value || typeof value !== "object") return null;
@@ -41,7 +54,17 @@ export function sanitizeGeometry(value: unknown): PopupGeometry | null {
 		return null;
 	}
 	if (c.width < MIN_WIDTH || c.height < MIN_HEIGHT) return null;
-	return { x: c.x, y: c.y, width: c.width, height: c.height };
+	const geometry: PopupGeometry = {
+		x: c.x,
+		y: c.y,
+		width: c.width,
+		height: c.height,
+	};
+	if (hasValidViewport(c)) {
+		geometry.viewportWidth = c.viewportWidth;
+		geometry.viewportHeight = c.viewportHeight;
+	}
+	return geometry;
 }
 
 export function clampToViewport(
@@ -61,11 +84,112 @@ export function clampToViewport(
 	) {
 		return null;
 	}
+	const width = Math.min(geometry.width, vw - margin * 2);
+	const height = Math.min(geometry.height, vh - margin * 2);
 	return {
-		x: Math.max(margin, Math.min(geometry.x, vw - geometry.width - margin)),
-		y: Math.max(margin, Math.min(geometry.y, vh - geometry.height - margin)),
-		width: Math.min(geometry.width, vw - margin * 2),
-		height: Math.min(geometry.height, vh - margin * 2),
+		x: Math.max(margin, Math.min(geometry.x, vw - width - margin)),
+		y: Math.max(margin, Math.min(geometry.y, vh - height - margin)),
+		width,
+		height,
+	};
+}
+
+/**
+ * Adapt a saved popup geometry to the current viewport size.
+ *
+ * When the geometry carries its recorded viewport dimensions, both size and
+ * position scale proportionally to the new viewport while respecting minimum
+ * dimensions and viewport margins. Legacy geometries without recorded viewport
+ * dimensions fall back to clamping.
+ */
+export function adaptGeometryToViewport(
+	geometry: PopupGeometry,
+	vw: number,
+	vh: number,
+	margin = 12,
+): PopupGeometry | null {
+	if (
+		!Number.isFinite(vw) ||
+		!Number.isFinite(vh) ||
+		vw <= margin * 2 ||
+		vh <= margin * 2
+	) {
+		return null;
+	}
+
+	if (!hasValidViewport(geometry)) {
+		const clamped = clampToViewport(geometry, vw, vh, margin);
+		return clamped
+			? { ...clamped, viewportWidth: vw, viewportHeight: vh }
+			: null;
+	}
+
+	const { viewportWidth: origVw, viewportHeight: origVh } = geometry;
+
+	if (
+		geometry.x + geometry.width < margin ||
+		geometry.y + geometry.height < margin ||
+		geometry.x > origVw - margin ||
+		geometry.y > origVh - margin
+	) {
+		return null;
+	}
+
+	const maxWidth = vw - margin * 2;
+	const maxHeight = vh - margin * 2;
+
+	if (origVw === vw && origVh === vh) {
+		const width = Math.min(geometry.width, maxWidth);
+		const height = Math.min(geometry.height, maxHeight);
+		return {
+			x: Math.max(margin, Math.min(geometry.x, vw - width - margin)),
+			y: Math.max(margin, Math.min(geometry.y, vh - height - margin)),
+			width,
+			height,
+			viewportWidth: vw,
+			viewportHeight: vh,
+		};
+	}
+
+	const scaleX = vw / origVw;
+	const scaleY = vh / origVh;
+
+	const minWidth = Math.min(MIN_WIDTH, maxWidth);
+	const minHeight = Math.min(MIN_HEIGHT, maxHeight);
+
+	const width = Math.max(
+		minWidth,
+		Math.min(maxWidth, Math.round(geometry.width * scaleX)),
+	);
+	const height = Math.max(
+		minHeight,
+		Math.min(maxHeight, Math.round(geometry.height * scaleY)),
+	);
+
+	// Preserve relative placement within available free space. When width/height
+	// scale without hitting min/max clamps this equals geometry.x * scaleX; when
+	// clamped, it still keeps left/center/right alignment natural.
+	const origSlackX = origVw - geometry.width;
+	const newSlackX = vw - width;
+	const scaledX =
+		origSlackX > 0
+			? (geometry.x / origSlackX) * newSlackX
+			: geometry.x * scaleX;
+
+	const origSlackY = origVh - geometry.height;
+	const newSlackY = vh - height;
+	const scaledY =
+		origSlackY > 0
+			? (geometry.y / origSlackY) * newSlackY
+			: geometry.y * scaleY;
+
+	return {
+		x: Math.max(margin, Math.min(Math.round(scaledX), vw - width - margin)),
+		y: Math.max(margin, Math.min(Math.round(scaledY), vh - height - margin)),
+		width,
+		height,
+		viewportWidth: vw,
+		viewportHeight: vh,
 	};
 }
 
@@ -131,8 +255,10 @@ export async function savePopupGeometry(
 ): Promise<void> {
 	const key = getDomainKey(url);
 	if (!key) return;
+	const sanitized = sanitizeGeometry(geometry);
+	if (!sanitized) return;
 	const map = await readMap();
-	map[key] = { ...geometry, updatedAt: Date.now() };
+	map[key] = { ...sanitized, updatedAt: Date.now() };
 	await writeMap(enforceCap(map, maxEntries));
 }
 
