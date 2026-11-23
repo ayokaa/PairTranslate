@@ -118,6 +118,7 @@ export function createBatchTranslation(
 		srcLang: () => string | undefined;
 		dstLang: () => string;
 		thinCache?: boolean;
+		takeCached?: () => TranslationResponse<string[]> | undefined;
 		/** Prepare context only when the batch cannot be served from cache. */
 		beforeTranslate?: () => Promise<unknown>;
 		ctx?: () => Record<string, unknown>;
@@ -225,6 +226,11 @@ export function createBatchTranslation(
 			cleanCache,
 			thinCache,
 		};
+		const cached = !cleanCache && options.takeCached?.();
+		if (cached) {
+			applyResponse(cached, texts.length);
+			return;
+		}
 		setAllLoading(texts.length);
 
 		const abortController = new AbortController();

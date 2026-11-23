@@ -39,6 +39,8 @@ const keyOf = (key: ArrayBuffer) =>
 		.map((byte) => byte.toString(16).padStart(2, "0"))
 		.join("");
 const fakeCache = {
+	getMany: async (keys: ArrayBuffer[]) =>
+		keys.map((key) => cacheEntries.get(keyOf(key))),
 	get: async (key: ArrayBuffer) => cacheEntries.get(keyOf(key)),
 	set: async (key: ArrayBuffer, value: { output: unknown }) => {
 		cacheEntries.set(keyOf(key), value);

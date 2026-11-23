@@ -43,6 +43,8 @@ const keyOf = (key: ArrayBuffer) =>
 
 const cacheCalls = { get: 0 };
 const fakeCache = {
+	getMany: async (keys: ArrayBuffer[]) =>
+		keys.map((key) => entries.get(keyOf(key))),
 	get: async (key: ArrayBuffer) => {
 		cacheCalls.get++;
 		return entries.get(keyOf(key));

@@ -33,11 +33,12 @@ export function createLRUStorage<TSchema>(
 	storeName: string,
 	maxSize: number,
 ) {
-	let db: IDBDatabase | null = null;
+	let connection: Promise<IDBDatabase> | undefined;
 	const usageStoreName = `__${storeName}_usage`;
 
-	const open = (): Promise<void> => {
-		return new Promise((resolve, reject) => {
+	const open = (): Promise<IDBDatabase> => {
+		if (connection) return connection;
+		const opening = new Promise<IDBDatabase>((resolve, reject) => {
 			const request = indexedDB.open(dbName, 1);
 
 			request.onupgradeneeded = (event) => {
@@ -53,25 +54,32 @@ export function createLRUStorage<TSchema>(
 				}
 			};
 
-			request.onsuccess = (event) => {
-				db = (event.target as IDBOpenDBRequest).result;
-				resolve();
+			request.onsuccess = () => {
+				const db = request.result;
+				const forget = () => {
+					if (connection === opening) connection = undefined;
+				};
+				db.onclose = forget;
+				db.onversionchange = () => {
+					forget();
+					db.close();
+				};
+				resolve(db);
 			};
 
-			request.onerror = (event) => {
-				reject((event.target as IDBOpenDBRequest).error);
-			};
+			request.onerror = () => reject(request.error);
 		});
+		connection = opening;
+		void opening.catch(() => {
+			if (connection === opening) connection = undefined;
+		});
+		return opening;
 	};
 
 	// Helper to remove a single item (used by set)
 	const evict = async (): Promise<void> => {
-		await open();
+		const db = await open();
 		return new Promise((resolve, reject) => {
-			if (!db) {
-				return reject(new Error("Database not open."));
-			}
-
 			const transaction = db.transaction(
 				[storeName, usageStoreName],
 				"readwrite",
@@ -98,41 +106,37 @@ export function createLRUStorage<TSchema>(
 		});
 	};
 
-	const get = async (key: Key): Promise<TSchema | undefined> => {
-		await open();
+	const getMany = async (
+		keys: readonly Key[],
+	): Promise<(TSchema | undefined)[]> => {
+		if (!keys.length) return [];
+		const db = await open();
 		return new Promise((resolve, reject) => {
-			if (!db) {
-				return reject(new Error("Database not open."));
-			}
-
 			const transaction = db.transaction(
 				[storeName, usageStoreName],
 				"readwrite",
 			);
-			const dataStore = transaction.objectStore(storeName);
-			const usageStore = transaction.objectStore(usageStoreName);
-			const getRequest = dataStore.get(key);
-
-			getRequest.onsuccess = () => {
-				const result = getRequest.result;
-				if (result) {
-					usageStore.put({ key, lastUsed: Date.now() });
-				}
-				resolve(result);
-			};
-
-			transaction.onerror = () => reject(transaction.error);
-			getRequest.onerror = () => reject(getRequest.error);
+			const data = transaction.objectStore(storeName);
+			const usage = transaction.objectStore(usageStoreName);
+			const values = new Array<TSchema | undefined>(keys.length);
+			keys.forEach((key, i) => {
+				const request = data.get(key);
+				request.onsuccess = () => {
+					values[i] = request.result;
+					if (request.result !== undefined)
+						usage.put({ key, lastUsed: Date.now() });
+				};
+			});
+			transaction.oncomplete = () => resolve(values);
+			transaction.onabort = () =>
+				reject(transaction.error ?? new Error("Cache read aborted"));
 		});
 	};
+	const get = async (key: Key) => (await getMany([key]))[0];
 
 	const set = async (key: Key, value: TSchema): Promise<void> => {
-		await open();
+		const db = await open();
 		return new Promise((resolve, reject) => {
-			if (!db) {
-				return reject(new Error("Database not open."));
-			}
-
 			const transaction = db.transaction(
 				[storeName, usageStoreName],
 				"readwrite",
@@ -166,12 +170,8 @@ export function createLRUStorage<TSchema>(
 		if (maxSize === newSize) return;
 		maxSize = newSize;
 
-		await open();
+		const db = await open();
 		return new Promise((resolve, reject) => {
-			if (!db) {
-				return reject(new Error("Database not open."));
-			}
-
 			const transaction = db.transaction(
 				[storeName, usageStoreName],
 				"readwrite",
@@ -222,12 +222,8 @@ export function createLRUStorage<TSchema>(
 	};
 
 	const del = async (key: Key): Promise<void> => {
-		await open();
+		const db = await open();
 		return new Promise((resolve, reject) => {
-			if (!db) {
-				return reject(new Error("Database not open."));
-			}
-
 			const transaction = db.transaction(
 				[storeName, usageStoreName],
 				"readwrite",
@@ -251,12 +247,8 @@ export function createLRUStorage<TSchema>(
 	 * separately and stops at its first hit, because it is ordered by `lastUsed`.
 	 */
 	const stats = async (): Promise<LRUStats> => {
-		await open();
+		const db = await open();
 		return new Promise((resolve, reject) => {
-			if (!db) {
-				return reject(new Error("Database not open."));
-			}
-
 			const transaction = db.transaction(
 				[storeName, usageStoreName],
 				"readonly",
@@ -300,12 +292,8 @@ export function createLRUStorage<TSchema>(
 	};
 
 	const clear = async (): Promise<void> => {
-		await open();
+		const db = await open();
 		return new Promise((resolve, reject) => {
-			if (!db) {
-				return reject(new Error("Database not open."));
-			}
-
 			const transaction = db.transaction(
 				[storeName, usageStoreName],
 				"readwrite",
@@ -322,14 +310,19 @@ export function createLRUStorage<TSchema>(
 	};
 
 	const close = (): void => {
-		if (db) {
-			db.close();
-			db = null;
-		}
+		const current = connection;
+		connection = undefined;
+		void current?.then(
+			(db) => db.close(),
+			() => {},
+		);
 	};
 
 	return {
-		open,
+		open: async () => {
+			await open();
+		},
+		getMany,
 		get,
 		set,
 		del,
