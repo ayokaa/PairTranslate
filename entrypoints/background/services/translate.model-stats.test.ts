@@ -1,5 +1,6 @@
-import { beforeEach, expect, mock, test } from "bun:test";
+import { beforeEach, expect, jest, mock, test } from "bun:test";
 import { PROMPT_ID } from "~/utils/constants";
+import { RATE_LIMIT_COOLDOWN_MS } from "~/utils/flow-control/model-queue";
 import type {
 	ChatRequest,
 	ChatResponse,
@@ -7,6 +8,7 @@ import type {
 	LLMClient,
 	StreamChunk,
 } from "~/utils/llm";
+import { LLMError, LLMErrorType } from "~/utils/llm/types";
 import type { SettingsSchema } from "~/utils/settings";
 import type { TranslateContext } from "~/utils/types";
 
@@ -89,32 +91,6 @@ mock.module("~/utils/i18n", () => ({
 mock.module("~/utils/storage", () => ({
 	createLRUStorage: () => fakeCache,
 }));
-// Runs queued work immediately, so timing in the fake client is the only
-// latency the measurement sees.
-mock.module("~/utils/async/queue-hub", () => ({
-	createQueueHub: () => ({
-		queue: () => ({
-			modelId: MODEL_ID,
-			updateLimits: () => {},
-			status: () => ({
-				modelId: MODEL_ID,
-				queued: 0,
-				running: 0,
-				tokensAvailable: 0,
-				tokensPerMinute: 0,
-				requestConcurrency: 0,
-			}),
-			enqueueUnary: async (runner: () => Promise<{ value: unknown }>) =>
-				(await runner()).value,
-			enqueueStream: async (
-				runner: () => Promise<{ iterator: AsyncGenerator<StreamChunk> }>,
-			) => (await runner()).iterator,
-		}),
-		refresh: () => {},
-		subscribe: async function* subscribe() {},
-	}),
-}));
-
 // --- fake LLM client ---
 
 type ChatHandler = (request: ChatRequest) => Promise<ChatResponse<string>>;
@@ -263,4 +239,49 @@ test("samples first-token latency and generation window for a stream", async () 
 	expect(entry.recent[0].generationMs).toBeGreaterThanOrEqual(15);
 	expect(modelThroughput(entry)).toMatchObject({ samples: 1 });
 	expect(modelThroughput(entry).value).toBeGreaterThan(0);
+});
+
+test("a rate limit during stream iteration holds the model queue", async () => {
+	const { stream, queueStatus } = await createTranslateService();
+	const options = {
+		modelId: MODEL_ID,
+		promptId: PROMPT_ID.summary,
+		srcLang: SRC,
+		dstLang: DST,
+	};
+	const failure = new LLMError(LLMErrorType.RATE_LIMIT_ERROR, "rate limited");
+	// biome-ignore lint/correctness/useYield: The provider rejects before sending the first chunk.
+	streamHandler = async function* () {
+		throw failure;
+	};
+
+	jest.useFakeTimers();
+	const status = queueStatus(MODEL_ID);
+	try {
+		await expect(stream(ctx, options, "First request").next()).rejects.toBe(
+			failure,
+		);
+
+		streamHandler = defaultStreamHandler;
+		await status.next();
+		const next = stream(ctx, options, "Second request");
+		const chunk = next.next();
+		await status.next();
+		const snapshot = queueStatus(MODEL_ID);
+		try {
+			expect((await snapshot.next()).value).toMatchObject({
+				queued: 1,
+				running: 0,
+			});
+		} finally {
+			await snapshot.return(undefined);
+		}
+
+		jest.advanceTimersByTime(RATE_LIMIT_COOLDOWN_MS);
+		expect((await chunk).value).toEqual({ content: "译" });
+		expect((await next.next()).done).toBe(true);
+	} finally {
+		await status.return(undefined);
+		jest.useRealTimers();
+	}
 });

@@ -702,8 +702,11 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						: undefined,
 			});
 
-			const { promise: completion, resolve: resolveCompletion } =
-				Promise.withResolvers<number>();
+			const {
+				promise: completion,
+				resolve: resolveCompletion,
+				reject: rejectCompletion,
+			} = Promise.withResolvers<number>();
 			const source = client.chatStream(request, undefined, signal);
 			// The request is issued by the first `next()`, so timing starts there
 			// rather than when the generator object was created.
@@ -765,9 +768,13 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 								yield chunk;
 							}
 						}
+					} catch (error) {
+						rejectCompletion(convertFromLLMError(error));
+						throw error;
 					} finally {
+						// On early return, the queue releases the slot without
+						// treating the cancelled stream as a successful probe.
 						await source.return({});
-						resolveCompletion(0);
 					}
 				})(),
 				completion,

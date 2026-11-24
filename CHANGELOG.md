@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Translate long full pages progressively: loading placeholders are mounted only for batches the selected model has room for, instead of for every paragraph at once, which removes the memory spike on very long pages. Full-page batches are looked up in the cache first, in rounds as wide as the model's request concurrency, so cached batches render without taking model slots, even behind pending requests. Cache reads share one IndexedDB connection and one transaction per batch, and in-text Markdown results and the language icon no longer retain reactive state per paragraph.
-- After a service rate limits a request (HTTP 429), hold that model's queue for 2 seconds, then let one request through at a time until one is accepted, instead of starting every queued request into the same limit. The rate limited request itself still fails.
+- After a service rate limits a regular or streaming request (HTTP 429), hold that model's queue for 2 seconds, then let one request through at a time until one succeeds. The rate-limited request itself still fails.
 - Use a website rule's in-text translation model for the translation requests themselves; previously only its batch limits were applied.
 
 - Translate visible margin notes marked `aria-hidden`, read-only article content, and text marked `data-nosnippet`; continue excluding actual editors, explicit hidden/no-translate regions, and visually hidden duplicates.
