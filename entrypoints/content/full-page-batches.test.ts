@@ -121,3 +121,36 @@ test("a round of lookups is as wide as the request concurrency and mounts its hi
 		stop();
 	}
 });
+
+test("batches advance without timers, which a hidden page delays", async () => {
+	const texts = ["a", "b", "c", "d", "e", "f"];
+	const published: string[] = [];
+	const done = Promise.withResolvers<void>();
+	const realSetTimeout = globalThis.setTimeout;
+	// Whatever is scheduled with a timer from here on never runs.
+	globalThis.setTimeout = (() => 0) as unknown as typeof setTimeout;
+	let stop: (() => void) | undefined;
+	try {
+		stop = createRoot((dispose) => {
+			const queue = createFullPageBatches(
+				{ ...limits, maxBatchSize: 1 },
+				(batch) => {
+					published.push(batch.sections()[0][1]);
+					// Misses hold the single model slot until they settle.
+					queueMicrotask(batch.settled);
+					if (published.length === texts.length) done.resolve();
+				},
+				() => {},
+				async (batchTexts) =>
+					batchTexts[0] < "d" ? { output: batchTexts, skipped: false } : null,
+			);
+			for (const text of texts) queue.add(section(text));
+			return dispose;
+		});
+		await done.promise;
+		expect(published).toEqual(texts);
+	} finally {
+		globalThis.setTimeout = realSetTimeout;
+		stop?.();
+	}
+});

@@ -5,6 +5,7 @@ import { useSettings } from "~/hooks/settings";
 import { useWebsiteRule } from "~/hooks/website-rule";
 import { PROMPT_ID } from "~/utils/constants";
 import { areLanguagesSame } from "~/utils/language";
+import { nextTask } from "~/utils/next-task";
 import { getPageContext } from "~/utils/page-context";
 import { isDisplayOnlySection } from "~/utils/parser/math-section";
 import type { DOMSection } from "~/utils/parser/types";
@@ -144,7 +145,7 @@ export default () => {
 					if (section[1] !== section[0]) listenRemove(section[1], remove);
 					if (++scanned >= queue.scanWindow) {
 						scanned = 0;
-						await new Promise((resolve) => setTimeout(resolve, 0));
+						await new Promise<void>((resolve) => nextTask(resolve));
 						if (controller.signal.aborted) break;
 					}
 				} else {

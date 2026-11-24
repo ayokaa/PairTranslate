@@ -1,5 +1,6 @@
 import { batch as batchUpdates, createSignal, onCleanup } from "solid-js";
 import { getMarkdownFromSection } from "~/utils/markdown";
+import { nextTask } from "~/utils/next-task";
 import { isDisplayOnlyMarkdown } from "~/utils/parser/math-section";
 import type { DOMSection } from "~/utils/parser/types";
 import type { EffectiveQueueSettings } from "~/utils/settings/services";
@@ -34,7 +35,7 @@ export function createFullPageBatches(
 	const controller = new AbortController();
 	let probing = false;
 
-	let timer: ReturnType<typeof setTimeout> | undefined;
+	let cancelStep: (() => void) | undefined;
 
 	const hasRoom = () => running.size < limits.requestConcurrency;
 	// With a lookup available every batch is looked up before it is mounted, so
@@ -43,9 +44,11 @@ export function createFullPageBatches(
 	const canRead = () => (probe ? !probing : hasRoom());
 
 	function schedule() {
-		if (controller.signal.aborted || timer !== undefined) return;
+		if (controller.signal.aborted || cancelStep) return;
+		// Not a timer: a long page is often left to translate in a background
+		// tab, where every timer step would wait for the next full second.
 		if ((hasRoom() && misses.size) || (canRead() && (pending.size || carry)))
-			timer = setTimeout(dispatch, 0);
+			cancelStep = nextTask(dispatch);
 	}
 
 	function start(batch: FullPageBatch) {
@@ -53,13 +56,18 @@ export function createFullPageBatches(
 		publish(batch);
 	}
 
-	// One step per task: resume the oldest miss, or read further ahead.
+	// One step per task: resume the oldest misses there is room for, or read
+	// further ahead.
 	function dispatch() {
-		timer = undefined;
-		const nextMiss = misses.values().next().value;
-		if (nextMiss && hasRoom()) {
-			misses.delete(nextMiss);
-			start(nextMiss);
+		cancelStep = undefined;
+		if (misses.size && hasRoom()) {
+			batchUpdates(() => {
+				for (const batch of misses) {
+					if (!hasRoom()) break;
+					misses.delete(batch);
+					start(batch);
+				}
+			});
 		} else if (canRead()) {
 			if (probe) lookAhead(probe);
 			else {
@@ -200,7 +208,7 @@ export function createFullPageBatches(
 		controller.abort();
 		running.clear();
 		misses.clear();
-		clearTimeout(timer);
+		cancelStep?.();
 		pending.clear();
 		owners.clear();
 		carry = undefined;
