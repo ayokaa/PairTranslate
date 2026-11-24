@@ -1,6 +1,7 @@
-import { expect, test } from "bun:test";
+import { expect, jest, test } from "bun:test";
+import { TranslateErrorType } from "~/utils/errors";
 import type { UnaryResult } from "./model-queue";
-import { createModelQueue } from "./model-queue";
+import { createModelQueue, RATE_LIMIT_COOLDOWN_MS } from "./model-queue";
 
 const createLimits = () => ({
 	requestConcurrency: 1,
@@ -233,4 +234,83 @@ test("lowering concurrency waits for existing tasks without freeing them early",
 	await Promise.all([...running, next]);
 	expect(started).toBe(true);
 	expect(queue.status()).toMatchObject({ queued: 0, running: 0 });
+});
+
+const rateLimited = () => ({
+	type: TranslateErrorType.QUOTA_EXCEEDED,
+	message: "rate limited",
+});
+
+const flush = async () => {
+	for (let i = 0; i < 5; i++) await Promise.resolve();
+};
+
+test("a rate limited request holds the queue for the cooldown, then one request probes", async () => {
+	jest.useFakeTimers();
+	try {
+		const queue = createModelQueue(
+			"model",
+			{ requestConcurrency: 2, tokensPerMinute: 1000 },
+			() => {},
+		);
+		const started: string[] = [];
+		const gates = new Map<string, PromiseWithResolvers<UnaryResult<string>>>();
+		const add = (name: string) => {
+			const gate = Promise.withResolvers<UnaryResult<string>>();
+			gates.set(name, gate);
+			const result = queue.enqueueUnary(() => {
+				started.push(name);
+				return gate.promise;
+			}, 1);
+			result.catch(() => {});
+			return result;
+		};
+		const results = ["a", "b", "c", "d", "e"].map(add);
+		expect(started).toEqual(["a", "b"]);
+
+		gates.get("a")?.reject(rateLimited());
+		await flush();
+		// The limited request fails; its free slot starts nothing.
+		await expect(results[0]).rejects.toMatchObject({ message: "rate limited" });
+		expect(started).toEqual(["a", "b"]);
+
+		// A request that was already in flight does not end the recovery.
+		gates.get("b")?.resolve(unaryResult("b"));
+		await flush();
+		expect(started).toEqual(["a", "b"]);
+
+		jest.advanceTimersByTime(RATE_LIMIT_COOLDOWN_MS - 1);
+		await flush();
+		expect(started).toEqual(["a", "b"]);
+		jest.advanceTimersByTime(1);
+		await flush();
+		// One probe, although two slots are free.
+		expect(started).toEqual(["a", "b", "c"]);
+
+		// A probe that is limited again restarts the cooldown.
+		gates.get("c")?.reject(rateLimited());
+		await flush();
+		expect(started).toEqual(["a", "b", "c"]);
+		jest.advanceTimersByTime(RATE_LIMIT_COOLDOWN_MS);
+		await flush();
+		expect(started).toEqual(["a", "b", "c", "d"]);
+
+		// An accepted probe restores the configured concurrency.
+		gates.get("d")?.resolve(unaryResult("d"));
+		await flush();
+		expect(await results[3]).toBe("d");
+		expect(started).toEqual(["a", "b", "c", "d", "e"]);
+	} finally {
+		jest.useRealTimers();
+	}
+});
+
+test("other failures do not hold the queue", async () => {
+	const queue = createModelQueue("model", createLimits(), () => {});
+	const failed = queue.enqueueUnary(async () => {
+		throw { type: TranslateErrorType.API_ERROR, message: "bad request" };
+	}, 1);
+	const next = queue.enqueueUnary(async () => unaryResult("next"), 1);
+	await expect(failed).rejects.toMatchObject({ message: "bad request" });
+	expect(await next).toBe("next");
 });

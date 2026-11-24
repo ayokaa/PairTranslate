@@ -702,8 +702,11 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						: undefined,
 			});
 
-			const { promise: completion, resolve: resolveCompletion } =
-				Promise.withResolvers<number>();
+			const {
+				promise: completion,
+				resolve: resolveCompletion,
+				reject: rejectCompletion,
+			} = Promise.withResolvers<number>();
 			const source = client.chatStream(request, undefined, signal);
 			// The request is issued by the first `next()`, so timing starts there
 			// rather than when the generator object was created.
@@ -765,9 +768,13 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 								yield chunk;
 							}
 						}
+					} catch (error) {
+						rejectCompletion(convertFromLLMError(error));
+						throw error;
 					} finally {
+						// On early return, the queue releases the slot without
+						// treating the cancelled stream as a successful probe.
 						await source.return({});
-						resolveCompletion(0);
 					}
 				})(),
 				completion,
@@ -825,9 +832,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		compiled: CompiledPrompt | undefined;
 		expectsArray: boolean;
 		payloadArray: string[] | undefined;
-		supportsThinCache: boolean;
+
 		effectiveSrcLang: string;
-		cacheKey: ArrayBuffer;
+		cacheKey: ArrayBuffer | undefined;
 		thinCacheState: ThinCacheState | undefined;
 		/** The whole-batch entry, for requests that do not use the thin cache. */
 		cached: CachedValue | undefined;
@@ -894,14 +901,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			}
 		}
 
-		const cacheKey = await computeCacheKey(
-			promptId,
-			modelId,
-			text,
-			ctx,
-			effectiveSrcLang,
-			options.dstLang,
-		);
+		let cacheKey: ArrayBuffer | undefined;
 		let thinCacheState: ThinCacheState | undefined;
 		let cached: CachedValue | undefined;
 
@@ -939,9 +939,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				await Promise.all(entryKeys.map((key) => resultCache.del(key)));
 				cacheState.missing = payloadArray.map((_, index) => index);
 			} else {
-				const cachedEntries = await Promise.all(
-					entryKeys.map((key) => getCacheEntry(key)),
-				);
+				const cachedEntries = settings.debug.disableCache
+					? entryKeys.map(() => undefined)
+					: await resultCache.getMany(entryKeys);
 				let hitEntries = 0;
 				let hitChars = 0;
 				cachedEntries.forEach((entry, index) => {
@@ -961,10 +961,17 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					recordTranslationStats({ cacheHits: hitEntries, chars: hitChars });
 				}
 			}
-		} else if (!options.cleanCache) {
-			cached = await getCacheEntry(cacheKey);
 		} else {
-			await resultCache.del(cacheKey);
+			cacheKey = await computeCacheKey(
+				promptId,
+				modelId,
+				text,
+				ctx,
+				effectiveSrcLang,
+				options.dstLang,
+			);
+			if (options.cleanCache) await resultCache.del(cacheKey);
+			else cached = await getCacheEntry(cacheKey);
 		}
 
 		return {
@@ -974,7 +981,6 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			compiled,
 			expectsArray,
 			payloadArray,
-			supportsThinCache,
 			effectiveSrcLang,
 			cacheKey,
 			thinCacheState,
@@ -1069,7 +1075,6 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			payload,
 			expectsArray,
 			payloadArray,
-			supportsThinCache,
 			effectiveSrcLang,
 			cacheKey,
 			thinCacheState,
@@ -1242,7 +1247,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			if (aligned.missing.length === 0) finalValue = aligned.values;
 		}
 
-		if (!supportsThinCache) {
+		if (cacheKey) {
 			await setCacheEntry(cacheKey, {
 				output: finalValue,
 				reasoning,

@@ -1,6 +1,14 @@
+import { isRateLimitError } from "~/utils/errors";
 import { createTokenBucket } from "~/utils/flow-control/token-bucket";
 import type { StreamChunk } from "~/utils/llm";
 import type { TranslateQueueStatus } from "~/utils/types";
+
+/**
+ * How long a model's queue starts nothing after the service rate limits one of
+ * its requests. The value was chosen by the user; services such as MiniMax
+ * send no Retry-After to derive it from.
+ */
+export const RATE_LIMIT_COOLDOWN_MS = 2000;
 
 export type QueueLimits = {
 	requestConcurrency: number;
@@ -62,6 +70,25 @@ export const createModelQueue = (
 	let running = 0;
 	let currentLimits = limits;
 	let tokenTimer: ReturnType<typeof setTimeout> | undefined;
+	// Rate limiting is counted in periods: a request only ends the recovery of
+	// the period it was started in, so one that was already in flight when the
+	// limit hit cannot reopen full concurrency by finishing late.
+	let rateLimitPeriod = 0;
+	let recovering = false;
+	let cooldownTimer: ReturnType<typeof setTimeout> | undefined;
+
+	// Without this, every queued request is started into the same limit and
+	// fails within seconds. Hold the queue, then let one request through at a
+	// time until the service accepts one again.
+	const coolDown = () => {
+		rateLimitPeriod += 1;
+		recovering = true;
+		clearTimeout(cooldownTimer);
+		cooldownTimer = setTimeout(() => {
+			cooldownTimer = undefined;
+			process();
+		}, RATE_LIMIT_COOLDOWN_MS);
+	};
 
 	const status = (): TranslateQueueStatus => ({
 		modelId,
@@ -99,7 +126,9 @@ export const createModelQueue = (
 
 	const process = () => {
 		while (pending.length > 0) {
-			if (running >= currentLimits.requestConcurrency) return;
+			if (cooldownTimer) return;
+			const concurrency = recovering ? 1 : currentLimits.requestConcurrency;
+			if (running >= concurrency) return;
 			const task = pending[0];
 			if (!bucket.consume(task.estimatedTokens)) {
 				waitForTokens(task.estimatedTokens);
@@ -116,6 +145,17 @@ export const createModelQueue = (
 				if (finished) return;
 				finished = true;
 				finish(tokens);
+			};
+			const period = rateLimitPeriod;
+			const succeed = (tokens: number) => {
+				if (period === rateLimitPeriod) recovering = false;
+				finishTask(tokens);
+			};
+			const fail = (error: unknown) => {
+				// Before the slot is released, so releasing it starts nothing.
+				if (isRateLimitError(error)) coolDown();
+				task.reject(error);
+				finishTask(0);
 			};
 			// A runner can throw before returning its promise.
 			const run = <T>(runner: () => Promise<T>): Promise<T> => {
@@ -134,12 +174,9 @@ export const createModelQueue = (
 							(result.completionTokens ?? task.estimatedTokens) -
 								task.estimatedTokens,
 						);
-						finishTask(extra);
+						succeed(extra);
 					})
-					.catch((error) => {
-						task.reject(error);
-						finishTask(0);
-					});
+					.catch(fail);
 			} else {
 				run(task.run)
 					.then(({ iterator, completion }) => {
@@ -160,17 +197,11 @@ export const createModelQueue = (
 									0,
 									(tokens ?? task.estimatedTokens) - task.estimatedTokens,
 								);
-								finishTask(extra);
+								succeed(extra);
 							})
-							.catch((error) => {
-								task.reject(error);
-								finishTask(0);
-							});
+							.catch(fail);
 					})
-					.catch((error) => {
-						task.reject(error);
-						finishTask(0);
-					});
+					.catch(fail);
 			}
 		}
 	};

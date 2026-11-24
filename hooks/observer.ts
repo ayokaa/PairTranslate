@@ -13,9 +13,26 @@ export function createNodeObserver() {
 			}
 		}
 	});
+	const removals = new WeakMap<Node, (() => void)[]>();
+	let watchingRemovals = false;
+	const notifyRemoval = (node: Node) => {
+		const listeners = removals.get(node);
+		if (!listeners) return;
+		removals.delete(node);
+		for (const listener of listeners) listener();
+	};
 	const mutationObserver = new MutationObserver((mutations) => {
 		for (const mutation of mutations) {
 			for (const removedNode of mutation.removedNodes) {
+				if (watchingRemovals && !removedNode.isConnected) {
+					notifyRemoval(removedNode);
+					const walker = document.createTreeWalker(
+						removedNode,
+						NodeFilter.SHOW_ALL,
+					);
+					for (let child = walker.nextNode(); child; child = walker.nextNode())
+						notifyRemoval(child);
+				}
 				if (removedNode.nodeType === Node.ELEMENT_NODE) {
 					if (removedNode instanceof HTMLElement) {
 						triggerListener(removedNode, false);
@@ -59,15 +76,10 @@ export function createNodeObserver() {
 		intersectionObserver.observe(element);
 	};
 	const listenRemove = (node: Node, callback: () => void) => {
-		const element = node instanceof Element ? node : node.parentElement;
-		if (!element) {
-			callback();
-			return;
-		}
-
-		const cur = callbacks.get(element);
-		if (cur) cur.push((r) => !r && callback());
-		else callbacks.set(element, [(r) => !r && callback()]);
+		watchingRemovals = true;
+		const listeners = removals.get(node);
+		if (listeners) listeners.push(callback);
+		else removals.set(node, [callback]);
 	};
 
 	onCleanup(() => {

@@ -1,11 +1,24 @@
 import { trackDeep } from "@solid-primitives/deep";
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createSignal, For, onCleanup } from "solid-js";
 import { createNodeObserver } from "@/hooks/observer";
 import { useSettings } from "~/hooks/settings";
 import { useWebsiteRule } from "~/hooks/website-rule";
+import { PROMPT_ID } from "~/utils/constants";
+import { areLanguagesSame } from "~/utils/language";
+import { nextTask } from "~/utils/next-task";
+import { getPageContext } from "~/utils/page-context";
 import { isDisplayOnlySection } from "~/utils/parser/math-section";
 import type { DOMSection } from "~/utils/parser/types";
-import { BatchInTextTranslation } from "../native-components/InTextTranslate";
+import { resolveQueueSettings } from "~/utils/settings/services";
+import {
+	createFullPageBatches,
+	type FullPageBatch,
+} from "../full-page-batches";
+import {
+	BatchInTextTranslation,
+	BatchRender,
+	useInTextPageContext,
+} from "../native-components/InTextTranslate";
 import { getDomListener } from "../parser";
 import { clearTranslationObservations } from "../web-adaptation/observations";
 
@@ -17,6 +30,47 @@ export default () => {
 		equals: false,
 	});
 
+	const [batches, setBatches] = createSignal<FullPageBatch[]>([]);
+	const pageContext = useInTextPageContext(() => batches().length > 0);
+
+	function fullPageQueue() {
+		const modelId =
+			websiteRule.inTextTranslateModel ||
+			settings.translate.inTextTranslateModel;
+		const limits = resolveQueueSettings(
+			settings.services,
+			settings.queue,
+			modelId,
+		);
+		const srcLang =
+			websiteRule.sourceLang || settings.translate.sourceLang || "auto";
+		const dstLang = websiteRule.targetLang || settings.translate.targetLang;
+		const probe =
+			modelId &&
+			!settings.debug?.disableCache &&
+			(srcLang === "auto" || !areLanguagesSame(srcLang, dstLang))
+				? (texts: string[], signal: AbortSignal) =>
+						window.rpc.cachedUnary(
+							{ page: getPageContext() },
+							{
+								modelId,
+								srcLang,
+								dstLang,
+								promptId: PROMPT_ID.batchTranslate,
+								thinCache: true,
+							},
+							texts,
+							signal,
+						)
+				: undefined;
+		return createFullPageBatches(
+			limits,
+			(batch) => setBatches((prev) => [...prev, batch]),
+			(batch) => setBatches((prev) => prev.filter((item) => item !== batch)),
+			probe,
+		);
+	}
+
 	createEffect(() => {
 		const [listenIntersectionOrRemove, listenRemove] = createNodeObserver();
 
@@ -26,6 +80,8 @@ export default () => {
 			websiteRule.translateFullPage ?? settings.translate.translateFullPage;
 		const hostname = window.location.hostname;
 		const adaptationRules = trackDeep(settings.webAdaptation.rules);
+
+		const queue = fullPage ? fullPageQueue() : undefined;
 
 		const buffer = {
 			add: new Set<DOMSection>(),
@@ -79,11 +135,19 @@ export default () => {
 			);
 			if (controller.signal.aborted) return;
 
+			let scanned = 0;
 			for await (const section of listener) {
 				if (controller.signal.aborted) break;
-				if (fullPage) {
-					handleAdd(section);
-					listenRemove(section[0], () => handleRemove(section));
+				if (queue) {
+					queue.add(section);
+					const remove = () => queue.remove(section);
+					listenRemove(section[0], remove);
+					if (section[1] !== section[0]) listenRemove(section[1], remove);
+					if (++scanned >= queue.scanWindow) {
+						scanned = 0;
+						await new Promise<void>((resolve) => nextTask(resolve));
+						if (controller.signal.aborted) break;
+					}
 				} else {
 					listenIntersectionOrRemove(section[0], (shouldRender) => {
 						shouldRender ? handleAdd(section) : handleRemove(section);
@@ -94,6 +158,7 @@ export default () => {
 
 		onCleanup(() => {
 			controller.abort();
+			setBatches([]);
 			clearTranslationObservations();
 			if (buffer.handle !== null) cancelAnimationFrame(buffer.handle);
 			setSections((prev) => {
@@ -110,5 +175,20 @@ export default () => {
 		});
 	};
 
-	return <BatchInTextTranslation sections={sections()} onDelete={onDelete} />;
+	return (
+		<>
+			<BatchInTextTranslation sections={sections()} onDelete={onDelete} />
+			<For each={batches()}>
+				{(batch) => (
+					<BatchRender
+						sections={batch.sections()}
+						pageContext={pageContext}
+						onSettled={batch.settled}
+						takeCached={batch.takeCached}
+						onDelete={batch.remove}
+					/>
+				)}
+			</For>
+		</>
+	);
 };

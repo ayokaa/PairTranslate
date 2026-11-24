@@ -33,6 +33,12 @@ export const createTranslateError = (
 	details,
 });
 
+/** Whether a failed request was refused by the service's rate limit. */
+export const isRateLimitError = (error: unknown): boolean =>
+	typeof error === "object" &&
+	error !== null &&
+	(error as { type?: unknown }).type === TranslateErrorType.QUOTA_EXCEEDED;
+
 // Helper function to extract meaningful error message from any error object
 const extractMeaningfulMessage = (error: unknown, fallback: string): string => {
 	if (!error) return fallback;

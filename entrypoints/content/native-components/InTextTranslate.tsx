@@ -1,4 +1,4 @@
-import { CircleX, Languages } from "lucide-solid";
+import { CircleX } from "lucide-solid";
 import {
 	createEffect,
 	createMemo,
@@ -26,10 +26,12 @@ import type { DOMSection } from "~/utils/parser/types";
 import { resolveQueueSettings } from "~/utils/settings/services";
 import { estimateTokens } from "~/utils/token-estimate";
 import InTextTooltip from "../components/InTextTooltip";
+import type { FullPageBatch, SectionTextPair } from "../full-page-batches";
 import {
 	recordTranslationObservation,
 	removeTranslationObservation,
 } from "../web-adaptation/observations";
+import { ICON_STYLE, NativeLanguageIcon } from "./LanguageIcon";
 import { NativeLoading } from "./Loading";
 
 const NEW_LINE_THRESHOLD = 10;
@@ -56,8 +58,6 @@ const pointerPosition = (e: MouseEvent | TouchEvent | FocusEvent) => {
 	return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 };
 
-type SectionTextPair = [DOMSection, string];
-
 interface BatchProps {
 	sections: Set<DOMSection>;
 	onDelete?: (section: DOMSection) => void;
@@ -68,6 +68,8 @@ export const BatchInTextTranslation = (props: BatchProps) => {
 	const [renderList, setRenderList] = createSignal([] as SectionTextPair[][], {
 		equals: false,
 	});
+
+	const pageContext = useInTextPageContext(() => renderList().length > 0);
 
 	const batchIds = new Map<DOMSection, number>();
 
@@ -158,17 +160,40 @@ export const BatchInTextTranslation = (props: BatchProps) => {
 	return (
 		<Index each={renderList()}>
 			{(sections) => (
-				<BatchRender sections={sections()} onDelete={props.onDelete} />
+				<BatchRender
+					pageContext={pageContext}
+					sections={sections()}
+					onDelete={props.onDelete}
+				/>
 			)}
 		</Index>
 	);
 };
 
+export function useInTextPageContext(active: () => boolean) {
+	const { settings } = useSettings();
+	const websiteRule = useWebsiteRule();
+	const srcLang = () => websiteRule.sourceLang || settings.translate.sourceLang;
+	const dstLang = () => websiteRule.targetLang || settings.translate.targetLang;
+	return usePageContext({
+		modelId: () => settings.summary?.pageContextModel,
+		srcLang,
+		dstLang,
+		active: createMemo(active),
+		// Capture before translation UI alters extraction, but generate only
+		// after the batch has missed the translation cache.
+		generate: () => false,
+	});
+}
+
 interface BatchRenderProps {
+	pageContext: ReturnType<typeof useInTextPageContext>;
+	onSettled?: () => void;
+	takeCached?: FullPageBatch["takeCached"];
 	sections: SectionTextPair[];
 	onDelete?: (section: DOMSection) => void;
 }
-const BatchRender = (props: BatchRenderProps) => {
+export const BatchRender = (props: BatchRenderProps) => {
 	const { settings } = useSettings();
 	const websiteRule = useWebsiteRule();
 	// A batch never gains members after it is dispatched, it only loses them as
@@ -177,32 +202,34 @@ const BatchRender = (props: BatchRenderProps) => {
 	const members = props.sections;
 	const active = createMemo(() => new Set(props.sections));
 	const texts = createMemo(() => members.map(([, text]) => text));
-	const srcLang = () => websiteRule.sourceLang || settings.translate.sourceLang;
-	const dstLang = () => websiteRule.targetLang || settings.translate.targetLang;
-	const pageContext = usePageContext({
-		modelId: () => settings.summary?.pageContextModel,
-		srcLang,
-		dstLang,
-		active: () => members.length > 0,
-		// Capture before translation UI alters extraction, but generate only
-		// after the batch has missed the translation cache.
-		generate: () => false,
-	});
 	const [getter, retry] = createBatchTranslation(texts, {
 		promptId: PROMPT_ID.batchTranslate,
-		modelId: () => settings.translate.inTextTranslateModel,
-		srcLang,
-		dstLang,
+		takeCached: props.takeCached,
+		modelId: () =>
+			websiteRule.inTextTranslateModel ||
+			settings.translate.inTextTranslateModel,
+		srcLang: () => websiteRule.sourceLang || settings.translate.sourceLang,
+		dstLang: () => websiteRule.targetLang || settings.translate.targetLang,
 		get beforeTranslate() {
 			return settings.summary?.pageContextModel
-				? pageContext.ensure
+				? props.pageContext.ensure
 				: undefined;
 		},
 		ctx: () => ({
 			page: getPageContext(),
-			pageContext: pageContext.text(),
+			pageContext: props.pageContext.text(),
 		}),
 	});
+
+	if (props.onSettled) {
+		let settled = false;
+		createEffect(() => {
+			if (!settled && getter().every((item) => !item.loading)) {
+				settled = true;
+				props.onSettled?.();
+			}
+		});
+	}
 
 	const hideOriginal = createMemo(
 		() =>
@@ -277,6 +304,10 @@ export const TranslationRender = (props: TranslationRenderProps) => {
 		}
 	});
 	const [tooltipPos, setTooltipPos] = createSignal<{ x: number; y: number }>();
+	// A long page holds thousands of results and almost none of their menus are
+	// ever opened, so the menu is mounted on first use. It then stays mounted so
+	// closing it still plays its exit animation.
+	const [menuUsed, setMenuUsed] = createSignal(false);
 	const shouldRender = () =>
 		!props.skipped &&
 		(props.loading ||
@@ -304,6 +335,7 @@ export const TranslationRender = (props: TranslationRenderProps) => {
 		if (tooltipPos()) return;
 		const { x, y } = pointerPosition(e);
 		closeActiveTooltip?.();
+		setMenuUsed(true);
 		setTooltipPos({
 			x,
 			y,
@@ -329,14 +361,14 @@ export const TranslationRender = (props: TranslationRenderProps) => {
 		if (props.loading) return <NativeLoading />;
 		if (props.error) return <CircleX style={ERROR_ICON_STYLE} size="12px" />;
 		if (props.showLanguageIcon) {
-			return <Languages style={ICON_STYLE} size="12px" />;
+			return <NativeLanguageIcon />;
 		}
 		return null;
 	});
 
 	return (
 		<Show when={shouldRender()}>
-			<Show when={canOpenMenu()}>
+			<Show when={canOpenMenu() && menuUsed()}>
 				<InTextTooltip
 					pos={tooltipPos()}
 					error={props.error}
@@ -396,14 +428,6 @@ export const TranslationRender = (props: TranslationRenderProps) => {
 			</TranslateNodePortal>
 		</Show>
 	);
-};
-
-const ICON_STYLE = {
-	"vertical-align": "middle",
-	margin: "0 4px",
-	background: "rgba(0, 0, 0, 0.1)",
-	"border-radius": "4px",
-	padding: "2px",
 };
 
 const ERROR_ICON_STYLE = {
