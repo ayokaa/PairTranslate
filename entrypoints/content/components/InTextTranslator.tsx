@@ -34,9 +34,11 @@ export default () => {
 	const pageContext = useInTextPageContext(() => batches().length > 0);
 
 	function fullPageQueue() {
-		const modelId =
-			websiteRule.inTextTranslateModel ||
+		const selection =
+			websiteRule.inTextTranslateModel ??
 			settings.translate.inTextTranslateModel;
+		const modelId = selection?.modelId;
+		const thinkingBudget = selection?.thinkingBudget;
 		const limits = resolveQueueSettings(
 			settings.services,
 			settings.queue,
@@ -54,6 +56,7 @@ export default () => {
 							{ page: getPageContext() },
 							{
 								modelId,
+								thinkingBudget,
 								srcLang,
 								dstLang,
 								promptId: PROMPT_ID.batchTranslate,

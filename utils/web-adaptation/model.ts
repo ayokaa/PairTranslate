@@ -9,6 +9,7 @@ import {
 	isProtectedPageContent,
 	isVisiblePageContent,
 } from "~/utils/page-content";
+import { ModelSelectionSettings } from "~/utils/settings/model-selection";
 
 const Selector = z.string().trim().min(1).max(180);
 const Tag = z.string().regex(/^[a-zA-Z][a-zA-Z0-9-]{0,15}$/);
@@ -117,7 +118,7 @@ export type AdaptationRule = z.infer<typeof AdaptationRule>;
 
 export const WebAdaptationSettings = z.object({
 	autoEnabled: z.boolean().default(false),
-	modelId: z.uuid().optional(),
+	model: ModelSelectionSettings.optional(),
 	rules: z.array(AdaptationRule).default([]),
 });
 export type WebAdaptationSettings = z.infer<typeof WebAdaptationSettings>;

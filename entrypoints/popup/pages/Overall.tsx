@@ -12,6 +12,7 @@ import {
 	getModifierOptions,
 	type SelectionTranslateModifier,
 } from "~/utils/modifier";
+import { withModelId } from "~/utils/settings/model-selection";
 import {
 	selectLLMModelOptions,
 	selectServicesByType,
@@ -77,7 +78,10 @@ export default () => {
 									setSettings(
 										"translate",
 										"inTextTranslateModel",
-										e.target.value || undefined,
+										withModelId(
+											settings.translate.inTextTranslateModel,
+											e.target.value || undefined,
+										),
 									);
 								}}
 							>
@@ -89,7 +93,8 @@ export default () => {
 										<option
 											value={option.value}
 											selected={
-												option.value === settings.translate.inTextTranslateModel
+												option.value ===
+												settings.translate.inTextTranslateModel?.modelId
 											}
 										>
 											{option.label}
@@ -108,7 +113,10 @@ export default () => {
 									setSettings(
 										"translate",
 										"floatingTranslateModel",
-										e.target.value || undefined,
+										withModelId(
+											settings.translate.floatingTranslateModel,
+											e.target.value || undefined,
+										),
 									)
 								}
 							>
@@ -121,7 +129,7 @@ export default () => {
 											value={option.value}
 											selected={
 												option.value ===
-												settings.translate.floatingTranslateModel
+												settings.translate.floatingTranslateModel?.modelId
 											}
 										>
 											{option.label}
@@ -140,7 +148,10 @@ export default () => {
 									setSettings(
 										"summary",
 										"summaryModel",
-										e.target.value || undefined,
+										withModelId(
+											settings.summary.summaryModel,
+											e.target.value || undefined,
+										),
 									)
 								}
 							>
@@ -149,7 +160,9 @@ export default () => {
 									{(option) => (
 										<option
 											value={option.value}
-											selected={option.value === settings.summary.summaryModel}
+											selected={
+												option.value === settings.summary.summaryModel?.modelId
+											}
 										>
 											{option.label}
 										</option>

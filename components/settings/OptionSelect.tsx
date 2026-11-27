@@ -27,6 +27,10 @@ export const OptionSelect: Component<OptionSelectProps> = (props) => {
 		"options",
 		"placeholder",
 		"class",
+		// Options carry `selected` themselves; spreading `value` onto the select
+		// only reassigns the same state and breaks DOM implementations that
+		// expose it as read-only.
+		"value",
 	]);
 
 	return (
@@ -54,7 +58,7 @@ export const OptionSelect: Component<OptionSelectProps> = (props) => {
 					<option
 						value={option.value}
 						disabled={option.disabled}
-						selected={selectProps.value === option.value}
+						selected={local.value === option.value}
 					>
 						{option.label}
 					</option>

@@ -28,13 +28,13 @@ export default (props: SummaryPanelProps) => {
 		page: props.pageContext,
 	});
 
-	const modelId = () => settings.summary.summaryModel;
+	const model = () => settings.summary.summaryModel;
 	const srcLang = () => settings.translate.sourceLang;
 	const dstLang = () => settings.translate.targetLang;
 
 	const [result, retry] = createTranslation<string>(text, {
 		promptId: PROMPT_ID.summary,
-		modelId,
+		model,
 		srcLang,
 		dstLang,
 		ctx,

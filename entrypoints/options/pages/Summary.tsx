@@ -3,11 +3,9 @@ import { createEffect, createSignal, on } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import type z from "zod";
 import { FormGrid } from "~/components/settings/FormGrid";
+import { ModelSelectionFields } from "~/components/settings/ModelSelectionFields";
 import { NumberInput } from "~/components/settings/NumberInput";
-import {
-	OptionSelect,
-	type SelectOption,
-} from "~/components/settings/OptionSelect";
+import type { SelectOption } from "~/components/settings/OptionSelect";
 import { SectionResetButton } from "~/components/settings/SectionResetButton";
 import { SettingsCard } from "~/components/settings/SettingsCard";
 import { SettingsToggle } from "~/components/settings/SettingsToggle";
@@ -77,27 +75,29 @@ export default (props: { navId: string }) => {
 			actions={<SectionResetButton onReset={handleReset} />}
 		>
 			<FormGrid gap="lg">
-				<OptionSelect
+				<ModelSelectionFields
 					label={t("settings.summary.summaryModel")}
 					helperText={t("settings.summary.summaryModelDesc")}
 					options={lLMOptions()}
-					value={localSettings.summaryModel || ""}
+					value={localSettings.summaryModel}
+					services={settings.services}
 					error={getFieldError(["summaryModel"])?.message}
-					onChange={(e) => {
-						const value = e.target.value === "" ? undefined : e.target.value;
-						setLocalSettings("summaryModel", value);
-					}}
+					thinkingError={
+						getFieldError(["summaryModel", "thinkingBudget"])?.message
+					}
+					onChange={(value) => setLocalSettings("summaryModel", value)}
 				/>
-				<OptionSelect
+				<ModelSelectionFields
 					label={t("settings.summary.pageContextModel")}
 					helperText={t("settings.summary.pageContextModelDesc")}
 					options={lLMOptions()}
-					value={localSettings.pageContextModel || ""}
+					value={localSettings.pageContextModel}
+					services={settings.services}
 					error={getFieldError(["pageContextModel"])?.message}
-					onChange={(e) => {
-						const value = e.target.value === "" ? undefined : e.target.value;
-						setLocalSettings("pageContextModel", value);
-					}}
+					thinkingError={
+						getFieldError(["pageContextModel", "thinkingBudget"])?.message
+					}
+					onChange={(value) => setLocalSettings("pageContextModel", value)}
 				/>
 				<SettingsToggle
 					label={t("settings.summary.summaryDefaultPinned")}

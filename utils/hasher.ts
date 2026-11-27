@@ -1,3 +1,4 @@
+import type { ThinkingBudget } from "./llm/thinking";
 import type { TranslateContext } from "./types";
 
 const encoder = new TextEncoder();
@@ -8,6 +9,7 @@ export const computeCacheKey = async (
 	ctx: TranslateContext,
 	srcLang?: string,
 	dstLang?: string,
+	thinkingBudget?: ThinkingBudget,
 ) => {
 	const D = "\u200C"; // Zero-width non-joiner to separate fields
 	let str = `${promptId}${modelId}${D}${Array.isArray(text) ? text.join(D) : text}${D}`;
@@ -30,6 +32,7 @@ export const computeCacheKey = async (
 
 	if (srcLang) str += `${D}src:${srcLang}`;
 	if (dstLang) str += `${D}dst:${dstLang}`;
+	if (thinkingBudget) str += `${D}thinking:${thinkingBudget}`;
 
 	const buf = await crypto.subtle.digest("SHA-256", encoder.encode(str));
 	return buf;

@@ -272,6 +272,10 @@ inTextTranslationActionsDesc = "Beim Überfahren oder Fokussieren eines Überset
 selectionTranslateEnabled = "$1 + Mausklick/Ziehen zum Übersetzen"
 selectionTranslateHintSuffix = "+ Mausklick/Ziehen zum Übersetzen"
 
+[settings.modelSelection]
+thinkingBudget = "Denkintensität"
+modelDefault = "Modellstandard"
+
 [settings.summary]
 summaryDefaultPinned = "Zusammenfassungsfenster standardmäßig anheften"
 summaryDefaultPinnedDesc = "Zusammenfassungsfenster beim Klicken außerhalb geöffnet lassen"
@@ -377,7 +381,7 @@ temperature = "Temperatur"
 maxTokens = "Maximale Token"
 maxTokensDefault = "Standard"
 thinkingBudget = "Denkbudget"
-thinkingBudgetDefault = "Standard"
+thinkingBudgetDefault = "Anbieterstandard"
 customService = "Benutzerdefiniert"
 extraBody = "Zusätzlicher Body"
 

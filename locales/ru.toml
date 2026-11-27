@@ -272,6 +272,10 @@ inTextTranslationActionsDesc = "Показывать повтор, удален�
 selectionTranslateEnabled = "$1 + клик/перетаскивание мыши для перевода"
 selectionTranslateHintSuffix = "+ клик/перетаскивание мыши для перевода"
 
+[settings.modelSelection]
+thinkingBudget = "Уровень рассуждения"
+modelDefault = "По умолчанию для модели"
+
 [settings.summary]
 summaryDefaultPinned = "Закреплять окно резюме по умолчанию"
 summaryDefaultPinnedDesc = "Оставлять окно резюме открытым при клике вне его"
@@ -377,7 +381,7 @@ temperature = "Температура"
 maxTokens = "Максимальные Токены"
 maxTokensDefault = "По умолчанию"
 thinkingBudget = "Бюджет на рассуждение"
-thinkingBudgetDefault = "По умолчанию"
+thinkingBudgetDefault = "По умолчанию у провайдера"
 customService = "Пользовательский"
 extraBody = "Дополнительное тело запроса"
 

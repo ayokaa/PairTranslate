@@ -26,6 +26,7 @@ import { MdStyled } from "~/components/MD";
 import { ScrollableReasoning } from "~/components/Reasoning";
 import { Select, type SelectOption } from "~/components/Select";
 import { SettingsRecoveryBanner } from "~/components/SettingsRecoveryBanner";
+import { thinkingBudgetOptions } from "~/components/settings/ModelSelectionFields";
 import { SettingsProvider, useSettings } from "~/hooks/settings";
 import { createTheme } from "~/hooks/theme";
 import { createTranslation } from "~/hooks/translation";
@@ -36,7 +37,13 @@ import {
 } from "~/utils/constants";
 import { t } from "~/utils/i18n";
 import { isApple } from "~/utils/isapple";
+import type { ThinkingBudget } from "~/utils/llm/thinking";
 import {
+	type ModelSelectionSettings,
+	withModelId,
+} from "~/utils/settings/model-selection";
+import {
+	resolveLLMModel,
 	selectLLMModelOptions,
 	selectServicesByType,
 } from "~/utils/settings/services";
@@ -80,7 +87,8 @@ const SidebarContent = () => {
 	const [error, setError] = createSignal<string>();
 	const initialTargetLang = settingsCtx.settings.translate?.targetLang ?? "en";
 	const [history, setHistory] = createSignal<SidebarHistoryItem[]>([]);
-	const [selectedModelId, setSelectedModelId] = createSignal<string>();
+	const [selectedModel, setSelectedModel] =
+		createSignal<ModelSelectionSettings>();
 	const [targetLang, setTargetLang] = createSignal(initialTargetLang);
 	const [lastHistoryKey, setLastHistoryKey] = createSignal<string>();
 	const [renderMarkdown, setRenderMarkdown] = createSignal(false);
@@ -112,13 +120,17 @@ const SidebarContent = () => {
 		return map;
 	});
 
-	const resolvedModelId = () =>
-		selectedModelId() || settingsCtx.settings.translate.floatingTranslateModel;
+	const resolvedModel = () =>
+		selectedModel() ?? settingsCtx.settings.translate.floatingTranslateModel;
+	const resolvedModelId = () => resolvedModel()?.modelId;
+	const resolvedLLMModel = createMemo(() =>
+		resolveLLMModel(settingsCtx.settings.services, resolvedModelId()),
+	);
 
 	const [translateResult, retry] = createTranslation(submittedText, {
 		stream: true,
 		promptId: PROMPT_ID.translate,
-		modelId: resolvedModelId,
+		model: resolvedModel,
 		srcLang: () => settingsCtx.settings.translate?.sourceLang,
 		dstLang: targetLang,
 		ctx: () => ({}),
@@ -142,8 +154,8 @@ const SidebarContent = () => {
 
 	onMount(async () => {
 		const storedSettings = await loadSidebarSettings();
-		if (storedSettings.modelId) {
-			setSelectedModelId(storedSettings.modelId);
+		if (storedSettings.model) {
+			setSelectedModel(storedSettings.model);
 		}
 		if (storedSettings.targetLang) {
 			setTargetLang(storedSettings.targetLang);
@@ -152,19 +164,33 @@ const SidebarContent = () => {
 		setHistory(storedHistory);
 	});
 
-	const persistModelId = async (value: string) => {
-		const next = value || undefined;
-		setSelectedModelId(next);
+	const persistModel = async (
+		selection: ModelSelectionSettings | undefined,
+	) => {
+		setSelectedModel(selection);
 		await saveSidebarSettings({
-			modelId: next,
+			model: selection,
 			targetLang: targetLang(),
+		});
+	};
+
+	const persistModelId = async (value: string) => {
+		await persistModel(withModelId(resolvedModel(), value || undefined));
+	};
+
+	const persistThinkingBudget = async (value: string) => {
+		const current = resolvedModel();
+		if (!current) return;
+		await persistModel({
+			...current,
+			thinkingBudget: value ? (value as ThinkingBudget) : undefined,
 		});
 	};
 
 	const persistTargetLang = async (value: string) => {
 		setTargetLang(value);
 		await saveSidebarSettings({
-			modelId: resolvedModelId(),
+			model: resolvedModel(),
 			targetLang: value,
 		});
 	};
@@ -201,7 +227,7 @@ const SidebarContent = () => {
 		);
 		setError(undefined);
 		if (item.modelId) {
-			setSelectedModelId(item.modelId);
+			setSelectedModel(withModelId(resolvedModel(), item.modelId));
 		}
 		if (item.targetLang) {
 			setTargetLang(item.targetLang);
@@ -291,6 +317,26 @@ const SidebarContent = () => {
 										size="sm"
 									/>
 								</div>
+								<Show when={resolvedLLMModel()}>
+									{(model) => (
+										<div class="flex flex-col gap-1">
+											<span class="text-xs font-semibold uppercase tracking-wide text-base-content/70">
+												{t("settings.modelSelection.thinkingBudget")}
+											</span>
+											<Select
+												class="w-full"
+												options={thinkingBudgetOptions(
+													model().model.thinkingBudget,
+												)}
+												value={resolvedModel()?.thinkingBudget ?? ""}
+												onChange={(event) =>
+													void persistThinkingBudget(event.currentTarget.value)
+												}
+												size="sm"
+											/>
+										</div>
+									)}
+								</Show>
 								<div class="flex flex-col gap-1">
 									<span class="text-xs font-semibold uppercase tracking-wide text-base-content/70">
 										{t("settings.translation.targetLanguage")}

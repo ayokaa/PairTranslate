@@ -62,10 +62,10 @@ export function generateTranslateSettings(): s.TranslateSettings {
 		inTextTranslateIconEnabled: true,
 		inTextTranslationActionsEnabled: true,
 		translateFullPage: false,
-		inTextTranslateModel: MS_TRANSLATOR_ID,
-		floatingTranslateModel: MS_TRANSLATOR_ID,
+		inTextTranslateModel: { modelId: MS_TRANSLATOR_ID },
+		floatingTranslateModel: { modelId: MS_TRANSLATOR_ID },
 		floatingExplainModel: undefined,
-		inputTranslateModel: MS_TRANSLATOR_ID,
+		inputTranslateModel: { modelId: MS_TRANSLATOR_ID },
 		inputTranslateLang: "en",
 	};
 }

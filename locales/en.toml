@@ -274,6 +274,10 @@ inTextTranslationActionsDesc = "Show retry, delete, and copy as Markdown actions
 selectionTranslateEnabled = "$1 + mouse click/drag to translate"
 selectionTranslateHintSuffix = "+ mouse click/drag to translate"
 
+[settings.modelSelection]
+thinkingBudget = "Thinking effort"
+modelDefault = "Model default"
+
 [settings.summary]
 title = "Summary Settings"
 summaryModel = "Summary Model"
@@ -379,7 +383,7 @@ temperature = "Temperature"
 maxTokens = "Max Tokens"
 maxTokensDefault = "Default"
 thinkingBudget = "Thinking Budget"
-thinkingBudgetDefault = "Default"
+thinkingBudgetDefault = "Provider default"
 customService = "Custom"
 extraBody = "Extra Body"
 

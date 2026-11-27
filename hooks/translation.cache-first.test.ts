@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { createRoot, createSignal } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { PROMPT_ID } from "~/utils/constants";
+import type { ModelSelectionSettings } from "~/utils/settings/model-selection";
 import type { TranslationResponse } from "~/utils/translation-result";
 
 mock.module("~/utils/i18n", () => ({ t: (key: string) => key }));
@@ -8,7 +10,9 @@ mock.module("~/hooks/progress-indicator", () => ({
 	mightUseProgressIndicator: () => undefined,
 }));
 
-const { createBatchTranslation } = await import("./translation");
+const { createBatchTranslation, createTranslation } = await import(
+	"./translation"
+);
 const disposers: (() => void)[] = [];
 const cachedUnary = mock(async (..._args: unknown[]): Promise<unknown> => null);
 const unary = mock(
@@ -17,6 +21,11 @@ const unary = mock(
 		skipped: false,
 	}),
 );
+const stream = mock((..._args: unknown[]) =>
+	(async function* () {
+		yield { content: "stream translation" };
+	})(),
+);
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 beforeEach(() => {
@@ -24,7 +33,10 @@ beforeEach(() => {
 	cachedUnary.mockResolvedValue(null);
 	unary.mockReset();
 	unary.mockResolvedValue({ output: ["fresh translation"], skipped: false });
-	Object.assign(globalThis, { window: { rpc: { cachedUnary, unary } } });
+	stream.mockClear();
+	Object.assign(globalThis, {
+		window: { rpc: { cachedUnary, unary, stream } },
+	});
 });
 
 afterEach(() => {
@@ -40,7 +52,7 @@ const start = (
 		disposers.push(dispose);
 		result = createBatchTranslation(() => ["Original paragraph"], {
 			promptId: PROMPT_ID.batchTranslate,
-			modelId: () => "model-1",
+			model: () => ({ modelId: "model-1" }),
 			srcLang: () => "en",
 			dstLang: () => "zh-CN",
 			ctx: () => ({ page: { domain: "example.com" } }),
@@ -158,7 +170,7 @@ test("partial batch errors render aligned translations and report only failed sl
 		disposers.push(dispose);
 		result = createBatchTranslation(() => ["First", "Second"], {
 			promptId: PROMPT_ID.batchTranslate,
-			modelId: () => "model-1",
+			model: () => ({ modelId: "model-1" }),
 			srcLang: () => "en",
 			dstLang: () => "zh-CN",
 			ctx: () => ({ page: { domain: "example.com" } }),
@@ -202,3 +214,75 @@ test("a late cache response cannot overwrite a new target language", async () =>
 	expect(read()[0]()).toBe("French translation");
 	expect(cachedUnary).toHaveBeenCalledTimes(2);
 });
+
+test("changing only feature effort cancels stale cache results and forwards off on retries", async () => {
+	const first = Promise.withResolvers<unknown>();
+	cachedUnary.mockImplementationOnce(() => first.promise);
+	cachedUnary.mockResolvedValue({
+		output: ["off translation"],
+		skipped: false,
+	});
+	const [model, setModel] = createSignal<ModelSelectionSettings>({
+		modelId: "model-1",
+		thinkingBudget: "high",
+	});
+	const [read, retry] = start(async () => {}, { model });
+	await flush();
+	setModel({ modelId: "model-1", thinkingBudget: "off" });
+	await flush();
+	expect(cachedUnary.mock.calls[1][1]).toMatchObject({ thinkingBudget: "off" });
+	first.resolve({ output: ["high translation"], skipped: false });
+	await flush();
+	expect(read()[0]()).toBe("off translation");
+	retry(0);
+	await flush();
+	expect(unary.mock.calls[0][1]).toMatchObject({
+		thinkingBudget: "off",
+		cleanCache: true,
+	});
+});
+
+test.each([
+	["streaming translation and explanation", "modelId", true],
+	["streaming translation and explanation", "thinkingBudget", true],
+	["unary summary", "modelId", false],
+	["unary summary", "thinkingBudget", false],
+] as const)(
+	"%s reruns when reconcile changes only %s",
+	async (_name, field, streaming) => {
+		const [state, setState] = createStore<{
+			selection: ModelSelectionSettings;
+		}>({
+			selection: { modelId: "model-1", thinkingBudget: "high" },
+		});
+		createRoot((dispose) => {
+			disposers.push(dispose);
+			const options = {
+				promptId: streaming ? PROMPT_ID.translate : PROMPT_ID.summary,
+				model: () => state.selection,
+				srcLang: () => "en",
+				dstLang: () => "zh-CN",
+			};
+			if (streaming) {
+				createTranslation(() => "Original", { ...options, stream: true });
+			} else {
+				createTranslation(() => "Original", { ...options, stream: false });
+			}
+		});
+		await flush();
+		const requests = streaming ? stream.mock.calls : unary.mock.calls;
+		expect(requests).toHaveLength(1);
+
+		const selection = state.selection;
+		const nextSelection: ModelSelectionSettings =
+			field === "modelId"
+				? { modelId: "model-2", thinkingBudget: "high" }
+				: { modelId: "model-1", thinkingBudget: "off" };
+		setState(reconcile({ selection: nextSelection }));
+		expect(state.selection).toBe(selection);
+		await flush();
+
+		expect(requests).toHaveLength(2);
+		expect(requests[1][1]).toMatchObject(nextSelection);
+	},
+);

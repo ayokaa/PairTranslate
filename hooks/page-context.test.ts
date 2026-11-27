@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { createRoot, createSignal } from "solid-js";
+import type { ServicesSettings } from "~/utils/settings/def";
 import "../utils/test/dom-setup";
 import { ensurePageContext, usePageContext } from "./page-context";
 
@@ -20,6 +21,56 @@ beforeAll(() => {
 });
 
 describe("page context cache", () => {
+	test("isolates effective effort while sharing inherited and explicit matching defaults", async () => {
+		const services: ServicesSettings = {
+			provider: {
+				type: "llm",
+				name: "Test",
+				apiSpec: "openai",
+				models: { model: { name: "Test", thinkingBudget: "high" } },
+			},
+		};
+		const options = {
+			model: { modelId: "model" },
+			services,
+			srcLang: "en",
+			dstLang: "zh",
+			url: "https://example.com/effort",
+		};
+		const received: unknown[] = [];
+		(window as unknown as { rpc: unknown }).rpc = {
+			unary: async (_ctx: unknown, config: unknown) => {
+				received.push(config);
+				return { output: `context ${received.length}` };
+			},
+		};
+		expect(await ensurePageContext(options)).toBe("context 1");
+		expect(
+			await ensurePageContext({
+				...options,
+				model: { modelId: "model", thinkingBudget: "high" },
+			}),
+		).toBe("context 1");
+		expect(
+			await ensurePageContext({
+				...options,
+				model: { modelId: "model", thinkingBudget: "off" },
+			}),
+		).toBe("context 2");
+		(
+			services.provider as Extract<ServicesSettings[string], { type: "llm" }>
+		).models.model.thinkingBudget = "off";
+		expect(await ensurePageContext(options)).toBe("context 2");
+		(
+			services.provider as Extract<ServicesSettings[string], { type: "llm" }>
+		).models.model.thinkingBudget = "low";
+		expect(await ensurePageContext(options)).toBe("context 3");
+		expect(received).toHaveLength(3);
+		expect(received[1]).toMatchObject({
+			modelId: "model",
+			thinkingBudget: "off",
+		});
+	});
 	test("same-page fragment navigation reuses the cached context", async () => {
 		let calls = 0;
 		(window as unknown as { rpc: unknown }).rpc = {
@@ -30,19 +81,22 @@ describe("page context cache", () => {
 		};
 
 		const base = await ensurePageContext({
-			modelId: "model-x",
+			model: { modelId: "model-x" },
+			services: {},
 			srcLang: "en",
 			dstLang: "zh",
 			url: "https://example.com/page",
 		});
 		const viaHash = await ensurePageContext({
-			modelId: "model-x",
+			model: { modelId: "model-x" },
+			services: {},
 			srcLang: "en",
 			dstLang: "zh",
 			url: "https://example.com/page#1-note",
 		});
 		const viaOtherHash = await ensurePageContext({
-			modelId: "model-x",
+			model: { modelId: "model-x" },
+			services: {},
 			srcLang: "en",
 			dstLang: "zh",
 			url: "https://example.com/page#footnotes",
@@ -64,7 +118,8 @@ describe("page context cache", () => {
 		};
 
 		const result = await ensurePageContext({
-			modelId: "model-x",
+			model: { modelId: "model-x" },
+			services: {},
 			srcLang: "en",
 			dstLang: "zh",
 			url: "https://example.com/other",
@@ -88,7 +143,8 @@ describe("page context generation gate", () => {
 		let ctx!: ReturnType<typeof usePageContext>;
 		const dispose = createRoot((dispose) => {
 			ctx = usePageContext({
-				modelId: () => "explicit-model",
+				model: () => ({ modelId: "explicit-model" }),
+				services: () => ({}),
 				srcLang: () => "en",
 				dstLang: () => "zh",
 				active: () => true,
@@ -131,7 +187,8 @@ describe("page context generation gate", () => {
 		let ctx: ReturnType<typeof usePageContext> | undefined;
 		const dispose = createRoot((dispose) => {
 			ctx = usePageContext({
-				modelId: () => "model-y",
+				model: () => ({ modelId: "model-y" }),
+				services: () => ({}),
 				srcLang: () => "en",
 				dstLang: () => "zh",
 				active: () => true,

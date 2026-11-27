@@ -42,7 +42,7 @@ const TranslateElement = (props: {
 
 	const [data, retry] = createTranslation(getText, {
 		promptId: PROMPT_ID.inputTranslate,
-		modelId: () => settings.translate.inputTranslateModel,
+		model: () => settings.translate.inputTranslateModel,
 		stream: true,
 		srcLang: () => settings.translate.sourceLang,
 		dstLang: () => settings.translate.inputTranslateLang,

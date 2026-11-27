@@ -17,6 +17,7 @@ import { t } from "~/utils/i18n";
 import { areLanguagesSame } from "~/utils/language";
 import { detectSourceLanguage } from "~/utils/language-detection";
 import { createThinkingFilter } from "~/utils/llm/thinking-filter";
+import type { ModelSelectionSettings } from "~/utils/settings/model-selection";
 import {
 	shouldSkipSameLanguage,
 	type TranslationResponse,
@@ -114,7 +115,7 @@ export function createBatchTranslation(
 	text: () => string[],
 	options: {
 		promptId: string;
-		modelId: () => string | undefined;
+		model: () => ModelSelectionSettings | undefined;
 		srcLang: () => string | undefined;
 		dstLang: () => string;
 		thinCache?: boolean;
@@ -125,7 +126,7 @@ export function createBatchTranslation(
 	},
 ): BatchReturn {
 	const promptId = options.promptId;
-	const modelId = options.modelId;
+	const model = options.model;
 	const srcLang = options.srcLang;
 	const dstLang = options.dstLang;
 	const ctx = options.ctx || (() => ({}));
@@ -223,8 +224,8 @@ export function createBatchTranslation(
 	};
 
 	const translate = (texts: string[], cleanCache = false) => {
-		const modelId_ = modelId();
-		if (modelId_ === undefined) {
+		const selection_ = model();
+		if (selection_ === undefined) {
 			setAllError(noModelError(), texts.length);
 			return;
 		}
@@ -232,7 +233,7 @@ export function createBatchTranslation(
 		const srcLang_ = srcLang() || "auto";
 		const dstLang_ = dstLang();
 		const requestOptions = {
-			modelId: modelId_,
+			...selection_,
 			promptId,
 			srcLang: srcLang_,
 			dstLang: dstLang_,
@@ -275,7 +276,7 @@ export function createBatchTranslation(
 						return;
 					}
 				}
-				endTracking = progressCtx?.beginRequest(modelId_);
+				endTracking = progressCtx?.beginRequest(selection_.modelId);
 				await options.beforeTranslate?.();
 				if (abortController.signal.aborted) return;
 				const resp = await window.rpc.unary(
@@ -297,8 +298,8 @@ export function createBatchTranslation(
 	};
 
 	const translateSingle = (index: number, text_: string) => {
-		const modelId_ = modelId();
-		if (modelId_ === undefined) {
+		const selection_ = model();
+		if (selection_ === undefined) {
 			batch(() => {
 				setError(index, noModelError());
 				setTextResult(index, undefined);
@@ -325,13 +326,13 @@ export function createBatchTranslation(
 					setSkipped(index, true);
 					return;
 				}
-				endTracking = progressCtx?.beginRequest(modelId_);
+				endTracking = progressCtx?.beginRequest(selection_.modelId);
 				await options.beforeTranslate?.();
 				if (abortController.signal.aborted) return;
 				const resp = await window.rpc.unary(
 					ctx(),
 					{
-						modelId: modelId_,
+						...selection_,
 						promptId,
 						srcLang: srcLang_,
 						dstLang: dstLang_,
@@ -454,7 +455,7 @@ export function createTranslation<T = string>(
 	options: {
 		stream: true;
 		promptId: string;
-		modelId: () => string | undefined;
+		model: () => ModelSelectionSettings | undefined;
 		srcLang: () => string | undefined;
 		dstLang: () => string;
 		ctx?: () => TranslateContext;
@@ -464,7 +465,7 @@ export function createTranslation<T>(
 	text: () => string,
 	options: {
 		stream?: false;
-		modelId: () => string | undefined;
+		model: () => ModelSelectionSettings | undefined;
 		srcLang: () => string | undefined;
 		dstLang: () => string;
 		promptId: string;
@@ -476,13 +477,13 @@ export function createTranslation<T>(
 	options: {
 		stream?: boolean;
 		promptId: string;
-		modelId: () => string | undefined;
+		model: () => ModelSelectionSettings | undefined;
 		srcLang: () => string | undefined;
 		dstLang: () => string;
 		ctx?: () => TranslateContext;
 	},
 ): SingleReturn<T> | SingleStreamReturn<T> {
-	const modelId = options.modelId;
+	const model = options.model;
 	const srcLang = options.srcLang;
 	const dstLang = options.dstLang;
 	const promptId = options.promptId;
@@ -535,13 +536,17 @@ export function createTranslation<T>(
 		});
 
 	const translateStream = async (text_: string, cleanCache?: boolean) => {
-		const modelId_ = modelId();
-		if (modelId_ === undefined) {
+		const selection_ = model();
+		if (selection_ === undefined) {
 			setErrorVal(noModelError());
 			return;
 		}
+		const modelId_ = selection_.modelId;
+		const thinkingBudget_ = selection_.thinkingBudget;
+		const srcLang_ = srcLang() || "auto";
+		const dstLang_ = dstLang();
 
-		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
+		if (await detectAndSkip(text_, srcLang_, dstLang_, promptId)) {
 			setSkippedVal();
 			return;
 		}
@@ -554,9 +559,10 @@ export function createTranslation<T>(
 			ctx(),
 			{
 				modelId: modelId_,
+				thinkingBudget: thinkingBudget_,
 				promptId,
-				srcLang: srcLang() || "auto",
-				dstLang: dstLang(),
+				srcLang: srcLang_,
+				dstLang: dstLang_,
 				cleanCache,
 			},
 			text_,
@@ -599,13 +605,17 @@ export function createTranslation<T>(
 	};
 
 	const translateUnary = async (text_: string, cleanCache?: boolean) => {
-		const modelId_ = modelId();
-		if (modelId_ === undefined) {
+		const selection_ = model();
+		if (selection_ === undefined) {
 			setErrorVal(noModelError());
 			return;
 		}
+		const modelId_ = selection_.modelId;
+		const thinkingBudget_ = selection_.thinkingBudget;
+		const srcLang_ = srcLang() || "auto";
+		const dstLang_ = dstLang();
 
-		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
+		if (await detectAndSkip(text_, srcLang_, dstLang_, promptId)) {
 			setSkippedVal();
 			return;
 		}
@@ -619,9 +629,10 @@ export function createTranslation<T>(
 				ctx(),
 				{
 					modelId: modelId_,
+					thinkingBudget: thinkingBudget_,
 					promptId,
-					srcLang: srcLang() || "auto",
-					dstLang: dstLang(),
+					srcLang: srcLang_,
+					dstLang: dstLang_,
 					cleanCache,
 				},
 				text_,

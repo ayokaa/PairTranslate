@@ -1,9 +1,9 @@
 import { trackDeep } from "@solid-primitives/deep";
 import { Globe2, Trash2 } from "lucide-solid";
 import { createMemo, For, Show } from "solid-js";
-import { Select } from "~/components/Select";
 import { DangerButton } from "~/components/settings/DangerButton";
 import { EmptyState } from "~/components/settings/EmptyState";
+import { ModelSelectionFields } from "~/components/settings/ModelSelectionFields";
 import { SectionHeading } from "~/components/settings/SectionHeading";
 import { SettingsCard } from "~/components/settings/SettingsCard";
 import { SettingsToggle } from "~/components/settings/SettingsToggle";
@@ -54,18 +54,13 @@ export default (props: { navId: string }) => {
 					)
 				}
 			/>
-			<Select
+			<ModelSelectionFields
 				label={t("settings.webAdaptation.model")}
 				helperText={t("settings.webAdaptation.modelDesc")}
 				options={modelOptions()}
-				value={settings.webAdaptation.modelId ?? ""}
-				onChange={(event) =>
-					setSettings(
-						"webAdaptation",
-						"modelId",
-						event.currentTarget.value || undefined,
-					)
-				}
+				value={settings.webAdaptation.model}
+				services={settings.services}
+				onChange={(value) => setSettings("webAdaptation", "model", value)}
 			/>
 
 			<SectionHeading divider>

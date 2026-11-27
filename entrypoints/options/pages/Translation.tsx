@@ -6,10 +6,8 @@ import type z from "zod";
 import { ButtonGroup } from "~/components/settings/ButtonGroup";
 import { FormField } from "~/components/settings/FormField";
 import { FormGrid } from "~/components/settings/FormGrid";
-import {
-	OptionSelect,
-	type SelectOption,
-} from "~/components/settings/OptionSelect";
+import { ModelSelectionFields } from "~/components/settings/ModelSelectionFields";
+import type { SelectOption } from "~/components/settings/OptionSelect";
 import { SectionResetButton } from "~/components/settings/SectionResetButton";
 import { SettingsCard } from "~/components/settings/SettingsCard";
 import { SettingsToggle } from "~/components/settings/SettingsToggle";
@@ -217,48 +215,54 @@ export default (props: { navId: string }) => {
 					</div>
 				</div>
 
-				<OptionSelect
+				<ModelSelectionFields
 					label={t("settings.translation.inTextTranslateModel")}
 					options={allOptions()}
-					value={localSettings.inTextTranslateModel || ""}
+					value={localSettings.inTextTranslateModel}
+					services={settings.services}
 					error={getFieldError(["inTextTranslateModel"])?.message}
-					onChange={(e) => {
-						const value = e.target.value === "" ? undefined : e.target.value;
-						setLocalSettings("inTextTranslateModel", value);
-					}}
+					thinkingError={
+						getFieldError(["inTextTranslateModel", "thinkingBudget"])?.message
+					}
+					onChange={(value) => setLocalSettings("inTextTranslateModel", value)}
 				/>
 
-				<OptionSelect
+				<ModelSelectionFields
 					label={t("settings.translation.floatingTranslateModel")}
 					options={allOptions()}
-					value={localSettings.floatingTranslateModel || ""}
+					value={localSettings.floatingTranslateModel}
+					services={settings.services}
 					error={getFieldError(["floatingTranslateModel"])?.message}
-					onChange={(e) => {
-						const value = e.target.value === "" ? undefined : e.target.value;
-						setLocalSettings("floatingTranslateModel", value);
-					}}
+					thinkingError={
+						getFieldError(["floatingTranslateModel", "thinkingBudget"])?.message
+					}
+					onChange={(value) =>
+						setLocalSettings("floatingTranslateModel", value)
+					}
 				/>
 
-				<OptionSelect
+				<ModelSelectionFields
 					label={t("settings.translation.floatingExplainModel")}
 					options={lLMOptions()}
-					value={localSettings.floatingExplainModel || ""}
+					value={localSettings.floatingExplainModel}
+					services={settings.services}
 					error={getFieldError(["floatingExplainModel"])?.message}
-					onChange={(e) => {
-						const value = e.target.value === "" ? undefined : e.target.value;
-						setLocalSettings("floatingExplainModel", value);
-					}}
+					thinkingError={
+						getFieldError(["floatingExplainModel", "thinkingBudget"])?.message
+					}
+					onChange={(value) => setLocalSettings("floatingExplainModel", value)}
 				/>
 
-				<OptionSelect
+				<ModelSelectionFields
 					label={t("settings.translation.inputTranslateModel")}
 					options={allOptions()}
-					value={localSettings.inputTranslateModel || ""}
+					value={localSettings.inputTranslateModel}
+					services={settings.services}
 					error={getFieldError(["inputTranslateModel"])?.message}
-					onChange={(e) => {
-						const value = e.target.value === "" ? undefined : e.target.value;
-						setLocalSettings("inputTranslateModel", value);
-					}}
+					thinkingError={
+						getFieldError(["inputTranslateModel", "thinkingBudget"])?.message
+					}
+					onChange={(value) => setLocalSettings("inputTranslateModel", value)}
 				/>
 			</FormGrid>
 		</SettingsCard>

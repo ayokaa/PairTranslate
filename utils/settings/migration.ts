@@ -18,6 +18,7 @@ import {
 	LEGACY_WEB_ADAPTATION_PROMPT,
 	LEGACY_WEB_ADAPTATION_PROMPT_V12_INITIAL,
 } from "./legacy-web-adaptation-prompt";
+import type { ModelSelectionSettings } from "./model-selection";
 import { SETTINGS_VERSION } from "./version";
 
 type LegacyLLMService = {
@@ -60,7 +61,43 @@ type LegacyTranslateSettings = {
 	inputTranslateLang: string;
 };
 
-type SettingsV1 = Omit<SettingsSchema, "debug"> & { __v: 1 };
+type LegacyModelSelection = string | ModelSelectionSettings;
+
+type LegacySettingsV14 = Omit<
+	SettingsSchema,
+	"translate" | "summary" | "websiteRules" | "webAdaptation"
+> & {
+	translate: Omit<
+		SettingsSchema["translate"],
+		| "inTextTranslateModel"
+		| "floatingTranslateModel"
+		| "floatingExplainModel"
+		| "inputTranslateModel"
+	> & {
+		inTextTranslateModel?: LegacyModelSelection;
+		floatingTranslateModel?: LegacyModelSelection;
+		floatingExplainModel?: LegacyModelSelection;
+		inputTranslateModel?: LegacyModelSelection;
+	};
+	summary?: Omit<
+		SettingsSchema["summary"],
+		"summaryModel" | "pageContextModel"
+	> & {
+		summaryModel?: LegacyModelSelection;
+		pageContextModel?: LegacyModelSelection;
+	};
+	websiteRules: Array<
+		Omit<SettingsSchema["websiteRules"][number], "inTextTranslateModel"> & {
+			inTextTranslateModel?: LegacyModelSelection;
+		}
+	>;
+	webAdaptation: Omit<SettingsSchema["webAdaptation"], "model"> & {
+		model?: ModelSelectionSettings;
+		modelId?: string;
+	};
+};
+
+type SettingsV1 = Omit<LegacySettingsV14, "debug"> & { __v: 1 };
 
 type LegacySettingsV0 = Omit<SettingsV1, "services" | "prompts" | "summary"> & {
 	services?: LegacyServices;
@@ -69,14 +106,14 @@ type LegacySettingsV0 = Omit<SettingsV1, "services" | "prompts" | "summary"> & {
 	__v?: number;
 };
 
-type LegacyTranslateSettingsV8 = SettingsSchema["translate"] & {
+type LegacyTranslateSettingsV8 = LegacySettingsV14["translate"] & {
 	summaryModel?: string;
 	summaryExcludedSites?: string[];
 	summaryDefaultPinned?: boolean;
 	summaryGeometryMaxEntries?: number;
 };
 
-type LegacySettingsV8 = Omit<SettingsSchema, "translate" | "summary"> & {
+type LegacySettingsV8 = Omit<LegacySettingsV14, "translate" | "summary"> & {
 	translate: LegacyTranslateSettingsV8;
 };
 
@@ -93,7 +130,7 @@ type LegacyLLMServiceV9 = Omit<
 	extraBody?: Record<string, unknown>;
 };
 
-type LegacySettingsV9 = Omit<SettingsSchema, "services"> & {
+type LegacySettingsV9 = Omit<LegacySettingsV14, "services"> & {
 	services: Record<string, LegacyLLMServiceV9 | ServiceSettings>;
 };
 
@@ -117,7 +154,7 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 			continue;
 		}
 		if (version === 2) {
-			working = migrateV2ToV3(working as SettingsSchema);
+			working = migrateV2ToV3(working as LegacySettingsV14);
 			version = 3;
 			continue;
 		}
@@ -157,23 +194,28 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 			continue;
 		}
 		if (version === 10) {
-			working = migrateV10ToV11(working as SettingsSchema);
+			working = migrateV10ToV11(working as LegacySettingsV14);
 			version = 11;
 			continue;
 		}
 		if (version === 11) {
-			working = migrateV11ToV12(working as SettingsSchema);
+			working = migrateV11ToV12(working as LegacySettingsV14);
 			version = 12;
 			continue;
 		}
 		if (version === 12) {
-			working = migrateV12ToV13(working as SettingsSchema);
+			working = migrateV12ToV13(working as LegacySettingsV14);
 			version = 13;
 			continue;
 		}
 		if (version === 13) {
-			working = migrateV13ToV14(working as SettingsSchema);
+			working = migrateV13ToV14(working as LegacySettingsV14);
 			version = 14;
+			continue;
+		}
+		if (version === 14) {
+			working = migrateV14ToV15(working as LegacySettingsV14);
+			version = 15;
 			continue;
 		}
 
@@ -206,7 +248,7 @@ function migrateV0ToV1(oldSettings: LegacySettingsV0): SettingsV1 {
 	};
 }
 
-function migrateV1ToV2(oldSettings: SettingsV1): SettingsSchema {
+function migrateV1ToV2(oldSettings: SettingsV1): LegacySettingsV14 {
 	return {
 		...oldSettings,
 		debug: generateDebugSettings(),
@@ -214,7 +256,7 @@ function migrateV1ToV2(oldSettings: SettingsV1): SettingsSchema {
 	};
 }
 
-function migrateV2ToV3(oldSettings: SettingsSchema): SettingsSchema {
+function migrateV2ToV3(oldSettings: LegacySettingsV14): LegacySettingsV14 {
 	// For v3 we reset prompts to the new defaults. Keep other settings as-is.
 	return {
 		...oldSettings,
@@ -284,7 +326,7 @@ function convertLegacyServices(legacy?: LegacyServices): ServicesSettings {
 
 function getModernTranslateSettings(
 	legacy?: LegacyTranslateSettings,
-): SettingsSchema["translate"] {
+): LegacySettingsV14["translate"] {
 	if (!legacy) {
 		return generateTranslateSettings();
 	}
@@ -359,7 +401,7 @@ function migrateV7ToV8(oldSettings: LegacySettingsV8): LegacySettingsV8 {
 	};
 }
 
-function migrateV8ToV9(oldSettings: LegacySettingsV8): SettingsSchema {
+function migrateV8ToV9(oldSettings: LegacySettingsV8): LegacySettingsV14 {
 	const {
 		summaryModel,
 		summaryDefaultPinned,
@@ -375,7 +417,7 @@ function migrateV8ToV9(oldSettings: LegacySettingsV8): SettingsSchema {
 
 	return {
 		...oldSettings,
-		translate: restTranslate as SettingsSchema["translate"],
+		translate: restTranslate as LegacySettingsV14["translate"],
 		summary: {
 			summaryModel,
 			summaryDefaultPinned: summaryDefaultPinned ?? false,
@@ -386,7 +428,7 @@ function migrateV8ToV9(oldSettings: LegacySettingsV8): SettingsSchema {
 	};
 }
 
-function migrateV9ToV10(oldSettings: LegacySettingsV9): SettingsSchema {
+function migrateV9ToV10(oldSettings: LegacySettingsV9): LegacySettingsV14 {
 	const services: ServicesSettings = {};
 	for (const [id, service] of Object.entries(oldSettings.services)) {
 		if (service.type !== "llm") {
@@ -423,7 +465,7 @@ function migrateV9ToV10(oldSettings: LegacySettingsV9): SettingsSchema {
 	return { ...oldSettings, services, __v: 10 };
 }
 
-function migrateV10ToV11(oldSettings: SettingsSchema): SettingsSchema {
+function migrateV10ToV11(oldSettings: LegacySettingsV14): LegacySettingsV14 {
 	const prompts = generatePromptSettings();
 	return {
 		...oldSettings,
@@ -440,7 +482,7 @@ function migrateV10ToV11(oldSettings: SettingsSchema): SettingsSchema {
 	};
 }
 
-function migrateV11ToV12(oldSettings: SettingsSchema): SettingsSchema {
+function migrateV11ToV12(oldSettings: LegacySettingsV14): LegacySettingsV14 {
 	return {
 		...oldSettings,
 		webAdaptation: generateWebAdaptationSettings(),
@@ -478,7 +520,7 @@ function matchesLegacyPrompt(
 	return matched ? { matched: true, name } : { matched: false };
 }
 
-function migrateV12ToV13(oldSettings: SettingsSchema): SettingsSchema {
+function migrateV12ToV13(oldSettings: LegacySettingsV14): LegacySettingsV14 {
 	const match = matchesLegacyPrompt(
 		oldSettings.prompts[PROMPT_ID.webAdaptation],
 		[LEGACY_WEB_ADAPTATION_PROMPT_V12_INITIAL, LEGACY_WEB_ADAPTATION_PROMPT],
@@ -499,7 +541,7 @@ function migrateV12ToV13(oldSettings: SettingsSchema): SettingsSchema {
 	return { ...oldSettings, __v: 13 };
 }
 
-function migrateV13ToV14(oldSettings: SettingsSchema): SettingsSchema {
+function migrateV13ToV14(oldSettings: LegacySettingsV14): LegacySettingsV14 {
 	const defaults = generatePromptSettings();
 	const legacyById = getLegacyBuiltinPromptsById();
 	let changed = false;
@@ -517,6 +559,50 @@ function migrateV13ToV14(oldSettings: SettingsSchema): SettingsSchema {
 		...oldSettings,
 		...(changed ? { prompts: nextPrompts } : {}),
 		__v: 14,
+	};
+}
+
+function toModelSelection(
+	value: LegacyModelSelection | undefined,
+): ModelSelectionSettings | undefined {
+	return typeof value === "string" ? { modelId: value } : value;
+}
+
+function migrateV14ToV15(oldSettings: LegacySettingsV14): SettingsSchema {
+	const { model, modelId, ...webAdaptation } = oldSettings.webAdaptation;
+	const adaptationModel = toModelSelection(model ?? modelId);
+	const summary = oldSettings.summary ?? generateSummarySettings();
+	return {
+		...oldSettings,
+		translate: {
+			...oldSettings.translate,
+			inTextTranslateModel: toModelSelection(
+				oldSettings.translate.inTextTranslateModel,
+			),
+			floatingTranslateModel: toModelSelection(
+				oldSettings.translate.floatingTranslateModel,
+			),
+			floatingExplainModel: toModelSelection(
+				oldSettings.translate.floatingExplainModel,
+			),
+			inputTranslateModel: toModelSelection(
+				oldSettings.translate.inputTranslateModel,
+			),
+		},
+		summary: {
+			...summary,
+			summaryModel: toModelSelection(summary.summaryModel),
+			pageContextModel: toModelSelection(summary.pageContextModel),
+		},
+		websiteRules: oldSettings.websiteRules.map((rule) => ({
+			...rule,
+			inTextTranslateModel: toModelSelection(rule.inTextTranslateModel),
+		})),
+		webAdaptation: {
+			...webAdaptation,
+			...(adaptationModel ? { model: adaptationModel } : {}),
+		},
+		__v: 15,
 	};
 }
 

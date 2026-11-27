@@ -1,8 +1,9 @@
 import { browser } from "#imports";
 import { STORAGE_KEYS } from "~/utils/constants";
+import { ModelSelectionSettings } from "~/utils/settings/model-selection";
 
 export type SidebarSettings = {
-	modelId?: string;
+	model?: ModelSelectionSettings;
 	targetLang?: string;
 };
 
@@ -33,8 +34,23 @@ const sanitizeHistory = (value: unknown): SidebarHistoryItem[] => {
 
 export async function loadSidebarSettings(): Promise<SidebarSettings> {
 	const res = await browser.storage.local.get(STORAGE_KEYS.sidebarSettings);
-	const settings = res[STORAGE_KEYS.sidebarSettings] as SidebarSettings;
-	return settings ?? {};
+	const settings = res[STORAGE_KEYS.sidebarSettings];
+	if (!settings || typeof settings !== "object") return {};
+	const candidate = settings as SidebarSettings & { modelId?: unknown };
+	const model = ModelSelectionSettings.safeParse(candidate.model);
+	const legacyModel = ModelSelectionSettings.safeParse({
+		modelId: candidate.modelId,
+	});
+	return {
+		...(model.success
+			? { model: model.data }
+			: legacyModel.success
+				? { model: legacyModel.data }
+				: {}),
+		...(typeof candidate.targetLang === "string"
+			? { targetLang: candidate.targetLang }
+			: {}),
+	};
 }
 
 export async function saveSidebarSettings(

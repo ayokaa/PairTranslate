@@ -2,6 +2,9 @@ import { createEffect, createSignal, onCleanup } from "solid-js";
 import { PROMPT_ID } from "~/utils/constants";
 import { getPageContext } from "~/utils/page-context";
 import { createLogger } from "~/utils/rpc/logger";
+import type { ServicesSettings } from "~/utils/settings/def";
+import type { ModelSelectionSettings } from "~/utils/settings/model-selection";
+import { resolveThinkingBudget } from "~/utils/settings/services";
 import { extractPageContent } from "~/utils/summary/extract";
 import type { TranslateContext } from "~/utils/types";
 
@@ -37,10 +40,14 @@ const stripFragment = (url: string): string => {
 
 const cacheKey = (
 	url: string,
-	modelId: string,
+	model: ModelSelectionSettings,
+	services: ServicesSettings,
 	srcLang: string,
 	dstLang: string,
-) => `url:${stripFragment(url)} model:${modelId} src:${srcLang} dst:${dstLang}`;
+) => {
+	const thinkingBudget = resolveThinkingBudget(services, model);
+	return `url:${stripFragment(url)} model:${model.modelId} thinking:${thinkingBudget ?? ""} src:${srcLang} dst:${dstLang}`;
+};
 
 const truncateToLength = (content: string, maxLength: number): string => {
 	if (content.length <= maxLength) return content;
@@ -52,13 +59,14 @@ const truncateToLength = (content: string, maxLength: number): string => {
 
 export const getCachedPageContext = (
 	url: string,
-	modelId: string | undefined,
+	model: ModelSelectionSettings | undefined,
+	services: ServicesSettings,
 	srcLang: string,
 	dstLang: string,
 ): string | undefined => {
-	if (!modelId) return undefined;
+	if (!model) return undefined;
 	cacheVersion();
-	return cache.get(cacheKey(url, modelId, srcLang, dstLang))?.text;
+	return cache.get(cacheKey(url, model, services, srcLang, dstLang))?.text;
 };
 
 /** Read the page content now, or record that there is nothing to read. */
@@ -76,13 +84,20 @@ const capturePageContent = (key: string): boolean => {
 };
 
 export const ensurePageContext = async (options: {
-	modelId: string;
+	model: ModelSelectionSettings;
+	services: ServicesSettings;
 	srcLang: string;
 	dstLang: string;
 	url?: string;
 }): Promise<string | undefined> => {
 	const url = options.url ?? window.location.href;
-	const key = cacheKey(url, options.modelId, options.srcLang, options.dstLang);
+	const key = cacheKey(
+		url,
+		options.model,
+		options.services,
+		options.srcLang,
+		options.dstLang,
+	);
 	const hit = cache.get(key);
 	if (hit) return hit.text;
 	if (failed.has(key)) return undefined;
@@ -101,7 +116,7 @@ export const ensurePageContext = async (options: {
 			const resp = await window.rpc.unary(
 				ctx,
 				{
-					modelId: options.modelId,
+					...options.model,
 					promptId: PROMPT_ID.pageContext,
 					srcLang: options.srcLang,
 					dstLang: options.dstLang,
@@ -133,7 +148,8 @@ export const ensurePageContext = async (options: {
 };
 
 export function usePageContext(options: {
-	modelId: () => string | undefined;
+	model: () => ModelSelectionSettings | undefined;
+	services: () => ServicesSettings;
 	srcLang: () => string;
 	dstLang: () => string;
 	active: () => boolean;
@@ -158,45 +174,60 @@ export function usePageContext(options: {
 	});
 
 	createEffect(() => {
-		const modelId = options.modelId();
-		if (!modelId || !options.active()) return;
+		const model = options.model();
+		if (!model || !options.active()) return;
 		const currentUrl = url();
 		if (!currentUrl) return;
+		const services = options.services();
 		const srcLang = options.srcLang();
 		const dstLang = options.dstLang();
-		const key = cacheKey(currentUrl, modelId, srcLang, dstLang);
+		const key = cacheKey(currentUrl, model, services, srcLang, dstLang);
 		if (cache.has(key) || failed.has(key)) return;
 		// Capture while the document is still free of this extension's own
 		// translation containers; afterwards there is nothing left to read.
 		if (!capturePageContent(key)) return;
 		if (!(options.generate?.() ?? true)) return;
 		if (inflight.has(key)) return;
-		void ensurePageContext({ modelId, srcLang, dstLang, url: currentUrl });
+		void ensurePageContext({
+			model,
+			services,
+			srcLang,
+			dstLang,
+			url: currentUrl,
+		});
 	});
 
 	const text = () =>
 		getCachedPageContext(
 			url(),
-			options.modelId(),
+			options.model(),
+			options.services(),
 			options.srcLang(),
 			options.dstLang(),
 		);
 
 	const ready = () => {
-		const modelId = options.modelId();
-		if (!modelId) return true;
+		const model = options.model();
+		if (!model) return true;
 		cacheVersion();
-		const key = cacheKey(url(), modelId, options.srcLang(), options.dstLang());
+		const key = cacheKey(
+			url(),
+			model,
+			options.services(),
+			options.srcLang(),
+			options.dstLang(),
+		);
 		return cache.has(key) || failed.has(key);
 	};
 
 	// Callers can capture content immediately, but defer generation until a
 	// translation cache miss actually needs the context.
 	const ensure = () => {
-		const modelId = options.modelId();
-		if (!modelId || !options.active()) return Promise.resolve(undefined);
+		const model = options.model();
+		if (!model || !options.active()) return Promise.resolve(undefined);
 		return ensurePageContext({
-			modelId,
+			model,
+			services: options.services(),
 			srcLang: options.srcLang(),
 			dstLang: options.dstLang(),
 			url: url() || stripFragment(window.location.href),

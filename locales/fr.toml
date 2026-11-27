@@ -272,6 +272,10 @@ inTextTranslationActionsDesc = "Afficher les actions Réessayer, Supprimer et Co
 selectionTranslateEnabled = "$1 + Clic/Glissement de souris pour traduire"
 selectionTranslateHintSuffix = "+ Clic/Glissement de souris pour traduire"
 
+[settings.modelSelection]
+thinkingBudget = "Effort de raisonnement"
+modelDefault = "Par défaut du modèle"
+
 [settings.summary]
 summaryDefaultPinned = "Épingler la fenêtre de résumé par défaut"
 summaryDefaultPinnedDesc = "Garder la fenêtre de résumé ouverte en cliquant à l'extérieur"
@@ -377,7 +381,7 @@ temperature = "Température"
 maxTokens = "Jetons Maximaux"
 maxTokensDefault = "Par défaut"
 thinkingBudget = "Budget de raisonnement"
-thinkingBudgetDefault = "Par défaut"
+thinkingBudgetDefault = "Par défaut du fournisseur"
 customService = "Personnalisé"
 extraBody = "Corps de requête supplémentaire"
 
