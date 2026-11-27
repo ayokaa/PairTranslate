@@ -76,7 +76,16 @@ export type DetailedSegment = {
 	text: string;
 	/** Index extracted from the delimiter text (e.g. "==== 12" -> 12). */
 	index: number | undefined;
+	/**
+	 * True when the segment body itself contains a malformed standalone divider
+	 * line (e.g. `**==== 1**` or `==== 1 ====`), meaning the next segment was
+	 * swallowed into this one and it must not be cached as a clean translation.
+	 */
+	corrupted?: boolean;
 };
+
+const MALFORMED_DIVIDER_LINE =
+	/^\s*(?:[*_#>`~-]+\s*)*={4,}\s*\d+(?:\s*={2,})?(?:\s*[*_~`]+)?\s*$/m;
 
 /**
  * Like splitWithDelimiter, but keeps the delimiter match of each segment so
@@ -95,10 +104,21 @@ export const splitWithDelimiterDetailed = (
 	const flags = delimiter.flags.includes("g")
 		? delimiter.flags
 		: `${delimiter.flags}g`;
+	const checkMalformedDivider = delimiter.source.includes("====");
 	const matches = [...value.matchAll(new RegExp(delimiter.source, flags))];
 	if (matches.length === 0) {
 		const text = value.trim();
-		return text ? [{ text, index: undefined }] : [];
+		return text
+			? [
+					{
+						text,
+						index: undefined,
+						...(checkMalformedDivider && MALFORMED_DIVIDER_LINE.test(text)
+							? { corrupted: true }
+							: {}),
+					},
+				]
+			: [];
 	}
 	const segments: DetailedSegment[] = [];
 	const preamble = value.slice(0, matches[0].index).trim();
@@ -115,6 +135,9 @@ export const splitWithDelimiterDetailed = (
 		segments.push({
 			text,
 			index: indexText ? Number.parseInt(indexText[0], 10) : undefined,
+			...(checkMalformedDivider && MALFORMED_DIVIDER_LINE.test(text)
+				? { corrupted: true }
+				: {}),
 		});
 	}
 	return segments;
@@ -131,8 +154,9 @@ export type SegmentAlignment = {
  * Place segments onto the expected positions. Index-based placement is used
  * only when every numbered segment carries a unique in-range index and any
  * unindexed segment is leading junk (a preamble); otherwise the segments must
- * match positionally one-to-one. Anything else leaves every position missing
- * so the caller can re-request instead of silently misplacing translations.
+ * match positionally one-to-one. Corrupted segments (holding a swallowed
+ * divider line) are always left missing so callers re-request them instead of
+ * caching poisoned output.
  */
 export const alignSegments = (
 	segments: DetailedSegment[],
@@ -154,11 +178,15 @@ export const alignSegments = (
 		indices.every((index) => index >= 0 && index < expected);
 	if (usable) {
 		for (const segment of segments) {
-			if (segment.index !== undefined) values[segment.index] = segment.text;
+			if (segment.index !== undefined && !segment.corrupted) {
+				values[segment.index] = segment.text;
+			}
 		}
 	} else if (segments.length === expected) {
 		segments.forEach((segment, i) => {
-			values[i] = segment.text;
+			if (!segment.corrupted) {
+				values[i] = segment.text;
+			}
 		});
 	}
 	const missing: number[] = [];

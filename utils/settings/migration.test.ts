@@ -1,5 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import { LEGACY_WEB_ADAPTATION_PROMPT } from "./legacy-web-adaptation-prompt";
+import {
+	LEGACY_BATCH_TRANSLATE_PROMPT_V13,
+	LEGACY_PAGE_CONTEXT_PROMPT_V13,
+	LEGACY_WEB_ADAPTATION_PROMPT,
+	LEGACY_WEB_ADAPTATION_PROMPT_V12_INITIAL,
+} from "./legacy-web-adaptation-prompt";
 import { SETTINGS_VERSION } from "./version";
 
 mock.module("~/utils/i18n", () => ({
@@ -615,4 +620,62 @@ describe("migrateSettings", () => {
 			expect(result.__v).toBe(SETTINGS_VERSION);
 		},
 	);
+
+	test("v13 to v14 upgrades initial v12 adaptation prompts missed by v13 and unchanged v13 defaults", () => {
+		const defaults = generateDefaultSettings();
+		const result = migrateSettings({
+			...defaults,
+			__v: 13,
+			prompts: {
+				...defaults.prompts,
+				[PROMPT_ID.webAdaptation]: {
+					name: "网页适配",
+					...LEGACY_WEB_ADAPTATION_PROMPT_V12_INITIAL,
+				},
+				[PROMPT_ID.batchTranslate]: {
+					name: "批量翻译",
+					...LEGACY_BATCH_TRANSLATE_PROMPT_V13,
+				},
+				[PROMPT_ID.pageContext]: {
+					name: "页面语境",
+					...LEGACY_PAGE_CONTEXT_PROMPT_V13,
+				},
+			},
+		});
+
+		expect(result.__v).toBe(SETTINGS_VERSION);
+		expect(result.prompts[PROMPT_ID.webAdaptation]).toEqual({
+			...defaults.prompts[PROMPT_ID.webAdaptation],
+			name: "网页适配",
+		});
+		expect(result.prompts[PROMPT_ID.batchTranslate]).toEqual({
+			...defaults.prompts[PROMPT_ID.batchTranslate],
+			name: "批量翻译",
+		});
+		expect(result.prompts[PROMPT_ID.pageContext]).toEqual({
+			...defaults.prompts[PROMPT_ID.pageContext],
+			name: "页面语境",
+		});
+	});
+
+	test("v13 to v14 preserves customized batchTranslate prompts", () => {
+		const defaults = generateDefaultSettings();
+		const customBatch = {
+			name: "Custom Batch",
+			...LEGACY_BATCH_TRANSLATE_PROMPT_V13,
+			systemPrompt: `${LEGACY_BATCH_TRANSLATE_PROMPT_V13.systemPrompt}\nCustom rule.`,
+		};
+		const result = migrateSettings({
+			...defaults,
+			__v: 13,
+			prompts: {
+				...defaults.prompts,
+				[PROMPT_ID.batchTranslate]: customBatch,
+			},
+		});
+		expect(result.__v).toBe(SETTINGS_VERSION);
+		expect(result.prompts[PROMPT_ID.batchTranslate]).toEqual(
+			PromptSettings.parse(customBatch),
+		);
+	});
 });

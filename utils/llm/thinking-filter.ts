@@ -41,27 +41,13 @@ function isPotentialTagPrefix(text: string): boolean {
 }
 
 /**
- * Find the longest suffix of `text` that could be the start of an open tag.
- * Returns the length of that suffix. e.g. "abc<thi" -> 4 ("<thi" is a prefix of "<think>")
- */
-function findTagPrefixSuffixLength(text: string): number {
-	let maxLen = 0;
-	for (let i = text.length - 1; i >= 0; i--) {
-		const suffix = text.slice(i);
-		if (suffix.startsWith("<") && isPotentialTagPrefix(suffix)) {
-			maxLen = Math.max(maxLen, suffix.length);
-		}
-	}
-	return maxLen;
-}
-
-/**
- * Creates a stateful filter that strips thinking/reasoning tags from LLM stream chunks.
- * Handles tags that may span across multiple chunks. All thinking content is discarded.
+ * Creates a stateful filter that strips leading thinking/reasoning envelopes.
+ * Tags after translated content are literal text and must be preserved.
  */
 export function createThinkingFilter() {
 	let buffer = "";
 	let inThinking = false;
+	let acceptsReasoning = true;
 
 	return {
 		/**
@@ -88,23 +74,31 @@ export function createThinkingFilter() {
 						return content || undefined;
 					}
 				} else {
+					if (!acceptsReasoning) {
+						content += text;
+						break;
+					}
+					const firstContent = text.search(/\S/);
+					if (firstContent === -1) {
+						content += text;
+						break;
+					}
 					const found = findEarliest(text, OPEN_TAGS);
-
-					if (found) {
+					if (found && !text.slice(0, found.index).trim()) {
 						content += text.slice(0, found.index);
 						text = text.slice(found.index + found.length);
 						inThinking = true;
-					} else {
-						// Check if the end of text could be a partial open tag
-						const suffixLen = findTagPrefixSuffixLength(text);
-						if (suffixLen > 0) {
-							content += text.slice(0, text.length - suffixLen);
-							buffer = text.slice(text.length - suffixLen);
-						} else {
-							content += text;
-						}
-						break;
+						continue;
 					}
+					const candidate = text.slice(firstContent);
+					if (isPotentialTagPrefix(candidate)) {
+						content += text.slice(0, firstContent);
+						buffer = candidate;
+					} else {
+						acceptsReasoning = false;
+						content += text;
+					}
+					break;
 				}
 			}
 

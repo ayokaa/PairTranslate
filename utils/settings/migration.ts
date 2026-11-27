@@ -13,7 +13,11 @@ import {
 	generateTranslateSettings,
 	generateWebAdaptationSettings,
 } from "./default";
-import { LEGACY_WEB_ADAPTATION_PROMPT } from "./legacy-web-adaptation-prompt";
+import {
+	getLegacyBuiltinPromptsById,
+	LEGACY_WEB_ADAPTATION_PROMPT,
+	LEGACY_WEB_ADAPTATION_PROMPT_V12_INITIAL,
+} from "./legacy-web-adaptation-prompt";
 import { SETTINGS_VERSION } from "./version";
 
 type LegacyLLMService = {
@@ -165,6 +169,11 @@ export const migrateSettings = (raw: unknown): SettingsSchema => {
 		if (version === 12) {
 			working = migrateV12ToV13(working as SettingsSchema);
 			version = 13;
+			continue;
+		}
+		if (version === 13) {
+			working = migrateV13ToV14(working as SettingsSchema);
+			version = 14;
 			continue;
 		}
 
@@ -444,32 +453,71 @@ function migrateV11ToV12(oldSettings: SettingsSchema): SettingsSchema {
 	};
 }
 
-function migrateV12ToV13(oldSettings: SettingsSchema): SettingsSchema {
-	const parsed = PromptSettings.safeParse(
-		oldSettings.prompts[PROMPT_ID.webAdaptation],
+function serializePromptDefinition(prompt: unknown): string | undefined {
+	const parsed = PromptSettings.safeParse(prompt);
+	if (!parsed.success) return undefined;
+	// Schema parsing gives a stable field order and defaults. The display name
+	// is user metadata; preserve it while comparing the entire prompt behavior.
+	const { name: _name, ...definition } = parsed.data;
+	return JSON.stringify(definition);
+}
+
+function matchesLegacyPrompt(
+	saved: unknown,
+	legacySnapshots: readonly unknown[],
+): { matched: true; name: string } | { matched: false } {
+	const parsed = PromptSettings.safeParse(saved);
+	if (!parsed.success) return { matched: false };
+	const { name, ...definition } = parsed.data;
+	const serialized = JSON.stringify(definition);
+	const matched = legacySnapshots.some(
+		(snapshot) =>
+			serializePromptDefinition({ name: "_", ...(snapshot as object) }) ===
+			serialized,
 	);
-	if (parsed.success) {
-		// Schema parsing gives a stable field order and defaults. The display name
-		// is user metadata; preserve it while comparing the entire prompt behavior.
-		const { name, ...definition } = parsed.data;
-		if (
-			JSON.stringify(definition) ===
-			JSON.stringify(LEGACY_WEB_ADAPTATION_PROMPT)
-		) {
-			return {
-				...oldSettings,
-				prompts: {
-					...oldSettings.prompts,
-					[PROMPT_ID.webAdaptation]: {
-						...generatePromptSettings()[PROMPT_ID.webAdaptation],
-						name,
-					},
+	return matched ? { matched: true, name } : { matched: false };
+}
+
+function migrateV12ToV13(oldSettings: SettingsSchema): SettingsSchema {
+	const match = matchesLegacyPrompt(
+		oldSettings.prompts[PROMPT_ID.webAdaptation],
+		[LEGACY_WEB_ADAPTATION_PROMPT_V12_INITIAL, LEGACY_WEB_ADAPTATION_PROMPT],
+	);
+	if (match.matched) {
+		return {
+			...oldSettings,
+			prompts: {
+				...oldSettings.prompts,
+				[PROMPT_ID.webAdaptation]: {
+					...generatePromptSettings()[PROMPT_ID.webAdaptation],
+					name: match.name,
 				},
-				__v: 13,
-			};
-		}
+			},
+			__v: 13,
+		};
 	}
 	return { ...oldSettings, __v: 13 };
+}
+
+function migrateV13ToV14(oldSettings: SettingsSchema): SettingsSchema {
+	const defaults = generatePromptSettings();
+	const legacyById = getLegacyBuiltinPromptsById();
+	let changed = false;
+	const nextPrompts = { ...oldSettings.prompts };
+	for (const [promptId, snapshots] of Object.entries(legacyById)) {
+		const replacement = defaults[promptId];
+		if (!replacement) continue;
+		const match = matchesLegacyPrompt(oldSettings.prompts[promptId], snapshots);
+		if (match.matched) {
+			nextPrompts[promptId] = { ...replacement, name: match.name };
+			changed = true;
+		}
+	}
+	return {
+		...oldSettings,
+		...(changed ? { prompts: nextPrompts } : {}),
+		__v: 14,
+	};
 }
 
 function getSettingsVersion(raw: unknown): number {

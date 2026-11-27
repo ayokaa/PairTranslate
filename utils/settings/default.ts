@@ -155,7 +155,7 @@ export function generatePromptSettings(): s.PromptsSettings {
 						type: "stringArray",
 						delimiter: {
 							type: "regex",
-							pattern: "^==== \\d+",
+							pattern: "^==== \\d+[ \\t]*$",
 							flags: "gm",
 						},
 					},

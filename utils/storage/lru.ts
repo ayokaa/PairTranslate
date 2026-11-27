@@ -76,36 +76,6 @@ export function createLRUStorage<TSchema>(
 		return opening;
 	};
 
-	// Helper to remove a single item (used by set)
-	const evict = async (): Promise<void> => {
-		const db = await open();
-		return new Promise((resolve, reject) => {
-			const transaction = db.transaction(
-				[storeName, usageStoreName],
-				"readwrite",
-			);
-			const dataStore = transaction.objectStore(storeName);
-			const usageStore = transaction.objectStore(usageStoreName);
-			const usageIndex = usageStore.index("lastUsed");
-
-			const openCursorRequest = usageIndex.openCursor();
-
-			openCursorRequest.onsuccess = (event) => {
-				const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
-				if (cursor) {
-					const lruKey = cursor.value.key;
-					dataStore.delete(lruKey);
-					usageStore.delete(lruKey);
-				}
-				resolve();
-			};
-
-			openCursorRequest.onerror = () => {
-				reject(openCursorRequest.error);
-			};
-		});
-	};
-
 	const getMany = async (
 		keys: readonly Key[],
 	): Promise<(TSchema | undefined)[]> => {
@@ -134,7 +104,12 @@ export function createLRUStorage<TSchema>(
 	};
 	const get = async (key: Key) => (await getMany([key]))[0];
 
-	const set = async (key: Key, value: TSchema): Promise<void> => {
+	// Write a batch and evict any overflow inside a single transaction so large
+	// translation batches do not spawn hundreds of competing write transactions.
+	const setMany = async (
+		entries: readonly { key: Key; value: TSchema }[],
+	): Promise<void> => {
+		if (!entries.length || maxSize <= 0) return;
 		const db = await open();
 		return new Promise((resolve, reject) => {
 			const transaction = db.transaction(
@@ -143,27 +118,43 @@ export function createLRUStorage<TSchema>(
 			);
 			const dataStore = transaction.objectStore(storeName);
 			const usageStore = transaction.objectStore(usageStoreName);
+			const usageIndex = usageStore.index("lastUsed");
+			const now = Date.now();
 
-			dataStore.put(value, key);
-			usageStore.put({ key, lastUsed: Date.now() });
+			for (const entry of entries) {
+				dataStore.put(entry.value, entry.key);
+				usageStore.put({ key: entry.key, lastUsed: now });
+			}
 
 			const countRequest = dataStore.count();
-
 			countRequest.onsuccess = () => {
-				if (countRequest.result > maxSize) {
-					// Eviction is chained to the transaction completion
-					transaction.oncomplete = () => {
-						evict().then(resolve).catch(reject);
-					};
-				} else {
-					transaction.oncomplete = () => resolve();
-				}
+				let excess = countRequest.result - maxSize;
+				if (excess <= 0) return;
+
+				const cursorRequest = usageIndex.openCursor();
+				cursorRequest.onsuccess = (event) => {
+					const cursor = (event.target as IDBRequest<IDBCursorWithValue>)
+						.result;
+					if (cursor && excess > 0) {
+						dataStore.delete(cursor.value.key);
+						cursor.delete();
+						excess--;
+						cursor.continue();
+					}
+				};
+				cursorRequest.onerror = () => reject(cursorRequest.error);
 			};
 
 			countRequest.onerror = () => reject(countRequest.error);
+			transaction.oncomplete = () => resolve();
 			transaction.onerror = () => reject(transaction.error);
+			transaction.onabort = () =>
+				reject(transaction.error ?? new Error("Cache write aborted"));
 		});
 	};
+
+	const set = async (key: Key, value: TSchema): Promise<void> =>
+		setMany([{ key, value }]);
 
 	const resize = async (newSize: number): Promise<void> => {
 		// Update the closure variable so future sets respect the new limit
@@ -324,6 +315,7 @@ export function createLRUStorage<TSchema>(
 		},
 		getMany,
 		get,
+		setMany,
 		set,
 		del,
 		clear,

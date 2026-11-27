@@ -198,6 +198,19 @@ export function createBatchTranslation(
 			? normalized.output
 			: [normalized.output];
 		setResultTexts(translated, normalized.skipped);
+		if (normalized.errors?.some(Boolean)) {
+			batch(() => {
+				normalized.errors?.forEach((message, index) => {
+					if (!message || index >= len) return;
+					setError(
+						index,
+						createTranslateError(TranslateErrorType.VALIDATION_ERROR, message),
+					);
+					setTextResult(index, undefined);
+					setSkipped(index, false);
+				});
+			});
+		}
 		if (translated.length < len) {
 			batch(() => {
 				setError(
@@ -323,12 +336,28 @@ export function createBatchTranslation(
 						srcLang: srcLang_,
 						dstLang: dstLang_,
 						cleanCache: true,
+						thinCache,
 					},
-					text_,
+					[text_],
 					abortController.signal,
 				);
 				if (abortController.signal.aborted) return;
 				const normalized = normalizeUnaryResponse<string | string[]>(resp);
+				const itemError = normalized.errors?.[0];
+				if (itemError) {
+					batch(() => {
+						setError(
+							index,
+							createTranslateError(
+								TranslateErrorType.VALIDATION_ERROR,
+								itemError,
+							),
+						);
+						setTextResult(index, undefined);
+						setSkipped(index, false);
+					});
+					return;
+				}
 				const value = Array.isArray(normalized.output)
 					? normalized.output[0]
 					: normalized.output;

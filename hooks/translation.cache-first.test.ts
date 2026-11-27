@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { createRoot, createSignal } from "solid-js";
 import { PROMPT_ID } from "~/utils/constants";
+import type { TranslationResponse } from "~/utils/translation-result";
 
 mock.module("~/utils/i18n", () => ({ t: (key: string) => key }));
 mock.module("~/hooks/progress-indicator", () => ({
@@ -10,10 +11,12 @@ mock.module("~/hooks/progress-indicator", () => ({
 const { createBatchTranslation } = await import("./translation");
 const disposers: (() => void)[] = [];
 const cachedUnary = mock(async (..._args: unknown[]): Promise<unknown> => null);
-const unary = mock(async (..._args: unknown[]) => ({
-	output: ["fresh translation"],
-	skipped: false,
-}));
+const unary = mock(
+	async (..._args: unknown[]): Promise<TranslationResponse<string[]>> => ({
+		output: ["fresh translation"],
+		skipped: false,
+	}),
+);
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 beforeEach(() => {
@@ -136,9 +139,37 @@ test("retrying one cached segment also prepares context before retranslation", a
 	expect(unary).not.toHaveBeenCalled();
 	context.resolve();
 	await flush();
-	expect(unary.mock.calls[0][1]).toMatchObject({ cleanCache: true });
-	expect(unary.mock.calls[0][2]).toBe("Original paragraph");
+	expect(unary.mock.calls[0][1]).toMatchObject({
+		cleanCache: true,
+		thinCache: true,
+	});
+	expect(unary.mock.calls[0][2]).toEqual(["Original paragraph"]);
 	expect(read()[0]()).toBe("fresh translation");
+});
+
+test("partial batch errors render aligned translations and report only failed slots", async () => {
+	unary.mockResolvedValue({
+		output: ["第一段", ""],
+		skipped: [false, false],
+		errors: [undefined, "Expected 2 translations, but got 1"],
+	});
+	let result!: ReturnType<typeof createBatchTranslation>;
+	createRoot((dispose) => {
+		disposers.push(dispose);
+		result = createBatchTranslation(() => ["First", "Second"], {
+			promptId: PROMPT_ID.batchTranslate,
+			modelId: () => "model-1",
+			srcLang: () => "en",
+			dstLang: () => "zh-CN",
+			ctx: () => ({ page: { domain: "example.com" } }),
+		});
+	});
+	await flush();
+	const [read] = result;
+	expect(read()[0]()).toBe("第一段");
+	expect(read()[0].error).toBeUndefined();
+	expect(read()[1]()).toBeUndefined();
+	expect(read()[1].error?.message).toBe("Expected 2 translations, but got 1");
 });
 
 test("unmounting while context is pending prevents a late translation", async () => {

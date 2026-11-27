@@ -24,8 +24,8 @@ import type {
 // Combine for better performance
 const COMMON_SKIP_PATTERNS = new RegExp(
 	[
-		// URLs and domains
-		/^(?:(?:https?|ftp):\/\/)?(?:[\w-]+\.)+[a-z]{2,}(?::\d{1,5})?(?:\/[^\s]*)?$/
+		// URLs, domains, and numbered/footnote URL references (e.g. "[1] https://...")
+		/^(?:(?:\[\d+\]|\d+[.)]):?\s*)?\[?(?:(?:https?|ftp):\/\/)?(?:[\w-]+\.)+[a-z]{2,}(?::\d{1,5})?(?:\/[^\s)\]]*)?\]?(?:\((?:https?|ftp):\/\/[^\s)]+\))?\.?$/
 			.source,
 		// Repeated characters (like "...")
 		/^(.)\1{2,}$/.source,

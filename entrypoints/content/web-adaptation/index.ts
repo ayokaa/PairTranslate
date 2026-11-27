@@ -18,7 +18,6 @@ import {
 	AdaptationSuggestion,
 	appendAdaptationPatch,
 	findAdaptationRule,
-	normalizePathname,
 	parseAdaptationRules,
 	patchesEqual,
 	validateSuggestedPatch,
@@ -219,8 +218,20 @@ async function analyzePage(
 	let reservedCheckKey: string | undefined;
 	let completed = false;
 	if (source === "automatic") {
+		const hasTemplateRuleForAnotherPath =
+			!existingRule &&
+			rules.some(
+				(rule) =>
+					rule.hostname === snapshot.hostname &&
+					(rule.structureKey === snapshot.structureKey ||
+						rule.structureKey === snapshot.legacyStructureKey),
+			);
+		// Covered pages share the template cooldown. An uncovered sibling needs
+		// a path-scoped reservation so it can obtain its own verified patch.
 		const key = checkKey(
-			`${snapshot.hostname}|${normalizePathname(snapshot.pathname)}|${snapshot.structureKey}|${modelId}`,
+			`${snapshot.hostname}|${snapshot.structureKey}|${modelId}${
+				hasTemplateRuleForAnotherPath ? `|${snapshot.pathname}` : ""
+			}`,
 		);
 		if (!(await window.rpc.reserveWebAdaptationCheck(key))) return "unchanged";
 		reservedCheckKey = key;
@@ -275,8 +286,28 @@ async function analyzePage(
 		} catch {
 			return "failed";
 		}
+		if (
+			raw &&
+			typeof raw === "object" &&
+			"reason" in raw &&
+			typeof (raw as { reason?: unknown }).reason === "string"
+		) {
+			const reason = (raw as { reason: string }).reason;
+			if (reason.length > 500) {
+				raw = {
+					...(raw as Record<string, unknown>),
+					reason: reason.slice(0, 500),
+				};
+			}
+		}
 		const suggestion = AdaptationSuggestion.safeParse(raw);
-		if (!suggestion.success) return "failed";
+		if (!suggestion.success) {
+			// The model returned parseable JSON that violated the suggestion schema;
+			// settle the cooldown so automatic analysis does not loop on the same
+			// template.
+			completed = true;
+			return "failed";
+		}
 		const incoming: AdaptationPatch = {
 			roots: suggestion.data.roots,
 			excludes: suggestion.data.excludes,
@@ -290,15 +321,20 @@ async function analyzePage(
 					!baselinePatch.excludes.includes(selector) ||
 					incoming.excludes.includes(selector),
 			)
-		)
+		) {
+			completed = true;
 			return "failed";
+		}
 		const hasAdditions = Object.values(incoming).some(
 			(items) => items.length > 0,
 		);
 		const patch = hasAdditions
 			? validateSuggestedPatch(incoming, document)
 			: incoming;
-		if (!patch) return "failed";
+		if (!patch) {
+			completed = true;
+			return "failed";
+		}
 		const finalPatch = appendAdaptationPatch(baselinePatch, patch, removals);
 		if (patchesEqual(baselinePatch, finalPatch)) {
 			completed = true;
