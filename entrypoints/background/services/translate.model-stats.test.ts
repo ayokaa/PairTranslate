@@ -356,6 +356,35 @@ test("batch translation strips thinking tags, discards corrupted dividers, and r
 	expect(cacheEntries.size).toBe(2);
 });
 
+test("batch translation preserves literal thinking tags in every segment", async () => {
+	chatHandler = async () => ({
+		output:
+			"==== 0\n使用 `<think>` 启用推理。\n==== 1\n```html\n<thinking>literal</thinking>\n<reasoning>literal</reasoning>\n```\n==== 2\n普通文本 <think> 保留。",
+		content:
+			"==== 0\n使用 `<think>` 启用推理。\n==== 1\n```html\n<thinking>literal</thinking>\n<reasoning>literal</reasoning>\n```\n==== 2\n普通文本 <think> 保留。",
+		usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+	});
+	const { unary } = await createTranslateService();
+	const response = await unary(
+		ctx,
+		{
+			modelId: MODEL_ID,
+			promptId: PROMPT_ID.batchTranslate,
+			srcLang: SRC,
+			dstLang: DST,
+			thinCache: true,
+		},
+		["Enable thinking", "Literal examples", "Next paragraph"],
+	);
+
+	expect(response.output).toEqual([
+		"使用 `<think>` 启用推理。",
+		"```html\n<thinking>literal</thinking>\n<reasoning>literal</reasoning>\n```",
+		"普通文本 <think> 保留。",
+	]);
+	expect(cacheEntries.size).toBe(3);
+});
+
 test("stream passes structured output schema for explain and strips thinking tags", async () => {
 	let receivedSchema: unknown;
 	streamHandler = async function* (_req, schema) {

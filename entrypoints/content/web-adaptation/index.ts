@@ -218,11 +218,20 @@ async function analyzePage(
 	let reservedCheckKey: string | undefined;
 	let completed = false;
 	if (source === "automatic") {
-		// Key cooldown by layout template rather than per-article pathname so
-		// sibling pages sharing the same structure do not repeatedly trigger
-		// analysis, while distinct templates on the same host stay independent.
+		const hasTemplateRuleForAnotherPath =
+			!existingRule &&
+			rules.some(
+				(rule) =>
+					rule.hostname === snapshot.hostname &&
+					(rule.structureKey === snapshot.structureKey ||
+						rule.structureKey === snapshot.legacyStructureKey),
+			);
+		// Covered pages share the template cooldown. An uncovered sibling needs
+		// a path-scoped reservation so it can obtain its own verified patch.
 		const key = checkKey(
-			`${snapshot.hostname}|${snapshot.structureKey}|${modelId}`,
+			`${snapshot.hostname}|${snapshot.structureKey}|${modelId}${
+				hasTemplateRuleForAnotherPath ? `|${snapshot.pathname}` : ""
+			}`,
 		);
 		if (!(await window.rpc.reserveWebAdaptationCheck(key))) return "unchanged";
 		reservedCheckKey = key;

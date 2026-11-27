@@ -154,6 +154,7 @@ let reservedKeys: string[] = [];
 let completedChecks = 0;
 let releasedChecks = 0;
 let reserveAllowed = true;
+const cooledCheckKeys = new Set<string>();
 let onModelRequest: (() => Promise<void>) | undefined;
 Object.assign(globalThis, {
 	window: {
@@ -182,10 +183,11 @@ Object.assign(globalThis, {
 			reserveWebAdaptationCheck: async (key: string) => {
 				reservedChecks += 1;
 				reservedKeys.push(key);
-				return reserveAllowed;
+				return reserveAllowed && !cooledCheckKeys.has(key);
 			},
-			completeWebAdaptationCheck: async () => {
+			completeWebAdaptationCheck: async (key: string) => {
 				completedChecks += 1;
+				cooledCheckKeys.add(key);
 			},
 			releaseWebAdaptationCheck: async () => {
 				releasedChecks += 1;
@@ -238,6 +240,7 @@ beforeEach(() => {
 	completedChecks = 0;
 	releasedChecks = 0;
 	reserveAllowed = true;
+	cooledCheckKeys.clear();
 	onModelRequest = undefined;
 	window.location.href = "https://example.com/article/one";
 	window.location.pathname = "/article/one";
@@ -493,6 +496,23 @@ test("sibling pages with the same layout share one automatic cooldown key", asyn
 
 	expect(reservedKeys).toHaveLength(2);
 	expect(reservedKeys[0]).toBe(reservedKeys[1]);
+});
+
+test("an uncovered sibling path does not inherit the saved template cooldown", async () => {
+	settings.webAdaptation.autoEnabled = true;
+
+	expect(await runWebAdaptation("automatic")).toBe("added");
+	window.location.href = "https://example.com/article/two";
+	window.location.pathname = "/article/two";
+	expect(await runWebAdaptation("automatic")).toBe("updated");
+
+	expect(settings.webAdaptation.rules[0].pathPatterns).toEqual(["/article/*"]);
+	expect(reservedKeys[1]).not.toBe(reservedKeys[0]);
+	expect(sentRequests).toHaveLength(2);
+
+	expect(await runWebAdaptation("automatic")).toBe("unchanged");
+	expect(reservedKeys[2]).toBe(reservedKeys[0]);
+	expect(sentRequests).toHaveLength(2);
 });
 
 test("a valid empty suggestion is unchanged and completes its reservation", async () => {
