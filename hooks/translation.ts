@@ -541,23 +541,28 @@ export function createTranslation<T>(
 			setErrorVal(noModelError());
 			return;
 		}
+		const modelId_ = selection_.modelId;
+		const thinkingBudget_ = selection_.thinkingBudget;
+		const srcLang_ = srcLang() || "auto";
+		const dstLang_ = dstLang();
 
-		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
+		if (await detectAndSkip(text_, srcLang_, dstLang_, promptId)) {
 			setSkippedVal();
 			return;
 		}
 
-		const endTracking = progressCtx?.beginRequest(selection_.modelId);
+		const endTracking = progressCtx?.beginRequest(modelId_);
 		setLoading();
 
 		const abortController = new AbortController();
 		const listener = window.rpc.stream(
 			ctx(),
 			{
-				...selection_,
+				modelId: modelId_,
+				thinkingBudget: thinkingBudget_,
 				promptId,
-				srcLang: srcLang() || "auto",
-				dstLang: dstLang(),
+				srcLang: srcLang_,
+				dstLang: dstLang_,
 				cleanCache,
 			},
 			text_,
@@ -605,13 +610,17 @@ export function createTranslation<T>(
 			setErrorVal(noModelError());
 			return;
 		}
+		const modelId_ = selection_.modelId;
+		const thinkingBudget_ = selection_.thinkingBudget;
+		const srcLang_ = srcLang() || "auto";
+		const dstLang_ = dstLang();
 
-		if (await detectAndSkip(text_, srcLang(), dstLang(), promptId)) {
+		if (await detectAndSkip(text_, srcLang_, dstLang_, promptId)) {
 			setSkippedVal();
 			return;
 		}
 
-		const endTracking = progressCtx?.beginRequest(selection_.modelId);
+		const endTracking = progressCtx?.beginRequest(modelId_);
 		setLoading();
 
 		const abortController = new AbortController();
@@ -619,10 +628,11 @@ export function createTranslation<T>(
 			.unary(
 				ctx(),
 				{
-					...selection_,
+					modelId: modelId_,
+					thinkingBudget: thinkingBudget_,
 					promptId,
-					srcLang: srcLang() || "auto",
-					dstLang: dstLang(),
+					srcLang: srcLang_,
+					dstLang: dstLang_,
 					cleanCache,
 				},
 				text_,

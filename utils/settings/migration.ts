@@ -79,7 +79,7 @@ type LegacySettingsV14 = Omit<
 		floatingExplainModel?: LegacyModelSelection;
 		inputTranslateModel?: LegacyModelSelection;
 	};
-	summary: Omit<
+	summary?: Omit<
 		SettingsSchema["summary"],
 		"summaryModel" | "pageContextModel"
 	> & {
@@ -571,6 +571,7 @@ function toModelSelection(
 function migrateV14ToV15(oldSettings: LegacySettingsV14): SettingsSchema {
 	const { model, modelId, ...webAdaptation } = oldSettings.webAdaptation;
 	const adaptationModel = toModelSelection(model ?? modelId);
+	const summary = oldSettings.summary ?? generateSummarySettings();
 	return {
 		...oldSettings,
 		translate: {
@@ -589,9 +590,9 @@ function migrateV14ToV15(oldSettings: LegacySettingsV14): SettingsSchema {
 			),
 		},
 		summary: {
-			...oldSettings.summary,
-			summaryModel: toModelSelection(oldSettings.summary.summaryModel),
-			pageContextModel: toModelSelection(oldSettings.summary.pageContextModel),
+			...summary,
+			summaryModel: toModelSelection(summary.summaryModel),
+			pageContextModel: toModelSelection(summary.pageContextModel),
 		},
 		websiteRules: oldSettings.websiteRules.map((rule) => ({
 			...rule,

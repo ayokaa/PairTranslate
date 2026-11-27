@@ -739,4 +739,15 @@ describe("migrateSettings", () => {
 		expect(result.webAdaptation.model).toEqual(model);
 		expect(migrateSettings(result)).toEqual(result);
 	});
+
+	test("v14 migration applies summary defaults when the section is absent", () => {
+		const defaults = generateDefaultSettings();
+		const v14Settings = { ...defaults, __v: 14 };
+		delete (v14Settings as Record<string, unknown>).summary;
+
+		const result = migrateSettings(v14Settings);
+
+		expect(result.__v).toBe(15);
+		expect(result.summary).toEqual(defaults.summary);
+	});
 });

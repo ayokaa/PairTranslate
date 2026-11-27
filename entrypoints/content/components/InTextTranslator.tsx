@@ -38,6 +38,7 @@ export default () => {
 			websiteRule.inTextTranslateModel ??
 			settings.translate.inTextTranslateModel;
 		const modelId = selection?.modelId;
+		const thinkingBudget = selection?.thinkingBudget;
 		const limits = resolveQueueSettings(
 			settings.services,
 			settings.queue,
@@ -55,7 +56,7 @@ export default () => {
 							{ page: getPageContext() },
 							{
 								modelId,
-								thinkingBudget: selection?.thinkingBudget,
+								thinkingBudget,
 								srcLang,
 								dstLang,
 								promptId: PROMPT_ID.batchTranslate,
