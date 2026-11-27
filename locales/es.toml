@@ -272,6 +272,10 @@ inTextTranslationActionsDesc = "Mostrar las acciones de reintentar, eliminar y c
 selectionTranslateEnabled = "$1 + Clic/Arrastrar del ratón para traducir"
 selectionTranslateHintSuffix = "+ Clic/Arrastrar del ratón para traducir"
 
+[settings.modelSelection]
+thinkingBudget = "Esfuerzo de razonamiento"
+modelDefault = "Predeterminado del modelo"
+
 [settings.summary]
 summaryDefaultPinned = "Fijar ventana de resumen por defecto"
 summaryDefaultPinnedDesc = "Mantener la ventana de resumen abierta al hacer clic fuera de ella"
@@ -377,7 +381,7 @@ temperature = "Temperatura"
 maxTokens = "Tokens Máximos"
 maxTokensDefault = "Predeterminado"
 thinkingBudget = "Presupuesto de razonamiento"
-thinkingBudgetDefault = "Predeterminado"
+thinkingBudgetDefault = "Predeterminado del proveedor"
 customService = "Personalizado"
 extraBody = "Cuerpo de solicitud adicional"
 

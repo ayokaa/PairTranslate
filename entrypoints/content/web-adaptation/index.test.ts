@@ -2,6 +2,7 @@ import { beforeEach, expect, mock, test } from "bun:test";
 import "~/utils/test/dom-setup";
 import { PROMPT_ID } from "~/utils/constants";
 import type { ServiceSettings } from "~/utils/settings";
+import type { ModelSelectionSettings } from "~/utils/settings/model-selection";
 import type { ResolvedLLMModel } from "~/utils/settings/services";
 import * as realSettingsServicesModule from "~/utils/settings/services";
 import {
@@ -22,16 +23,20 @@ import {
 
 const modelId = "00000000-0000-4000-8000-000000000001";
 const settings = {
-	services: {},
+	services: {} as Record<string, ServiceSettings>,
 	websiteRules: [] as Array<Record<string, unknown>>,
 	queue: { maxTokensPerBatch: Infinity, maxBatchSize: 10 },
 	translate: {
 		filterInteractive: false,
 		sourceLang: "auto",
 		targetLang: "zh-CN",
-		inTextTranslateModel: modelId,
+		inTextTranslateModel: { modelId },
 	},
-	webAdaptation: { autoEnabled: false, modelId, rules: [] as AdaptationRule[] },
+	webAdaptation: {
+		autoEnabled: false,
+		model: { modelId } as ModelSelectionSettings,
+		rules: [] as AdaptationRule[],
+	},
 };
 
 mock.module("#imports", () => ({
@@ -67,7 +72,7 @@ mock.module("~/utils/settings/services", () => ({
 		modelId: string | undefined,
 	): ResolvedLLMModel | undefined =>
 		realSettingsServices.resolveLLMModel(services, modelId) ??
-		({} as ResolvedLLMModel),
+		({ model: {} } as ResolvedLLMModel),
 }));
 mock.module("~/utils/page-context", () => ({ getPageContext: () => ({}) }));
 
@@ -222,6 +227,8 @@ beforeEach(() => {
 	siteParserScans = 0;
 	removePageOnSiteScan = false;
 	settings.webAdaptation.autoEnabled = false;
+	settings.services = {};
+	settings.webAdaptation.model = { modelId };
 	settings.webAdaptation.rules = [];
 	modelOutput = JSON.stringify({
 		roots: [],
@@ -513,6 +520,31 @@ test("an uncovered sibling path does not inherit the saved template cooldown", a
 	expect(await runWebAdaptation("automatic")).toBe("unchanged");
 	expect(reservedKeys[2]).toBe(reservedKeys[0]);
 	expect(sentRequests).toHaveLength(2);
+});
+
+test("automatic cooldown keys share equal effective effort and isolate explicit off", async () => {
+	settings.webAdaptation.autoEnabled = true;
+	settings.services.provider = {
+		type: "llm",
+		name: "Test",
+		apiSpec: "openai",
+		models: { [modelId]: { name: "Test", thinkingBudget: "high" } },
+	};
+	modelOutput = JSON.stringify({
+		roots: [],
+		excludes: [],
+		includes: [],
+		promoteTags: [],
+	});
+	await runWebAdaptation("automatic");
+	settings.webAdaptation.model = { modelId, thinkingBudget: "high" };
+	await runWebAdaptation("automatic");
+	settings.webAdaptation.model = { modelId, thinkingBudget: "off" };
+	await runWebAdaptation("automatic");
+	expect(reservedKeys).toHaveLength(3);
+	expect(reservedKeys[0]).toBe(reservedKeys[1]);
+	expect(reservedKeys[2]).not.toBe(reservedKeys[0]);
+	expect(sentRequests.at(-1)).toMatchObject({ modelId, thinkingBudget: "off" });
 });
 
 test("a valid empty suggestion is unchanged and completes its reservation", async () => {

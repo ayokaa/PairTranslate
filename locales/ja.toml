@@ -272,6 +272,10 @@ inTextTranslationActionsDesc = "翻訳アイコンにカーソルを合わせる
 selectionTranslateEnabled = "$1 + マウスクリック/ドラッグで翻訳"
 selectionTranslateHintSuffix = "+ マウスクリック/ドラッグで翻訳"
 
+[settings.modelSelection]
+thinkingBudget = "思考の強度"
+modelDefault = "モデルのデフォルト"
+
 [settings.summary]
 summaryDefaultPinned = "デフォルトで要約ウィンドウを固定"
 summaryDefaultPinnedDesc = "要約ウィンドウの外側をクリックしても開いたままにする"
@@ -377,7 +381,7 @@ temperature = "温度"
 maxTokens = "最大トークン数"
 maxTokensDefault = "デフォルト"
 thinkingBudget = "推論予算"
-thinkingBudgetDefault = "デフォルト"
+thinkingBudgetDefault = "プロバイダーのデフォルト"
 customService = "カスタム"
 extraBody = "追加リクエストボディ"
 

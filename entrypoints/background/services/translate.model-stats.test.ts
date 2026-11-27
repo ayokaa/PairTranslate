@@ -47,6 +47,12 @@ const fakeCache = {
 	set: async (key: ArrayBuffer, value: { output: unknown }) => {
 		cacheEntries.set(keyOf(key), value);
 	},
+	setMany: async (
+		entries: Array<{ key: ArrayBuffer; value: { output: unknown } }>,
+	) => {
+		for (const entry of entries)
+			cacheEntries.set(keyOf(entry.key), entry.value);
+	},
 	del: async (key: ArrayBuffer) => {
 		cacheEntries.delete(keyOf(key));
 	},
@@ -424,4 +430,171 @@ test("oversized batch estimate is clamped to bucket capacity instead of starving
 		"x".repeat(400),
 	);
 	expect(response.output).toBe("译文");
+});
+
+test("feature effort overrides the model default in unary and streaming requests", async () => {
+	const configuredModel = (
+		settings!.services[SERVICE_ID] as Extract<
+			SettingsSchema["services"][string],
+			{ type: "llm" }
+		>
+	).models[MODEL_ID];
+	configuredModel.thinkingBudget = "high";
+	const received: ChatRequest["thinkingBudget"][] = [];
+	chatHandler = async (request) => {
+		received.push(request.thinkingBudget);
+		return defaultChatHandler(request);
+	};
+	streamHandler = async function* (request) {
+		received.push(request.thinkingBudget);
+		yield { content: "译" };
+		return {};
+	};
+	const { unary, stream } = await createTranslateService();
+	const options = {
+		modelId: MODEL_ID,
+		promptId: PROMPT_ID.translate,
+		srcLang: SRC,
+		dstLang: DST,
+		cleanCache: true,
+	};
+	await unary(ctx, options, "Hello");
+	await unary(ctx, { ...options, thinkingBudget: "low" }, "Hello");
+	await unary(ctx, { ...options, thinkingBudget: "off" }, "Hello");
+	for await (const chunk of stream(
+		ctx,
+		{ ...options, thinkingBudget: "off" },
+		"Hello",
+	))
+		void chunk;
+	expect(received).toEqual(["high", "low", "off", "off"]);
+	expect(configuredModel.thinkingBudget).toBe("high");
+});
+
+test("whole-response caches share equal effective effort and isolate off and changed defaults", async () => {
+	const configuredModel = (
+		settings!.services[SERVICE_ID] as Extract<
+			SettingsSchema["services"][string],
+			{ type: "llm" }
+		>
+	).models[MODEL_ID];
+	configuredModel.thinkingBudget = "high";
+	const calls: ChatRequest["thinkingBudget"][] = [];
+	chatHandler = async (request) => {
+		calls.push(request.thinkingBudget);
+		return {
+			output: `translated:${request.thinkingBudget}`,
+			content: `translated:${request.thinkingBudget}`,
+		};
+	};
+	const { unary, cachedUnary } = await createTranslateService();
+	const options = {
+		modelId: MODEL_ID,
+		promptId: PROMPT_ID.translate,
+		srcLang: SRC,
+		dstLang: DST,
+	};
+	await unary(ctx, options, "Hello");
+	expect(
+		(await cachedUnary(ctx, { ...options, thinkingBudget: "high" }, "Hello"))
+			?.output,
+	).toBe("translated:high");
+	expect(
+		await cachedUnary(ctx, { ...options, thinkingBudget: "off" }, "Hello"),
+	).toBeNull();
+	await unary(ctx, { ...options, thinkingBudget: "off" }, "Hello");
+	configuredModel.thinkingBudget = "off";
+	expect((await cachedUnary(ctx, options, "Hello"))?.output).toBe(
+		"translated:off",
+	);
+	configuredModel.thinkingBudget = "low";
+	expect(await cachedUnary(ctx, options, "Hello")).toBeNull();
+	expect(calls).toEqual(["high", "off"]);
+});
+
+test("thin batch caches and single retries use the effective effort", async () => {
+	(
+		settings!.services[SERVICE_ID] as Extract<
+			SettingsSchema["services"][string],
+			{ type: "llm" }
+		>
+	).models[MODEL_ID].thinkingBudget = "high";
+	const calls: ChatRequest["thinkingBudget"][] = [];
+	chatHandler = async (request) => {
+		calls.push(request.thinkingBudget);
+		const output = `==== 0\n译文 ${request.thinkingBudget}`;
+		return { output, content: output };
+	};
+	const { unary, cachedUnary } = await createTranslateService();
+	const options = {
+		modelId: MODEL_ID,
+		promptId: PROMPT_ID.batchTranslate,
+		srcLang: SRC,
+		dstLang: DST,
+		thinCache: true,
+	};
+	await unary(ctx, options, ["Paragraph"]);
+	expect(
+		(
+			await cachedUnary(ctx, { ...options, thinkingBudget: "high" }, [
+				"Paragraph",
+			])
+		)?.output,
+	).toEqual(["译文 high"]);
+	expect(
+		await cachedUnary(ctx, { ...options, thinkingBudget: "off" }, [
+			"Paragraph",
+		]),
+	).toBeNull();
+	await unary(ctx, { ...options, thinkingBudget: "off", cleanCache: true }, [
+		"Paragraph",
+	]);
+	expect(
+		(
+			await cachedUnary(ctx, { ...options, thinkingBudget: "off" }, [
+				"Paragraph",
+			])
+		)?.output,
+	).toEqual(["译文 off"]);
+	expect((await cachedUnary(ctx, options, ["Paragraph"]))?.output).toEqual([
+		"译文 high",
+	]);
+	expect(calls).toEqual(["high", "off"]);
+});
+
+test("stream cache lookup and persistence distinguish effective effort", async () => {
+	(
+		settings!.services[SERVICE_ID] as Extract<
+			SettingsSchema["services"][string],
+			{ type: "llm" }
+		>
+	).models[MODEL_ID].thinkingBudget = "high";
+	const calls: ChatRequest["thinkingBudget"][] = [];
+	streamHandler = async function* (request) {
+		calls.push(request.thinkingBudget);
+		yield { content: `译文 ${request.thinkingBudget}` };
+		return {};
+	};
+	const { stream } = await createTranslateService();
+	const options = {
+		modelId: MODEL_ID,
+		promptId: PROMPT_ID.translate,
+		srcLang: SRC,
+		dstLang: DST,
+	};
+	const read = async (thinkingBudget?: ChatRequest["thinkingBudget"]) => {
+		let text = "";
+		for await (const chunk of stream(
+			ctx,
+			{ ...options, thinkingBudget },
+			"Hello",
+		))
+			text += chunk.content ?? "";
+		return text;
+	};
+	expect(await read()).toBe("译文 high");
+	expect(await read("high")).toBe("译文 high");
+	expect(await read("off")).toBe("译文 off");
+	expect(await read("off")).toBe("译文 off");
+	expect(calls).toEqual(["high", "off"]);
 });

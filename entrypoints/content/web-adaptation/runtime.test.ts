@@ -22,7 +22,11 @@ const settings = {
 	services: {},
 	websiteRules: [],
 	translate: { filterInteractive: false, targetLang: "zh-CN" },
-	webAdaptation: { modelId, autoEnabled: false, rules: [] as AdaptationRule[] },
+	webAdaptation: {
+		model: { modelId },
+		autoEnabled: false,
+		rules: [] as AdaptationRule[],
+	},
 };
 const stored: Record<string, unknown> = {};
 mock.module("#imports", () => ({
@@ -54,7 +58,7 @@ mock.module("~/utils/settings/services", () => ({
 		id: string | undefined,
 	): ResolvedLLMModel | undefined =>
 		realServices.resolveLLMModel(services, id) ??
-		(id === modelId ? ({} as ResolvedLLMModel) : undefined),
+		(id === modelId ? ({ model: {} } as ResolvedLLMModel) : undefined),
 }));
 
 const { createWebAdaptationService } = await import(

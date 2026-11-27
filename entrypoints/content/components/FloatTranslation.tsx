@@ -77,7 +77,7 @@ const Explain = (props: { textContext: TextContext }) => {
 	const { settings } = useSettings();
 	const [data, retry] = createTranslation(() => props.textContext.text, {
 		promptId: PROMPT_ID.explain,
-		modelId: () => settings.translate.floatingExplainModel,
+		model: () => settings.translate.floatingExplainModel,
 		srcLang: () => settings.translate.sourceLang,
 		dstLang: () => settings.translate.targetLang,
 		ctx: () => ({
@@ -86,6 +86,7 @@ const Explain = (props: { textContext: TextContext }) => {
 			pageContext: getCachedPageContext(
 				window.location.href,
 				settings.summary?.pageContextModel,
+				settings.services,
 				settings.translate.sourceLang,
 				settings.translate.targetLang,
 			),
@@ -110,7 +111,7 @@ const Explain = (props: { textContext: TextContext }) => {
 	const currentModelName = createMemo(() => {
 		const resolved = resolveLLMModel(
 			settings.services,
-			settings.translate.floatingExplainModel,
+			settings.translate.floatingExplainModel?.modelId,
 		);
 		return resolved
 			? formatLLMModelLabel(resolved.service.name, resolved.model.name)
@@ -220,7 +221,7 @@ const Translate = (props: { textContext: TextContext }) => {
 	const { settings } = useSettings();
 	const [data, retry] = createTranslation(() => props.textContext.text, {
 		promptId: PROMPT_ID.translate,
-		modelId: () => settings.translate.floatingTranslateModel,
+		model: () => settings.translate.floatingTranslateModel,
 		srcLang: () => settings.translate.sourceLang,
 		dstLang: () => settings.translate.targetLang,
 		ctx: () => ({
@@ -229,6 +230,7 @@ const Translate = (props: { textContext: TextContext }) => {
 			pageContext: getCachedPageContext(
 				window.location.href,
 				settings.summary?.pageContextModel,
+				settings.services,
 				settings.translate.sourceLang,
 				settings.translate.targetLang,
 			),
@@ -239,7 +241,7 @@ const Translate = (props: { textContext: TextContext }) => {
 	const currentModelName = createMemo(() => {
 		const resolved = resolveLLMModel(
 			settings.services,
-			settings.translate.floatingTranslateModel,
+			settings.translate.floatingTranslateModel?.modelId,
 		);
 		return resolved
 			? formatLLMModelLabel(resolved.service.name, resolved.model.name)

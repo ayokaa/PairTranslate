@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Configure thinking effort separately for each translation, explanation, summary, page-context, and webpage-adaptation feature, including website rules and the translator window. Feature settings inherit the model's default unless explicitly overridden; Off remains an explicit override. Changing models in the popup preserves the feature's effort. Settings migrate to v15, and translation caches, page-context caches, and adaptation cooldowns distinguish the effective effort.
 - Translate long full pages progressively: loading placeholders are mounted only for batches the selected model has room for, instead of for every paragraph at once, which removes the memory spike on very long pages. Full-page batches are looked up in the cache first, in rounds as wide as the model's request concurrency, so cached batches render without taking model slots, even behind pending requests. Cache reads share one IndexedDB connection and one transaction per batch, and in-text Markdown results and the language icon no longer retain reactive state per paragraph.
 - After a service rate limits a regular or streaming request (HTTP 429), hold that model's queue for 2 seconds, then let one request through at a time until one succeeds. The rate-limited request itself still fails.
 - Use a website rule's in-text translation model for the translation requests themselves; previously only its batch limits were applied.

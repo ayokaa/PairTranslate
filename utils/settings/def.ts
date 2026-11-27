@@ -2,6 +2,7 @@ import z from "zod";
 import { THINKING_BUDGET_LEVELS } from "../llm/thinking";
 import { getDefaultModifierKey, SELECTION_MODIFIER_KEYS } from "../modifier";
 import { WebAdaptationSettings } from "../web-adaptation/model";
+import { ModelSelectionSettings } from "./model-selection";
 import { SETTINGS_VERSION } from "./version";
 
 export * from "./version";
@@ -123,18 +124,18 @@ export const TranslateSettings = z.object({
 	inTextTranslateIconEnabled: z.boolean().default(true),
 	inTextTranslationActionsEnabled: z.boolean().default(true),
 	translateFullPage: z.boolean().default(false), // Translate entire page content instead of only visible content
-	inTextTranslateModel: z.uuid().optional(),
-	floatingTranslateModel: z.uuid().optional(),
-	floatingExplainModel: z.uuid().optional(),
-	inputTranslateModel: z.uuid().optional(),
+	inTextTranslateModel: ModelSelectionSettings.optional(),
+	floatingTranslateModel: ModelSelectionSettings.optional(),
+	floatingExplainModel: ModelSelectionSettings.optional(),
+	inputTranslateModel: ModelSelectionSettings.optional(),
 	inputTranslateLang: z.string().default("en"), // Target language for input translation
 });
 export type TranslateSettings = z.infer<typeof TranslateSettings>;
 
 export const SummarySettings = z
 	.object({
-		summaryModel: z.uuid().optional(),
-		pageContextModel: z.uuid().optional(),
+		summaryModel: ModelSelectionSettings.optional(),
+		pageContextModel: ModelSelectionSettings.optional(),
 		summaryDefaultPinned: z.boolean().default(false),
 		summaryGeometryMaxEntries: z.number().min(1).default(1000),
 	})
@@ -154,7 +155,7 @@ export const WebsiteRuleSettings = z.object({
 	targetLang: z.optional(z.string()),
 	filterInteractive: z.optional(z.boolean()),
 	translateMode: z.optional(z.enum(["parallel", "replace"])),
-	inTextTranslateModel: z.uuid().optional(),
+	inTextTranslateModel: ModelSelectionSettings.optional(),
 	translationStyle: TranslationStyleSettings.optional(),
 });
 export type WebsiteRuleSettings = z.infer<typeof WebsiteRuleSettings>;

@@ -2,6 +2,7 @@
 
 import type { DictionaryResponse } from "./dictionary";
 import type { RpcService } from "./rpc/factory";
+import type { ModelSelectionSettings } from "./settings/model-selection";
 import type { LRUStats } from "./storage/lru";
 import type {
 	TranslationResponse,
@@ -41,8 +42,7 @@ export interface TranslateService extends RpcService {
 	cacheStats(): Promise<CacheStats>;
 }
 
-export interface TranslateOptions {
-	modelId: string;
+export interface TranslateOptions extends ModelSelectionSettings {
 	promptId: string;
 	cleanCache?: boolean;
 	thinCache?: boolean;

@@ -7,13 +7,16 @@ import { Input } from "~/components/Input";
 import { Select } from "~/components/Select";
 import { ButtonGroup } from "~/components/settings/ButtonGroup";
 import { FormField } from "~/components/settings/FormField";
+import { thinkingBudgetOptions } from "~/components/settings/ModelSelectionFields";
 import type { SelectOption } from "~/components/settings/OptionSelect";
 import { TranslationStyleControls } from "~/components/settings/TranslationStyleControls";
 import { useSettings } from "~/hooks/settings";
 import { SUPPORTED_LANGUAGES } from "~/utils/constants";
 import { t } from "~/utils/i18n";
+import type { ThinkingBudget } from "~/utils/llm/thinking";
 import type { WebsiteRuleSettings } from "~/utils/settings";
 import {
+	resolveLLMModel,
 	selectLLMModelOptions,
 	selectServicesByType,
 } from "~/utils/settings/services";
@@ -66,6 +69,10 @@ export const WebsiteRuleEditor = (props: Props) => {
 
 		return options;
 	});
+
+	const selectedModel = createMemo(() =>
+		resolveLLMModel(settings.services, local.inTextTranslateModel?.modelId),
+	);
 
 	const sourceLanguageOptions = createMemo<SelectOption[]>(() => [
 		{ value: "default", label: t("common.globalDefault") },
@@ -318,18 +325,44 @@ export const WebsiteRuleEditor = (props: Props) => {
 					{/* In-text Translation Model */}
 					<FormField label={t("settings.translation.inTextTranslateModel")}>
 						<Select
-							value={local.inTextTranslateModel || "default"}
+							value={local.inTextTranslateModel?.modelId || "default"}
 							onChange={(e) => {
 								const value = e.currentTarget.value;
-								if (value === "default") {
-									setLocal("inTextTranslateModel", undefined);
-								} else {
-									setLocal("inTextTranslateModel", value);
-								}
+								setLocal(
+									"inTextTranslateModel",
+									value === "default"
+										? undefined
+										: {
+												modelId: value,
+												thinkingBudget:
+													local.inTextTranslateModel?.thinkingBudget,
+											},
+								);
 							}}
 							options={modelOptions()}
 						/>
 					</FormField>
+					<Show when={selectedModel()}>
+						{(model) => (
+							<FormField label={t("settings.modelSelection.thinkingBudget")}>
+								<Select
+									value={local.inTextTranslateModel?.thinkingBudget ?? ""}
+									onChange={(event) => {
+										const current = local.inTextTranslateModel;
+										if (!current) return;
+										const value = event.currentTarget.value;
+										setLocal("inTextTranslateModel", {
+											...current,
+											thinkingBudget: value
+												? (value as ThinkingBudget)
+												: undefined,
+										});
+									}}
+									options={thinkingBudgetOptions(model().model.thinkingBudget)}
+								/>
+							</FormField>
+						)}
+					</Show>
 				</div>
 			</div>
 

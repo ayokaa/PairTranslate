@@ -272,6 +272,10 @@ inTextTranslationActionsDesc = "Mostrar as ações de tentar novamente, excluir 
 selectionTranslateEnabled = "$1 + Clique/Arrasto do mouse para traduzir"
 selectionTranslateHintSuffix = "+ Clique/Arrasto do mouse para traduzir"
 
+[settings.modelSelection]
+thinkingBudget = "Esforço de raciocínio"
+modelDefault = "Padrão do modelo"
+
 [settings.summary]
 summaryDefaultPinned = "Fixar janela de resumo por padrão"
 summaryDefaultPinnedDesc = "Manter a janela de resumo aberta ao clicar fora dela"
@@ -377,7 +381,7 @@ temperature = "Temperatura"
 maxTokens = "Tokens Máximos"
 maxTokensDefault = "Padrão"
 thinkingBudget = "Orçamento de raciocínio"
-thinkingBudgetDefault = "Padrão"
+thinkingBudgetDefault = "Padrão do provedor"
 customService = "Personalizado"
 extraBody = "Corpo da solicitação extra"
 

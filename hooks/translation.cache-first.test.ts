@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { createRoot, createSignal } from "solid-js";
 import { PROMPT_ID } from "~/utils/constants";
+import type { ModelSelectionSettings } from "~/utils/settings/model-selection";
 import type { TranslationResponse } from "~/utils/translation-result";
 
 mock.module("~/utils/i18n", () => ({ t: (key: string) => key }));
@@ -40,7 +41,7 @@ const start = (
 		disposers.push(dispose);
 		result = createBatchTranslation(() => ["Original paragraph"], {
 			promptId: PROMPT_ID.batchTranslate,
-			modelId: () => "model-1",
+			model: () => ({ modelId: "model-1" }),
 			srcLang: () => "en",
 			dstLang: () => "zh-CN",
 			ctx: () => ({ page: { domain: "example.com" } }),
@@ -158,7 +159,7 @@ test("partial batch errors render aligned translations and report only failed sl
 		disposers.push(dispose);
 		result = createBatchTranslation(() => ["First", "Second"], {
 			promptId: PROMPT_ID.batchTranslate,
-			modelId: () => "model-1",
+			model: () => ({ modelId: "model-1" }),
 			srcLang: () => "en",
 			dstLang: () => "zh-CN",
 			ctx: () => ({ page: { domain: "example.com" } }),
@@ -201,4 +202,31 @@ test("a late cache response cannot overwrite a new target language", async () =>
 	await flush();
 	expect(read()[0]()).toBe("French translation");
 	expect(cachedUnary).toHaveBeenCalledTimes(2);
+});
+
+test("changing only feature effort cancels stale cache results and forwards off on retries", async () => {
+	const first = Promise.withResolvers<unknown>();
+	cachedUnary.mockImplementationOnce(() => first.promise);
+	cachedUnary.mockResolvedValue({
+		output: ["off translation"],
+		skipped: false,
+	});
+	const [model, setModel] = createSignal<ModelSelectionSettings>({
+		modelId: "model-1",
+		thinkingBudget: "high",
+	});
+	const [read, retry] = start(async () => {}, { model });
+	await flush();
+	setModel({ modelId: "model-1", thinkingBudget: "off" });
+	await flush();
+	expect(cachedUnary.mock.calls[1][1]).toMatchObject({ thinkingBudget: "off" });
+	first.resolve({ output: ["high translation"], skipped: false });
+	await flush();
+	expect(read()[0]()).toBe("off translation");
+	retry(0);
+	await flush();
+	expect(unary.mock.calls[0][1]).toMatchObject({
+		thinkingBudget: "off",
+		cleanCache: true,
+	});
 });

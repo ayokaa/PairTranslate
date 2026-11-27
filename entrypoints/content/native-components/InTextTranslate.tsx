@@ -88,11 +88,13 @@ export const BatchInTextTranslation = (props: BatchProps) => {
 				}
 
 				createIdleDebounce(() => {
+					const model =
+						websiteRule.inTextTranslateModel ??
+						settings.translate.inTextTranslateModel;
 					const queueSettings = resolveQueueSettings(
 						settings.services,
 						settings.queue,
-						websiteRule.inTextTranslateModel ||
-							settings.translate.inTextTranslateModel,
+						model?.modelId,
 					);
 					const maxBatchSize = queueSettings.maxBatchSize;
 
@@ -176,7 +178,8 @@ export function useInTextPageContext(active: () => boolean) {
 	const srcLang = () => websiteRule.sourceLang || settings.translate.sourceLang;
 	const dstLang = () => websiteRule.targetLang || settings.translate.targetLang;
 	return usePageContext({
-		modelId: () => settings.summary?.pageContextModel,
+		model: () => settings.summary?.pageContextModel,
+		services: () => settings.services,
 		srcLang,
 		dstLang,
 		active: createMemo(active),
@@ -205,8 +208,8 @@ export const BatchRender = (props: BatchRenderProps) => {
 	const [getter, retry] = createBatchTranslation(texts, {
 		promptId: PROMPT_ID.batchTranslate,
 		takeCached: props.takeCached,
-		modelId: () =>
-			websiteRule.inTextTranslateModel ||
+		model: () =>
+			websiteRule.inTextTranslateModel ??
 			settings.translate.inTextTranslateModel,
 		srcLang: () => websiteRule.sourceLang || settings.translate.sourceLang,
 		dstLang: () => websiteRule.targetLang || settings.translate.targetLang,

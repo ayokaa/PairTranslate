@@ -274,6 +274,10 @@ inTextTranslationActionsDesc = "懸停或聚焦頁面內翻譯圖示時，顯示
 selectionTranslateEnabled = "$1 + 滑鼠點擊/拖動進行翻譯"
 selectionTranslateHintSuffix = "+ 滑鼠點擊/拖動進行翻譯"
 
+[settings.modelSelection]
+thinkingBudget = "思考強度"
+modelDefault = "模型預設"
+
 [settings.summary]
 summaryDefaultPinned = "預設固定摘要視窗"
 summaryDefaultPinnedDesc = "點擊摘要視窗外部時保持視窗開啟"
@@ -379,7 +383,7 @@ temperature = "溫度"
 maxTokens = "最大令牌數"
 maxTokensDefault = "預設"
 thinkingBudget = "思考強度"
-thinkingBudgetDefault = "預設"
+thinkingBudgetDefault = "服務商預設"
 customService = "自定義"
 extraBody = "額外參數"
 

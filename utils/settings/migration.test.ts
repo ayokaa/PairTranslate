@@ -342,9 +342,9 @@ describe("migrateSettings", () => {
 		expect(result.__v).toBe(SETTINGS_VERSION);
 		expect(result.summary.summaryDefaultPinned).toBe(true);
 		expect(result.summary.summaryGeometryMaxEntries).toBe(500);
-		expect(result.summary.summaryModel).toBe(
-			"550e8400-e29b-41d4-a716-446655440000",
-		);
+		expect(result.summary.summaryModel).toEqual({
+			modelId: "550e8400-e29b-41d4-a716-446655440000",
+		});
 		expect(result.translate).not.toHaveProperty("summaryExcludedSites");
 		expect(result.websiteRules).toHaveLength(3);
 		expect(result.websiteRules[1]).toEqual({
@@ -469,12 +469,12 @@ describe("migrateSettings", () => {
 		expect(traditional).not.toHaveProperty("models");
 
 		// References pointing at the old service UUID remain valid.
-		expect(result.translate.inTextTranslateModel).toBe(
-			"11111111-1111-4111-8111-111111111111",
-		);
-		expect(result.summary.summaryModel).toBe(
-			"11111111-1111-4111-8111-111111111111",
-		);
+		expect(result.translate.inTextTranslateModel).toEqual({
+			modelId: "11111111-1111-4111-8111-111111111111",
+		});
+		expect(result.summary.summaryModel).toEqual({
+			modelId: "11111111-1111-4111-8111-111111111111",
+		});
 	});
 
 	test("migrates from v10 to v11 adding the page-context prompt", () => {
@@ -677,5 +677,66 @@ describe("migrateSettings", () => {
 		expect(result.prompts[PROMPT_ID.batchTranslate]).toEqual(
 			PromptSettings.parse(customBatch),
 		);
+	});
+
+	test("v14 to v15 wraps every model reference without adding overrides", () => {
+		const defaults = generateDefaultSettings();
+		const modelId = "11111111-1111-4111-8111-111111111111";
+		const result = migrateSettings({
+			...defaults,
+			__v: 14,
+			translate: {
+				...defaults.translate,
+				inTextTranslateModel: modelId,
+				floatingTranslateModel: modelId,
+				floatingExplainModel: modelId,
+				inputTranslateModel: modelId,
+			},
+			summary: {
+				...defaults.summary,
+				summaryModel: modelId,
+				pageContextModel: modelId,
+			},
+			websiteRules: [
+				{ urlPatterns: ["example.com"], inTextTranslateModel: modelId },
+			],
+			webAdaptation: { autoEnabled: true, rules: [], modelId },
+		});
+
+		expect(result.__v).toBe(15);
+		expect(result.translate.inTextTranslateModel).toEqual({ modelId });
+		expect(result.translate.floatingTranslateModel).toEqual({ modelId });
+		expect(result.translate.floatingExplainModel).toEqual({ modelId });
+		expect(result.translate.inputTranslateModel).toEqual({ modelId });
+		expect(result.summary.summaryModel).toEqual({ modelId });
+		expect(result.summary.pageContextModel).toEqual({ modelId });
+		expect(result.websiteRules[0].inTextTranslateModel).toEqual({ modelId });
+		expect(result.webAdaptation).toEqual({
+			autoEnabled: true,
+			rules: [],
+			model: { modelId },
+		});
+	});
+
+	test("v14 migration preserves existing feature overrides and absent references", () => {
+		const defaults = generateDefaultSettings();
+		const model = {
+			modelId: "11111111-1111-4111-8111-111111111111",
+			thinkingBudget: "off",
+		} as const;
+		const result = migrateSettings({
+			...defaults,
+			__v: 14,
+			translate: {
+				...defaults.translate,
+				inTextTranslateModel: model,
+				floatingExplainModel: undefined,
+			},
+			webAdaptation: { ...defaults.webAdaptation, model },
+		});
+		expect(result.translate.inTextTranslateModel).toEqual(model);
+		expect(result.translate.floatingExplainModel).toBeUndefined();
+		expect(result.webAdaptation.model).toEqual(model);
+		expect(migrateSettings(result)).toEqual(result);
 	});
 });

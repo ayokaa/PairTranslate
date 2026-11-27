@@ -97,7 +97,7 @@ export default (props: DictionaryEntry) => {
 				word: props.word,
 			}),
 			promptId: PROMPT_ID.dictionaryTranslate,
-			modelId: () =>
+			model: () =>
 				settings.translate.floatingTranslateModel ??
 				settings.translate.inTextTranslateModel,
 			srcLang: () => settings.translate.sourceLang,

@@ -1,9 +1,11 @@
+import type { ThinkingBudget } from "~/utils/llm/thinking";
 import type {
 	LLMModelSettings,
 	QueueControlSettings,
 	QueueOverride,
 	ServiceSettings,
 } from "~/utils/settings";
+import type { ModelSelectionSettings } from "~/utils/settings/model-selection";
 
 export type ServiceByType<TType extends ServiceSettings["type"]> = Extract<
 	ServiceSettings,
@@ -82,6 +84,17 @@ export function resolveQueueSettings(
 		maxBatchSize: pick("maxBatchSize"),
 		maxTokensPerBatch: pick("maxTokensPerBatch"),
 	};
+}
+
+export function resolveThinkingBudget(
+	services: Record<string, ServiceSettings>,
+	selection: ModelSelectionSettings | undefined,
+): ThinkingBudget | undefined {
+	if (!selection) return undefined;
+	return (
+		selection.thinkingBudget ??
+		resolveLLMModel(services, selection.modelId)?.model.thinkingBudget
+	);
 }
 
 export function formatLLMModelLabel(

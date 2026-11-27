@@ -274,6 +274,10 @@ inTextTranslationActionsDesc = "悬停或聚焦页面内翻译图标时，显示
 selectionTranslateEnabled = "$1 + 鼠标点击/拖动进行翻译"
 selectionTranslateHintSuffix = "+ 鼠标点击/拖动进行翻译"
 
+[settings.modelSelection]
+thinkingBudget = "思考强度"
+modelDefault = "模型默认"
+
 [settings.summary]
 summaryDefaultPinned = "默认固定摘要窗口"
 summaryDefaultPinnedDesc = "点击摘要窗口外部时保持窗口打开"
@@ -379,7 +383,7 @@ temperature = "温度"
 maxTokens = "最大 Token 数"
 maxTokensDefault = "默认"
 thinkingBudget = "推理预算"
-thinkingBudgetDefault = "默认"
+thinkingBudgetDefault = "服务商默认"
 customService = "自定义"
 extraBody = "额外参数"
 

@@ -172,9 +172,12 @@ async function analyzePage(
 		return "unavailable";
 	await waitRpc();
 	const settings = await getSettings();
-	const modelId = settings.webAdaptation.modelId;
-	if (!modelId || !resolveLLMModel(settings.services, modelId))
-		return "noModel";
+	const selection = settings.webAdaptation.model;
+	const resolvedModel = resolveLLMModel(settings.services, selection?.modelId);
+	if (!selection || !resolvedModel) return "noModel";
+	const modelId = selection.modelId;
+	const thinkingBudget =
+		selection.thinkingBudget ?? resolvedModel.model.thinkingBudget;
 	if (source === "automatic" && !settings.webAdaptation.autoEnabled)
 		return "unchanged";
 	const rules = parseAdaptationRules(settings.webAdaptation.rules);
@@ -229,7 +232,7 @@ async function analyzePage(
 		// Covered pages share the template cooldown. An uncovered sibling needs
 		// a path-scoped reservation so it can obtain its own verified patch.
 		const key = checkKey(
-			`${snapshot.hostname}|${snapshot.structureKey}|${modelId}${
+			`${snapshot.hostname}|${snapshot.structureKey}|${modelId}|${thinkingBudget ?? ""}${
 				hasTemplateRuleForAnotherPath ? `|${snapshot.pathname}` : ""
 			}`,
 		);
@@ -256,7 +259,7 @@ async function analyzePage(
 		const response = await window.rpc.unary(
 			{},
 			{
-				modelId,
+				...selection,
 				promptId: PROMPT_ID.webAdaptation,
 				srcLang: "auto",
 				dstLang,

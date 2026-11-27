@@ -315,14 +315,24 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		| ({ kind: "llm" } & ResolvedLLMModel);
 
 	// modelId may be a traditional service UUID or an LLM model UUID.
-	const resolveTarget = (modelId: string): ServiceTarget => {
+	const resolveTarget = (
+		modelId: string,
+		thinkingBudget?: LLMModelSettings["thinkingBudget"],
+	): ServiceTarget => {
 		const direct = settings.services[modelId];
 		if (direct?.type === "traditional") {
 			return { kind: "traditional", service: direct };
 		}
 		const resolved = resolveLLMModel(settings.services, modelId);
 		if (resolved) {
-			return { kind: "llm", ...resolved };
+			return {
+				kind: "llm",
+				...resolved,
+				model: {
+					...resolved.model,
+					thinkingBudget: thinkingBudget ?? resolved.model.thinkingBudget,
+				},
+			};
 		}
 		throw createTranslateError(
 			TranslateErrorType.MODEL_NOT_FOUND,
@@ -907,7 +917,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				"Prompt ID is required",
 			);
 		}
-		const target = resolveTarget(modelId);
+		const target = resolveTarget(modelId, options.thinkingBudget);
 		const payload = text ?? "";
 		const expectsArray = Array.isArray(payload);
 		const compiled = target.kind === "llm" ? getPrompt(promptId) : undefined;
@@ -977,6 +987,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						ctx,
 						effectiveSrcLang,
 						options.dstLang,
+						target.kind === "llm" ? target.model.thinkingBudget : undefined,
 					),
 				),
 			);
@@ -1022,6 +1033,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				ctx,
 				effectiveSrcLang,
 				options.dstLang,
+				target.kind === "llm" ? target.model.thinkingBudget : undefined,
 			);
 			if (options.cleanCache) await resultCache.del(cacheKey);
 			else cached = await getCacheEntry(cacheKey);
@@ -1397,7 +1409,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				if (served) return served;
 			}
 
-			const target = resolveTarget(options.modelId);
+			const target = resolveTarget(options.modelId, options.thinkingBudget);
 			const prompt =
 				target.kind === "llm" ? getPrompt(options.promptId) : undefined;
 			const normalized = prompt
@@ -1426,7 +1438,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		) {
 			const modelId = options.modelId;
 			const promptId = options.promptId;
-			const target = resolveTarget(modelId);
+			const target = resolveTarget(modelId, options.thinkingBudget);
 			const payload = text ?? "";
 			const compiledPrompt =
 				target.kind === "llm" ? getPrompt(promptId) : undefined;
@@ -1471,6 +1483,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					ctx,
 					effectiveSrcLang,
 					options.dstLang,
+					target.kind === "llm" ? target.model.thinkingBudget : undefined,
 				);
 				if (options.cleanCache) {
 					await resultCache.del(cacheKey);
