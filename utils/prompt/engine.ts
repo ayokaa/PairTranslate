@@ -88,7 +88,13 @@ export const normalizeLLMStepOutput = (
 export const normalizeLLMStepOutputDetailed = (
 	step: CompiledStep,
 	output: unknown,
-): { texts: string[]; indices: (number | undefined)[] } | undefined => {
+):
+	| {
+			texts: string[];
+			indices: (number | undefined)[];
+			corrupted: boolean[];
+	  }
+	| undefined => {
 	if (typeof output !== "string" || !step.stringArrayDelimiter) {
 		return undefined;
 	}
@@ -99,6 +105,7 @@ export const normalizeLLMStepOutputDetailed = (
 	return {
 		texts: segments.map((segment) => segment.text),
 		indices: segments.map((segment) => segment.index),
+		corrupted: segments.map((segment) => Boolean(segment.corrupted)),
 	};
 };
 

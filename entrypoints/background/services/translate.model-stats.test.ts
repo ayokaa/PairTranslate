@@ -93,9 +93,13 @@ mock.module("~/utils/storage", () => ({
 }));
 // --- fake LLM client ---
 
-type ChatHandler = (request: ChatRequest) => Promise<ChatResponse<string>>;
+type ChatHandler = (
+	request: ChatRequest,
+	schema?: unknown,
+) => Promise<ChatResponse<string>>;
 type StreamHandler = (
 	request: ChatRequest,
+	schema?: unknown,
 ) => AsyncGenerator<StreamChunk, EndResponse>;
 
 const defaultChatHandler: ChatHandler = async () => ({
@@ -118,8 +122,10 @@ let streamHandler: StreamHandler = defaultStreamHandler;
 
 const fakeClient = {
 	listModels: async () => [],
-	chat: (request: ChatRequest) => chatHandler(request),
-	chatStream: (request: ChatRequest) => streamHandler(request),
+	chat: (request: ChatRequest, schema?: unknown) =>
+		chatHandler(request, schema),
+	chatStream: (request: ChatRequest, schema?: unknown) =>
+		streamHandler(request, schema),
 } as unknown as LLMClient;
 
 mock.module("~/utils/llm", () => ({ createLLMClient: () => fakeClient }));
@@ -284,4 +290,109 @@ test("a rate limit during stream iteration holds the model queue", async () => {
 		await status.return(undefined);
 		jest.useRealTimers();
 	}
+});
+
+test("webAdaptation responses bypass translate-cache persistence", async () => {
+	chatHandler = async () => ({
+		output:
+			'{"roots":[],"excludes":[],"includes":[],"promoteTags":[],"removeExcludes":[],"reason":"ok"}',
+		content:
+			'{"roots":[],"excludes":[],"includes":[],"promoteTags":[],"removeExcludes":[],"reason":"ok"}',
+		reasoning: "long reasoning trace",
+		usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+	});
+	const { unary } = await createTranslateService();
+	await unary(
+		{},
+		{
+			modelId: MODEL_ID,
+			promptId: PROMPT_ID.webAdaptation,
+			srcLang: "auto",
+			dstLang: DST,
+		},
+		'{"outline":[],"pairs":[],"untranslated":[]}',
+	);
+	expect(cacheEntries.size).toBe(0);
+});
+
+test("batch translation strips thinking tags, discards corrupted dividers, and returns partial results", async () => {
+	let calls = 0;
+	chatHandler = async () => {
+		calls += 1;
+		if (calls === 1) {
+			return {
+				output:
+					"<think>internal</think>\n==== 0\n引言\n**==== 1**\n正文\n==== 2\n公司",
+				content:
+					"<think>internal</think>\n==== 0\n引言\n**==== 1**\n正文\n==== 2\n公司",
+				usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+			};
+		}
+		// Recovery round resolves only the first missing item (index 0 -> orig 0)
+		return {
+			output: "==== 0\n干净引言",
+			content: "==== 0\n干净引言",
+			usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
+		};
+	};
+	const { unary } = await createTranslateService();
+	const response = await unary(
+		ctx,
+		{
+			modelId: MODEL_ID,
+			promptId: PROMPT_ID.batchTranslate,
+			srcLang: SRC,
+			dstLang: DST,
+			thinCache: true,
+		},
+		["Quote", "Body paragraph", "Company"],
+	);
+	expect(calls).toBe(2);
+	expect(response.output).toEqual(["干净引言", "", "公司"]);
+	expect(response.errors?.[0]).toBeUndefined();
+	expect(response.errors?.[1]).toContain("Expected 3 translations");
+	expect(response.errors?.[2]).toBeUndefined();
+	// Only clean segments were cached (index 0 and index 2, never the poisoned segment).
+	expect(cacheEntries.size).toBe(2);
+});
+
+test("stream passes structured output schema for explain and strips thinking tags", async () => {
+	let receivedSchema: unknown;
+	streamHandler = async function* (_req, schema) {
+		receivedSchema = schema;
+		yield { content: '<think>hidden</think>{"context_explanation":"ok"}' };
+		return { usage: { promptTokens: 5, completionTokens: 3, totalTokens: 8 } };
+	};
+	const { stream } = await createTranslateService();
+	let combined = "";
+	for await (const chunk of stream(
+		ctx,
+		{
+			modelId: MODEL_ID,
+			promptId: PROMPT_ID.explain,
+			srcLang: SRC,
+			dstLang: DST,
+		},
+		"superposition",
+	)) {
+		if (chunk.content) combined += chunk.content;
+	}
+	expect(receivedSchema).toBeDefined();
+	expect(combined).toBe('{"context_explanation":"ok"}');
+});
+
+test("oversized batch estimate is clamped to bucket capacity instead of starving the queue", async () => {
+	settings!.queue.tokensPerMinute = 50;
+	const { unary } = await createTranslateService();
+	const response = await unary(
+		ctx,
+		{
+			modelId: MODEL_ID,
+			promptId: PROMPT_ID.translate,
+			srcLang: SRC,
+			dstLang: DST,
+		},
+		"x".repeat(400),
+	);
+	expect(response.output).toBe("译文");
 });

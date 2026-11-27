@@ -184,6 +184,29 @@ describe("domListener", () => {
 		expect(getMarkdownFromSection(sections[0])).toBe("Benchmark");
 	});
 
+	test("skips numbered and bracketed pure URL reference lines", async () => {
+		const root = document.createElement("div");
+		for (const text of [
+			"[0] https://example.com/transcript/",
+			"[1]: https://example.com/reference-article",
+			"1. https://example.com/item",
+			"Real explanatory sentence.",
+		]) {
+			const p = document.createElement("p");
+			p.textContent = text;
+			root.append(p);
+		}
+		document.body.append(root);
+		try {
+			const sections = await collectSections(root, 2);
+			expect(sections.map(getMarkdownFromSection)).toEqual([
+				"Real explanatory sentence.",
+			]);
+		} finally {
+			root.remove();
+		}
+	});
+
 	test("does not promote layout ancestors that only contain deep math", async () => {
 		// Quarto-like shell: outer page-columns div wraps <main> and a formula
 		// lives deep inside a paragraph. The outer div must not become one

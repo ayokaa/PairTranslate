@@ -11,6 +11,8 @@ export default (): WebsiteParser => ({
 				".pagetop",
 				".subline",
 				".comhead",
+				".reply",
+				".yclinks",
 			],
 		};
 		return domListener(newOptions);

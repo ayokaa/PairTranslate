@@ -1,4 +1,4 @@
-<instructions>You must output exactly {{text.length}} paragraphs divided by `==== <index>`, directly output your translations without any explanation or context information</instructions>
+<instructions>You must output exactly {{text.length}} segments, each preceded by its plain-text `==== <index>` line at column 0 (no bold/headings/suffixes). Translate into "{{lang.dst}}" directly without any explanation or extra commentary.</instructions>
 
 {{#for key, item:text}}
 ==== {{key}}

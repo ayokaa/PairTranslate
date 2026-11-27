@@ -267,3 +267,39 @@ test("an aside with explicit navigation semantics remains removable", () => {
 		improvesExtraction([body, { text: "Menu", element: link }], [body]),
 	).toBe(true);
 });
+
+test("a page without main/article landmarks allows removing an isolated sidebar chrome container", () => {
+	const shell = document.createElement("div");
+	const sidebar = document.createElement("div");
+	sidebar.className = "sidebar";
+	const link = document.createElement("a");
+	link.textContent = "Recent posts";
+	sidebar.append(link);
+	const content = document.createElement("div");
+	const prose = document.createElement("p");
+	prose.textContent = "Main body paragraph";
+	const otherProse = document.createElement("p");
+	otherProse.textContent = "Second body paragraph";
+	content.append(prose, otherProse);
+	shell.append(sidebar, content);
+
+	expect(
+		improvesExtraction(
+			[
+				{ text: "Recent posts", element: link },
+				{ text: "Main body paragraph", element: prose },
+			],
+			[{ text: "Main body paragraph", element: prose }],
+		),
+	).toBe(true);
+	// Ordinary prose without chrome semantics is still protected.
+	expect(
+		improvesExtraction(
+			[
+				{ text: "Main body paragraph", element: prose },
+				{ text: "Second body paragraph", element: otherProse },
+			],
+			[{ text: "Main body paragraph", element: prose }],
+		),
+	).toBe(false);
+});

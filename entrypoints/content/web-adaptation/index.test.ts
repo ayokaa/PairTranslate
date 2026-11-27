@@ -150,6 +150,7 @@ let matchedWebsiteRuleIndex: number | null = null;
 let skippedResponse = false;
 let diagnosticOutput = "诊断译文";
 let reservedChecks = 0;
+let reservedKeys: string[] = [];
 let completedChecks = 0;
 let releasedChecks = 0;
 let reserveAllowed = true;
@@ -178,8 +179,9 @@ Object.assign(globalThis, {
 				await onModelRequest?.();
 				return { output };
 			},
-			reserveWebAdaptationCheck: async () => {
+			reserveWebAdaptationCheck: async (key: string) => {
 				reservedChecks += 1;
+				reservedKeys.push(key);
 				return reserveAllowed;
 			},
 			completeWebAdaptationCheck: async () => {
@@ -232,6 +234,7 @@ beforeEach(() => {
 	diagnosticOutput = "诊断译文";
 	sentRequests = [];
 	reservedChecks = 0;
+	reservedKeys = [];
 	completedChecks = 0;
 	releasedChecks = 0;
 	reserveAllowed = true;
@@ -388,7 +391,7 @@ test("automatic analysis improves a saved automatic rule after its cooldown", as
 	});
 });
 
-test("automatic analysis releases its reservation when the model returns an invalid schema", async () => {
+test("automatic analysis settles its cooldown when the model returns an invalid schema", async () => {
 	settings.webAdaptation.autoEnabled = true;
 	modelOutput = JSON.stringify({
 		roots: "main",
@@ -399,8 +402,8 @@ test("automatic analysis releases its reservation when the model returns an inva
 
 	expect(await runWebAdaptation("automatic")).toBe("failed");
 	expect(reservedChecks).toBe(1);
-	expect(releasedChecks).toBe(1);
-	expect(completedChecks).toBe(0);
+	expect(releasedChecks).toBe(0);
+	expect(completedChecks).toBe(1);
 	expect(committed).toBeUndefined();
 });
 
@@ -442,7 +445,7 @@ test("automatic analysis releases its reservation when the model returns invalid
 	expect(committed).toBeUndefined();
 });
 
-test("automatic analysis releases its reservation for an unsafe selector", async () => {
+test("automatic analysis settles its cooldown for an unsafe selector", async () => {
 	settings.webAdaptation.autoEnabled = true;
 	modelOutput = JSON.stringify({
 		roots: [],
@@ -453,9 +456,43 @@ test("automatic analysis releases its reservation for an unsafe selector", async
 
 	expect(await runWebAdaptation("automatic")).toBe("failed");
 	expect(reservedChecks).toBe(1);
-	expect(releasedChecks).toBe(1);
-	expect(completedChecks).toBe(0);
+	expect(releasedChecks).toBe(0);
+	expect(completedChecks).toBe(1);
 	expect(committed).toBeUndefined();
+});
+
+test("overlong reason strings are truncated instead of failing a valid proposal", async () => {
+	modelOutput = JSON.stringify({
+		roots: [],
+		excludes: [],
+		includes: ["p.article-text"],
+		promoteTags: [],
+		removeExcludes: [],
+		reason: "x".repeat(650),
+	});
+
+	expect(await runWebAdaptation("manual")).toBe("added");
+	expect(committed).toMatchObject({
+		patch: { includes: ["p.article-text"] },
+	});
+});
+
+test("sibling pages with the same layout share one automatic cooldown key", async () => {
+	settings.webAdaptation.autoEnabled = true;
+	modelOutput = JSON.stringify({
+		roots: [],
+		excludes: [],
+		includes: [],
+		promoteTags: [],
+	});
+
+	expect(await runWebAdaptation("automatic")).toBe("unchanged");
+	window.location.href = "https://example.com/article/two";
+	window.location.pathname = "/article/two";
+	expect(await runWebAdaptation("automatic")).toBe("unchanged");
+
+	expect(reservedKeys).toHaveLength(2);
+	expect(reservedKeys[0]).toBe(reservedKeys[1]);
 });
 
 test("a valid empty suggestion is unchanged and completes its reservation", async () => {

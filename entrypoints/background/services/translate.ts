@@ -22,6 +22,7 @@ import type {
 } from "~/utils/llm";
 import { createLLMClient } from "~/utils/llm";
 import { appendReasoningContent } from "~/utils/llm/reasoning";
+import { createThinkingFilter } from "~/utils/llm/thinking-filter";
 import {
 	alignSegments,
 	type DetailedSegment,
@@ -163,6 +164,17 @@ const buildLLMClient = (
 	}
 };
 
+const stripThinkingTags = (value: unknown): unknown => {
+	if (typeof value !== "string") return value;
+	const filter = createThinkingFilter();
+	return (filter.process(value) ?? "") + (filter.flush() ?? "");
+};
+
+const isCacheDisabledForPrompt = (promptId: string): boolean =>
+	// Webpage adaptation snapshots carry unique DOM/pair payloads and large
+	// reasoning traces, and already have a dedicated template cooldown.
+	promptId === PROMPT_ID.webAdaptation;
+
 const isStructuredOutput = (
 	output: PromptStepOutput,
 ): output is { type: "structured"; schema: object } =>
@@ -211,6 +223,21 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			return;
 		}
 		await resultCache.set(key, value);
+	};
+
+	const setCacheEntries = async (
+		entries: readonly { key: ArrayBuffer; value: CachedValue }[],
+	) => {
+		if (settings.debug.disableCache || entries.length === 0) {
+			return;
+		}
+		if (typeof resultCache.setMany === "function") {
+			await resultCache.setMany(entries);
+			return;
+		}
+		await Promise.all(
+			entries.map((entry) => resultCache.set(entry.key, entry.value)),
+		);
 	};
 
 	const applyDebugLatency = async () => {
@@ -469,6 +496,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		tokens: number;
 		reasoning?: string;
 		outputIndices?: (number | undefined)[];
+		outputCorrupted?: boolean[];
 	}> => {
 		const { serviceId, service, model } = target;
 		const client = ensureLLMClient(serviceId, service);
@@ -488,6 +516,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		};
 		let reasoning: string | undefined;
 		let outputIndices: (number | undefined)[] | undefined;
+		let outputCorrupted: boolean[] | undefined;
 		let generationMs = 0;
 		let stepIndex = 0;
 		for (const step of prompt.steps) {
@@ -524,11 +553,13 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					response.usage?.totalTokens ?? response.usage?.promptTokens ?? 0;
 				usage.cachedTokens += response.usage?.cachedTokens ?? 0;
 				reasoning = appendReasoningContent(reasoning, response.reasoning);
-				const detailed = normalizeLLMStepOutputDetailed(step, response.output);
+				const cleanedOutput = stripThinkingTags(response.output);
+				const detailed = normalizeLLMStepOutputDetailed(step, cleanedOutput);
 				const output = detailed
 					? detailed.texts
-					: normalizeLLMStepOutput(step, response.output);
+					: normalizeLLMStepOutput(step, cleanedOutput);
 				outputIndices = detailed?.indices;
+				outputCorrupted = detailed?.corrupted;
 				outputs.push(output);
 				conversation.push({
 					role: "assistant",
@@ -580,6 +611,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			tokens: usage.totalTokens,
 			reasoning,
 			outputIndices,
+			outputCorrupted,
 		};
 	};
 
@@ -623,7 +655,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					content: tokensToString(promptCtx, step.messageTokens),
 				});
 				const request = createChatRequest(
-					service,
+					model,
 					snapshotConversation(conversation),
 				);
 				const latestMessage = conversation.at(-1);
@@ -649,7 +681,10 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					usage.totalTokens +=
 						response.usage?.totalTokens ?? response.usage?.promptTokens ?? 0;
 					usage.cachedTokens += response.usage?.cachedTokens ?? 0;
-					const output = normalizeLLMStepOutput(step, response.output);
+					const output = normalizeLLMStepOutput(
+						step,
+						stripThinkingTags(response.output),
+					);
 					outputs.push(output);
 					conversation.push({
 						role: "assistant",
@@ -702,12 +737,16 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						: undefined,
 			});
 
+			const finalSchema = isStructuredOutput(finalStep.output)
+				? (finalStep.output.schema as JSONSchema)
+				: undefined;
 			const {
 				promise: completion,
 				resolve: resolveCompletion,
 				reject: rejectCompletion,
 			} = Promise.withResolvers<number>();
-			const source = client.chatStream(request, undefined, signal);
+			const source = client.chatStream(request, finalSchema, signal);
+			const thinkingFilter = createThinkingFilter();
 			// The request is issued by the first `next()`, so timing starts there
 			// rather than when the generator object was created.
 			let streamStartedAt = 0;
@@ -719,6 +758,11 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 							if (streamStartedAt === 0) streamStartedAt = performance.now();
 							const next = await source.next();
 							if (next.done) {
+								const tail = thinkingFilter.flush();
+								if (tail) {
+									if (firstTokenAt === 0) firstTokenAt = performance.now();
+									yield { content: tail };
+								}
 								if (next.value?.reasoning) {
 									yield { reasoning: next.value.reasoning };
 								}
@@ -759,13 +803,20 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 										}),
 									},
 								});
-								resolveCompletion(next.value?.usage?.completionTokens ?? 0);
+								resolveCompletion(usage.totalTokens);
 								return;
 							}
 							const chunk = next.value;
-							if (chunk?.content || chunk?.reasoning) {
+							if (!chunk) continue;
+							const filteredContent = chunk.content
+								? thinkingFilter.process(chunk.content)
+								: undefined;
+							if (filteredContent || chunk.reasoning) {
 								if (firstTokenAt === 0) firstTokenAt = performance.now();
-								yield chunk;
+								yield {
+									...(filteredContent ? { content: filteredContent } : {}),
+									...(chunk.reasoning ? { reasoning: chunk.reasoning } : {}),
+								};
 							}
 						}
 					} catch (error) {
@@ -931,7 +982,9 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			);
 			const cacheState: ThinCacheState = {
 				keys: entryKeys,
-				values: new Array(payloadArray.length),
+				values: new Array<string | undefined>(payloadArray.length).fill(
+					undefined,
+				),
 				missing: [],
 			};
 			thinCacheState = cacheState;
@@ -961,7 +1014,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					recordTranslationStats({ cacheHits: hitEntries, chars: hitChars });
 				}
 			}
-		} else {
+		} else if (!isCacheDisabledForPrompt(promptId)) {
 			cacheKey = await computeCacheKey(
 				promptId,
 				modelId,
@@ -1094,6 +1147,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		let completionTokens = 0;
 		let reasoning: string | undefined;
 		let outputIndices: (number | undefined)[] | undefined;
+		let outputCorrupted: boolean[] | undefined;
 
 		if (target.kind === "traditional") {
 			const texts = toTextArray(
@@ -1136,14 +1190,21 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			completionTokens = llmResult.tokens;
 			reasoning = llmResult.reasoning;
 			outputIndices = llmResult.outputIndices;
+			outputCorrupted = llmResult.outputCorrupted;
 		}
 
 		let finalValue = translationResult;
+		let itemErrors: (string | undefined)[] | undefined;
 		const toSegments = (
 			texts: unknown[],
 			indices?: (number | undefined)[],
+			corrupted?: boolean[],
 		): DetailedSegment[] =>
-			texts.map((text, i) => ({ text: String(text), index: indices?.[i] }));
+			texts.map((text, i) => ({
+				text: String(text),
+				index: indices?.[i],
+				...(corrupted?.[i] ? { corrupted: true } : {}),
+			}));
 		if (thinCacheState && payloadArray) {
 			if (!Array.isArray(translationResult)) {
 				throw createTranslateError(
@@ -1156,7 +1217,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				: [executionPayload];
 			const expected = thinCacheState.missing.length;
 			let { values, missing } = alignSegments(
-				toSegments(translationResult, outputIndices),
+				toSegments(translationResult, outputIndices, outputCorrupted),
 				expected,
 			);
 			if (missing.length > 0) {
@@ -1171,6 +1232,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 				const retryItems = missing.map((pos) => executionItems[pos]);
 				let retryResult: unknown;
 				let retryIndices: (number | undefined)[] | undefined;
+				let retryCorrupted: boolean[] | undefined;
 				if (target.kind === "traditional") {
 					const retried = await runTraditional(
 						target.service,
@@ -1194,12 +1256,13 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					);
 					retryResult = retried.result;
 					retryIndices = retried.outputIndices;
+					retryCorrupted = retried.outputCorrupted;
 					completionTokens += retried.tokens;
 					reasoning = appendReasoningContent(reasoning, retried.reasoning);
 				}
 				if (Array.isArray(retryResult)) {
 					const sub = alignSegments(
-						toSegments(retryResult, retryIndices),
+						toSegments(retryResult, retryIndices, retryCorrupted),
 						retryItems.length,
 					);
 					sub.values.forEach((value, subPos) => {
@@ -1210,28 +1273,43 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 					);
 				}
 			}
-			// Cache every aligned entry, even when some positions are still
-			// missing: the next retry then only re-requests those positions
-			// instead of the whole batch.
-			await Promise.all(
-				thinCacheState.missing.map((origIndex, pos) => {
-					const value = values[pos];
-					return value === undefined
-						? Promise.resolve()
-						: setCacheEntry(thinCacheState.keys[origIndex], { output: value });
-				}),
-			);
-			if (missing.length > 0) {
-				throw createTranslateError(
-					TranslateErrorType.VALIDATION_ERROR,
-					`Expected ${expected} translations, but got ${expected - missing.length}`,
-				);
-			}
+			// Cache every aligned entry in one batch write, even when some
+			// positions are still missing: the next retry then only re-requests
+			// those positions instead of the whole batch.
+			const toWrite: { key: ArrayBuffer; value: CachedValue }[] = [];
+			thinCacheState.missing.forEach((origIndex, pos) => {
+				const value = values[pos];
+				if (value !== undefined) {
+					toWrite.push({
+						key: thinCacheState.keys[origIndex],
+						value: { output: value },
+					});
+				}
+			});
+			await setCacheEntries(toWrite);
 			const merged = thinCacheState.values.slice();
 			thinCacheState.missing.forEach((origIndex, pos) => {
-				merged[origIndex] = values[pos] as string;
+				if (values[pos] !== undefined) {
+					merged[origIndex] = values[pos] as string;
+				}
 			});
-			finalValue = merged;
+			if (missing.length > 0) {
+				const errorMessage = `Expected ${expected} translations, but got ${expected - missing.length}`;
+				if (merged.every((entry) => entry === undefined)) {
+					throw createTranslateError(
+						TranslateErrorType.VALIDATION_ERROR,
+						errorMessage,
+					);
+				}
+				// Preserve every aligned or cached segment instead of failing the
+				// entire batch when only a subset of positions failed to align.
+				itemErrors = merged.map((entry) =>
+					entry === undefined ? errorMessage : undefined,
+				);
+				finalValue = merged.map((entry) => entry ?? "");
+			} else {
+				finalValue = merged as string[];
+			}
 		} else if (
 			payloadArray &&
 			Array.isArray(translationResult) &&
@@ -1241,7 +1319,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			// resolved; otherwise keep the raw result and let the caller's
 			// length check report the tail as errors.
 			const aligned = alignSegments(
-				toSegments(translationResult, outputIndices),
+				toSegments(translationResult, outputIndices, outputCorrupted),
 				payloadArray.length,
 			);
 			if (aligned.missing.length === 0) finalValue = aligned.values;
@@ -1264,6 +1342,7 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 		return {
 			value: createTranslationResponse(payload, finalValue, promptId, {
 				reasoning,
+				errors: itemErrors,
 			}),
 			completionTokens,
 		};
@@ -1324,7 +1403,13 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 			const normalized = prompt
 				? normalizePromptInput(prompt, payload)
 				: (payload ?? "");
-			const estimated = estimateTokens(normalized);
+			const queueConfig = getQueueConfig(options.modelId);
+			// Clamp estimated tokens to the bucket capacity so an oversized batch
+			// or page snapshot never starves the queue indefinitely.
+			const estimated = Math.min(
+				estimateTokens(normalized),
+				queueConfig.tokensPerMinute,
+			);
 			const queue = queueHub.queue(options.modelId);
 			return queue.enqueueUnary(
 				() => executeUnary(ctx, options, payload, signal, prepared),
@@ -1414,8 +1499,12 @@ export const createTranslateService = async (): Promise<TranslateService> => {
 						return;
 					}
 				}
+				const queueConfig = getQueueConfig(modelId);
 				const queue = queueHub.queue(modelId);
-				const estimated = estimateTokens(normalized);
+				const estimated = Math.min(
+					estimateTokens(normalized),
+					queueConfig.tokensPerMinute,
+				);
 				const finalStep = compiledPrompt?.steps.at(-1);
 				let traditionalResult: string[] | undefined;
 				const streamRunner =

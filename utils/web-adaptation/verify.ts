@@ -12,19 +12,19 @@ const CHROME_NAME =
 function isSafeRemoval(
 	element: Element,
 	retainedMainRoots: Element[],
+	retainedElements: Element[] = [],
 ): boolean {
 	if (element.closest(CHROME_SELECTOR)) return true;
-	if (
-		retainedMainRoots.length === 0 ||
-		element.closest("main, article, [role='main']")
-	)
-		return false;
+	if (element.closest("main, article, [role='main']")) return false;
+	const protectedRoots =
+		retainedMainRoots.length > 0 ? retainedMainRoots : retainedElements;
+	if (protectedRoots.length === 0) return false;
 	for (
 		let current: Element | null = element;
 		current;
 		current = current.parentElement
 	) {
-		if (retainedMainRoots.some((root) => current?.contains(root))) continue;
+		if (protectedRoots.some((root) => current?.contains(root))) continue;
 		const className =
 			typeof current.className === "string" ? current.className : "";
 		if (
@@ -55,6 +55,7 @@ export function improvesExtraction(
 				.filter((element): element is Element => Boolean(element)),
 		),
 	];
+	const retainedElements = candidate.map((item) => item.element);
 	// A patch that changes the traversal boundary can drop content that was
 	// never sampled, so every baseline sample that is still on the page but now
 	// sits outside the candidate roots has to look like page chrome.
@@ -67,7 +68,10 @@ export function improvesExtraction(
 				),
 		);
 		if (
-			outOfScope.some((item) => !isSafeRemoval(item.element, retainedMainRoots))
+			outOfScope.some(
+				(item) =>
+					!isSafeRemoval(item.element, retainedMainRoots, retainedElements),
+			)
 		)
 			return false;
 	}
@@ -75,13 +79,15 @@ export function improvesExtraction(
 		(sample) =>
 			inCandidate(sample) &&
 			!inBaseline(sample) &&
-			!isSafeRemoval(sample.element, retainedMainRoots),
+			!isSafeRemoval(sample.element, retainedMainRoots, retainedElements),
 	);
 	if (requireUntranslatedAddition && !addedUntranslatedCandidate) return false;
 	// Equal text elsewhere does not prove this region was already extracted.
 	const addedSamples = candidate.filter((item) => !inBaseline(item));
 	if (
-		addedSamples.some((item) => isSafeRemoval(item.element, retainedMainRoots))
+		addedSamples.some((item) =>
+			isSafeRemoval(item.element, retainedMainRoots, retainedElements),
+		)
 	)
 		return false;
 	if (
@@ -100,7 +106,7 @@ export function improvesExtraction(
 	if (baseline.length === 0) return addedUntranslatedCandidate;
 	const removed = baseline.filter((item) => !inCandidate(item));
 	const unsafeRemoved = removed.some(
-		(item) => !isSafeRemoval(item.element, retainedMainRoots),
+		(item) => !isSafeRemoval(item.element, retainedMainRoots, retainedElements),
 	);
 	if (unsafeRemoved) return false;
 	const lessFragmented =

@@ -146,4 +146,33 @@ describe("alignSegments", () => {
 		expect(result.missing).toEqual([0, 1, 2]);
 		expect(result.indexed).toBe(false);
 	});
+
+	test("marks segments swallowing a malformed markdown-wrapped divider as corrupted", () => {
+		const delimiter = /^==== \d+[ \t]*$/gm;
+		const output = [
+			"==== 0",
+			"引言",
+			"**==== 1**",
+			"第一条引言的中文译文",
+			"==== 2",
+			"公司",
+		].join("\n");
+		const segments = splitWithDelimiterDetailed(output, delimiter);
+		expect(segments[0].corrupted).toBe(true);
+		expect(segments[1].corrupted).toBeUndefined();
+		const aligned = alignSegments(segments, 3);
+		expect(aligned.values).toEqual([undefined, undefined, "公司"]);
+		expect(aligned.missing).toEqual([0, 1]);
+	});
+
+	test("rejects trailing-suffix dividers swallowed into a segment body", () => {
+		const delimiter = /^==== \d+[ \t]*$/gm;
+		const output = "==== 0\n第一段\n==== 1 ====\n第二段";
+		const segments = splitWithDelimiterDetailed(output, delimiter);
+		expect(segments).toHaveLength(1);
+		expect(segments[0].corrupted).toBe(true);
+		const aligned = alignSegments(segments, 2);
+		expect(aligned.values).toEqual([undefined, undefined]);
+		expect(aligned.missing).toEqual([0, 1]);
+	});
 });

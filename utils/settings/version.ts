@@ -1,2 +1,3 @@
-// The successor to v12 migrates unchanged built-in adaptation prompts.
-export const SETTINGS_VERSION = 13;
+// v14 migrates unchanged built-in prompts (including v12 initial adaptation
+// prompts missed by v13) to align with updated delimiter and validation rules.
+export const SETTINGS_VERSION = 14;

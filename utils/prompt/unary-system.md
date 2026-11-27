@@ -32,6 +32,7 @@ Why does the sky appear blue?
 </context>{{/if}}
 
 {{#if page}}<page>
-{{#for key, item: page}}{{key}}: {{item}}{{/for}}
+{{#for key, item: page}}{{key}}: {{item}}
+{{/for}}
 </page>{{/if}}
 

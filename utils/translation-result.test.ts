@@ -16,11 +16,25 @@ describe("translation skipped state", () => {
 	test("marks unchanged batch outputs per item", () => {
 		expect(
 			getIdenticalTranslationSkipped(
-				["Same", "需要转换"],
-				["Same", "需要轉換"],
+				["Same", "需要转换", "  Hello   world  "],
+				["Same", "需要轉換", "Hello world"],
 				PROMPT_ID.batchTranslate,
 			),
-		).toEqual([true, false]);
+		).toEqual([true, false, true]);
+	});
+
+	test("does not mark errored batch positions as skipped", () => {
+		const response = createTranslationResponse(
+			["First", "Second"],
+			["第一段", ""],
+			PROMPT_ID.batchTranslate,
+			{ errors: [undefined, "Expected 2 translations, but got 1"] },
+		);
+		expect(response.skipped).toEqual([false, false]);
+		expect(response.errors).toEqual([
+			undefined,
+			"Expected 2 translations, but got 1",
+		]);
 	});
 
 	test("does not skip an actual Chinese variant conversion", () => {

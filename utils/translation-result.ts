@@ -6,6 +6,8 @@ export type TranslationResponse<T> = {
 	output: T;
 	reasoning?: string;
 	skipped: TranslationSkipped;
+	/** Per-position error messages when a batch partially succeeds. */
+	errors?: (string | undefined)[];
 };
 
 /**
@@ -31,14 +33,18 @@ export const skippedForPayload = (
 ): TranslationSkipped =>
 	Array.isArray(payload) ? payload.map(() => true) : true;
 
+const normalizeComparableText = (text: string): string =>
+	text.normalize("NFC").trim().replace(/\s+/g, " ");
+
 const isSameText = (source: string, output: unknown): boolean =>
 	typeof output === "string" &&
-	source.normalize("NFC") === output.normalize("NFC");
+	normalizeComparableText(source) === normalizeComparableText(output);
 
 export const getIdenticalTranslationSkipped = (
 	payload: string | string[],
 	output: unknown,
 	promptId: string,
+	errors?: (string | undefined)[],
 ): TranslationSkipped => {
 	if (!shouldSkipSameLanguage(promptId)) {
 		return Array.isArray(payload) ? payload.map(() => false) : false;
@@ -47,7 +53,9 @@ export const getIdenticalTranslationSkipped = (
 	if (Array.isArray(payload)) {
 		return payload.map(
 			(source, index) =>
-				Array.isArray(output) && isSameText(source, output[index]),
+				!errors?.[index] &&
+				Array.isArray(output) &&
+				isSameText(source, output[index]),
 		);
 	}
 
@@ -61,11 +69,13 @@ export const createTranslationResponse = <T>(
 	options: {
 		reasoning?: string;
 		skipped?: TranslationSkipped;
+		errors?: (string | undefined)[];
 	} = {},
 ): TranslationResponse<T> => ({
 	output,
 	reasoning: options.reasoning,
 	skipped:
 		options.skipped ??
-		getIdenticalTranslationSkipped(payload, output, promptId),
+		getIdenticalTranslationSkipped(payload, output, promptId, options.errors),
+	...(options.errors ? { errors: options.errors } : {}),
 });

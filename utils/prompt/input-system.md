@@ -20,7 +20,8 @@ I hope this email finds you well. ...
 </example>
 
 {{#if page}}<page>
-{{#for key, item: page}}{{key}}: {{item}}{{/for}}
+{{#for key, item: page}}{{key}}: {{item}}
+{{/for}}
 </page>{{/if}}
 
 {{#if element}}<element_info>
